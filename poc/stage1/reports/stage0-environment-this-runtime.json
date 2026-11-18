@@ -1,0 +1,67 @@
+{
+  "schemaVersion": "1.0",
+  "inspectionScope": "ONLY_THIS_PROCESS_ENVIRONMENT_NOT_USER_DEVICE",
+  "timeUtc": "2026-11-18T15:59:13.976Z",
+  "platform": "linux",
+  "arch": "x64",
+  "baselineReady": true,
+  "adapterCliReadiness": false,
+  "tools": [
+    {
+      "tool": "node",
+      "status": "AVAILABLE",
+      "baselineRequired": true,
+      "version": "v22.16.0"
+    },
+    {
+      "tool": "npm",
+      "status": "AVAILABLE",
+      "baselineRequired": true,
+      "version": "10.9.2"
+    },
+    {
+      "tool": "git",
+      "status": "AVAILABLE",
+      "baselineRequired": true,
+      "version": "git version 2.47.3"
+    },
+    {
+      "tool": "java",
+      "status": "AVAILABLE",
+      "baselineRequired": false,
+      "version": "openjdk version \"21.0.12.1\" 2026-08-18"
+    },
+    {
+      "tool": "firebase",
+      "status": "NOT_AVAILABLE_OR_ERROR",
+      "baselineRequired": false,
+      "detail": "ENOENT"
+    },
+    {
+      "tool": "supabase",
+      "status": "NOT_AVAILABLE_OR_ERROR",
+      "baselineRequired": false,
+      "detail": "ENOENT"
+    },
+    {
+      "tool": "docker",
+      "status": "NOT_AVAILABLE_OR_ERROR",
+      "baselineRequired": false,
+      "detail": "ENOENT"
+    },
+    {
+      "tool": "gh",
+      "status": "NOT_AVAILABLE_OR_ERROR",
+      "baselineRequired": false,
+      "detail": "ENOENT"
+    }
+  ],
+  "safety": {
+    "cloudProjectsCreated": false,
+    "secretsRead": false,
+    "studentDataRead": false,
+    "externalInstallAttempted": false,
+    "emulatorsStarted": false
+  },
+  "next": "確認 Windows 本機 CLI 與 Docker；Stage 1 之前不執行任何後端測試"
+}

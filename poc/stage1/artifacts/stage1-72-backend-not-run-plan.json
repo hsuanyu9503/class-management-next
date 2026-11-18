@@ -1,0 +1,1205 @@
+{
+  "schemaVersion": "1.0",
+  "scope": "PLANNING_ONLY_NO_BACKEND_EXECUTION",
+  "fixtureHash": "d5f7e4a8fc321f83e2e6fd762235cda9bb685ce50afb78eb10ca5747b2f0a918",
+  "caseCount": 36,
+  "backendRows": 72,
+  "p0Count": 20,
+  "p1Count": 16,
+  "firebaseStatus": "NOT_RUN",
+  "postgresStatus": "NOT_RUN",
+  "execution": [
+    {
+      "backend": "firebase",
+      "testId": "POC-001",
+      "priority": "P0",
+      "fixtureSet": "A17-20261117",
+      "status": "NOT_RUN",
+      "requiredEvidenceKeys": [
+        "authzDecision",
+        "returnedIds",
+        "workspaceId"
+      ],
+      "oracleFields": [
+        "workspaceId",
+        "returnedCount",
+        "crossWorkspaceDisclosure"
+      ]
+    },
+    {
+      "backend": "firebase",
+      "testId": "POC-002",
+      "priority": "P0",
+      "fixtureSet": "A17-20261117",
+      "status": "NOT_RUN",
+      "requiredEvidenceKeys": [
+        "authzDecision",
+        "returnedFields",
+        "traceId"
+      ],
+      "oracleFields": [
+        "code",
+        "identifyingFieldsReturned"
+      ]
+    },
+    {
+      "backend": "firebase",
+      "testId": "POC-003",
+      "priority": "P0",
+      "fixtureSet": "SC01-20261116",
+      "status": "NOT_RUN",
+      "requiredEvidenceKeys": [
+        "responseFields",
+        "policyVersion"
+      ],
+      "oracleFields": [
+        "sensitiveReasonReturned",
+        "applicabilityAvailable"
+      ]
+    },
+    {
+      "backend": "firebase",
+      "testId": "POC-004",
+      "priority": "P0",
+      "fixtureSet": "A17-20261117",
+      "status": "NOT_RUN",
+      "requiredEvidenceKeys": [
+        "serverResponse",
+        "auditId"
+      ],
+      "oracleFields": [
+        "code",
+        "personalDataDisclosed"
+      ]
+    },
+    {
+      "backend": "firebase",
+      "testId": "POC-005",
+      "priority": "P0",
+      "fixtureSet": "SC01-20261116",
+      "status": "NOT_RUN",
+      "requiredEvidenceKeys": [
+        "principalId",
+        "scope",
+        "serverLog"
+      ],
+      "oracleFields": [
+        "code",
+        "scopeForgeryAccepted"
+      ]
+    },
+    {
+      "backend": "firebase",
+      "testId": "POC-029",
+      "priority": "P0",
+      "fixtureSet": "SC01-20261116",
+      "status": "NOT_RUN",
+      "requiredEvidenceKeys": [
+        "traceFields",
+        "exportFields",
+        "authz"
+      ],
+      "oracleFields": [
+        "sensitiveReasonDisclosed",
+        "exportMinimized",
+        "sourceScopeEnforced"
+      ]
+    },
+    {
+      "backend": "firebase",
+      "testId": "POC-035",
+      "priority": "P0",
+      "fixtureSet": "SC01-20261116",
+      "status": "NOT_RUN",
+      "requiredEvidenceKeys": [
+        "roleTrace",
+        "sqlPolicy/functionLogs"
+      ],
+      "oracleFields": [
+        "code",
+        "serverAuthorityNotBypassed"
+      ]
+    },
+    {
+      "backend": "firebase",
+      "testId": "POC-030",
+      "priority": "P1",
+      "fixtureSet": "SC01-20261116",
+      "status": "NOT_RUN",
+      "requiredEvidenceKeys": [
+        "termState",
+        "authzDecision"
+      ],
+      "oracleFields": [
+        "code",
+        "archivedSourceReadonly"
+      ]
+    },
+    {
+      "backend": "firebase",
+      "testId": "POC-008",
+      "priority": "P0",
+      "fixtureSet": "A17-20261117",
+      "status": "NOT_RUN",
+      "requiredEvidenceKeys": [
+        "queryCount",
+        "assertions"
+      ],
+      "oracleFields": [
+        "counts.P",
+        "counts.R",
+        "counts.N",
+        "counts.U",
+        "counts.registered",
+        "counts.arrived",
+        "counts.total"
+      ]
+    },
+    {
+      "backend": "firebase",
+      "testId": "POC-009",
+      "priority": "P0",
+      "fixtureSet": "SC01-20261116",
+      "status": "NOT_RUN",
+      "requiredEvidenceKeys": [
+        "versions",
+        "coverageResult",
+        "entryHash"
+      ],
+      "oracleFields": [
+        "attendance",
+        "leaveVersion",
+        "applicability",
+        "pendingPeriods",
+        "autoRewrite"
+      ]
+    },
+    {
+      "backend": "firebase",
+      "testId": "POC-015",
+      "priority": "P0",
+      "fixtureSet": "SC01-DRAFT-v6",
+      "status": "NOT_RUN",
+      "requiredEvidenceKeys": [
+        "officialVersion",
+        "draftOnly",
+        "issueStale"
+      ],
+      "oracleFields": [
+        "officialVersion",
+        "draftCommitted",
+        "issueEvidenceStale"
+      ]
+    },
+    {
+      "backend": "firebase",
+      "testId": "POC-016",
+      "priority": "P0",
+      "fixtureSet": "SC01-COMMITTED-v6",
+      "status": "NOT_RUN",
+      "requiredEvidenceKeys": [
+        "current",
+        "revision",
+        "receipt",
+        "event",
+        "attendance"
+      ],
+      "oracleFields": [
+        "officialVersion",
+        "revisionDelta",
+        "receiptDelta",
+        "eventDelta",
+        "attendance"
+      ]
+    },
+    {
+      "backend": "firebase",
+      "testId": "POC-006",
+      "priority": "P1",
+      "fixtureSet": "A17-20261117",
+      "status": "NOT_RUN",
+      "requiredEvidenceKeys": [
+        "membershipSnapshot",
+        "seatHistory"
+      ],
+      "oracleFields": [
+        "memberCount",
+        "stableIdentityUsed",
+        "effectiveEnrollmentUsed"
+      ]
+    },
+    {
+      "backend": "firebase",
+      "testId": "POC-007",
+      "priority": "P1",
+      "fixtureSet": "SC01-20261116",
+      "status": "NOT_RUN",
+      "requiredEvidenceKeys": [
+        "sessionRoster",
+        "enrollmentHistory"
+      ],
+      "oracleFields": [
+        "historicalRosterPreserved",
+        "historicalSeatPreserved"
+      ]
+    },
+    {
+      "backend": "firebase",
+      "testId": "POC-010",
+      "priority": "P1",
+      "fixtureSet": "A17-20261117",
+      "status": "NOT_RUN",
+      "requiredEvidenceKeys": [
+        "preview",
+        "excluded",
+        "commitCount"
+      ],
+      "oracleFields": [
+        "eligibleCountAtMost",
+        "protectedExcluded",
+        "committedWithoutConfirmation"
+      ]
+    },
+    {
+      "backend": "firebase",
+      "testId": "POC-011",
+      "priority": "P1",
+      "fixtureSet": "M04-PENDING",
+      "status": "NOT_RUN",
+      "requiredEvidenceKeys": [
+        "rateState",
+        "calendarVersion"
+      ],
+      "oracleFields": [
+        "rateState",
+        "officialRate",
+        "officialDayDenominator",
+        "officialPeriodDenominator"
+      ]
+    },
+    {
+      "backend": "firebase",
+      "testId": "POC-012",
+      "priority": "P1",
+      "fixtureSet": "L1-ILLUSTRATIVE",
+      "status": "NOT_RUN",
+      "requiredEvidenceKeys": [
+        "scopeIds",
+        "sourceVersions"
+      ],
+      "oracleFields": [
+        "snapshotsSeparated",
+        "formalStatisticsPublished"
+      ]
+    },
+    {
+      "backend": "firebase",
+      "testId": "POC-013",
+      "priority": "P1",
+      "fixtureSet": "SC01-20261116",
+      "status": "NOT_RUN",
+      "requiredEvidenceKeys": [
+        "segments",
+        "matcherResult"
+      ],
+      "oracleFields": [
+        "daily",
+        "morning",
+        "afternoon"
+      ]
+    },
+    {
+      "backend": "firebase",
+      "testId": "POC-014",
+      "priority": "P1",
+      "fixtureSet": "SC01-20261116",
+      "status": "NOT_RUN",
+      "requiredEvidenceKeys": [
+        "unknownReason",
+        "calendarRef"
+      ],
+      "oracleFields": [
+        "applicability",
+        "reason"
+      ]
+    },
+    {
+      "backend": "firebase",
+      "testId": "POC-034",
+      "priority": "P1",
+      "fixtureSet": "SC01-20261116",
+      "status": "NOT_RUN",
+      "requiredEvidenceKeys": [
+        "normalizedIntervals",
+        "rosterContext"
+      ],
+      "oracleFields": [
+        "halfOpenIntervals",
+        "effectiveEnrollmentChecked",
+        "currentClassGuessed"
+      ]
+    },
+    {
+      "backend": "firebase",
+      "testId": "POC-017",
+      "priority": "P0",
+      "fixtureSet": "SC01-20261116",
+      "status": "NOT_RUN",
+      "requiredEvidenceKeys": [
+        "versionHistory",
+        "receiptCount",
+        "conflicts"
+      ],
+      "oracleFields": [
+        "successes",
+        "conflicts",
+        "silentOverwrite"
+      ]
+    },
+    {
+      "backend": "firebase",
+      "testId": "POC-018",
+      "priority": "P0",
+      "fixtureSet": "SC01-20261116",
+      "status": "NOT_RUN",
+      "requiredEvidenceKeys": [
+        "requestHash",
+        "receiptId",
+        "revisionCount"
+      ],
+      "oracleFields": [
+        "revisionDelta",
+        "receiptCount",
+        "uniqueReceiptIds"
+      ]
+    },
+    {
+      "backend": "firebase",
+      "testId": "POC-019",
+      "priority": "P0",
+      "fixtureSet": "SC01-20261116",
+      "status": "NOT_RUN",
+      "requiredEvidenceKeys": [
+        "returnCode",
+        "currentVersion",
+        "receiptHash"
+      ],
+      "oracleFields": [
+        "code",
+        "revisionDelta",
+        "receiptLeaked"
+      ]
+    },
+    {
+      "backend": "firebase",
+      "testId": "POC-020",
+      "priority": "P0",
+      "fixtureSet": "SC01-20261116",
+      "status": "NOT_RUN",
+      "requiredEvidenceKeys": [
+        "prePostState",
+        "transactionTrace"
+      ],
+      "oracleFields": [
+        "rolledBack",
+        "currentVersion",
+        "revisionDelta",
+        "receiptDelta",
+        "eventDelta"
+      ]
+    },
+    {
+      "backend": "firebase",
+      "testId": "POC-021",
+      "priority": "P0",
+      "fixtureSet": "SC01-20261116",
+      "status": "NOT_RUN",
+      "requiredEvidenceKeys": [
+        "receiptLookup",
+        "revisionCount"
+      ],
+      "oracleFields": [
+        "receiptRecovered",
+        "revisionDelta",
+        "duplicateCommit"
+      ]
+    },
+    {
+      "backend": "firebase",
+      "testId": "POC-022",
+      "priority": "P1",
+      "fixtureSet": "SC01-COMMITTED-v6",
+      "status": "NOT_RUN",
+      "requiredEvidenceKeys": [
+        "evidenceVersions",
+        "issueStatus",
+        "sourceHashes"
+      ],
+      "oracleFields": [
+        "issueEvidenceStale",
+        "issueAutoResolved",
+        "attendance"
+      ]
+    },
+    {
+      "backend": "firebase",
+      "testId": "POC-023",
+      "priority": "P1",
+      "fixtureSet": "SC01-20261116",
+      "status": "NOT_RUN",
+      "requiredEvidenceKeys": [
+        "projectionKeys",
+        "eventIds",
+        "issueCount"
+      ],
+      "oracleFields": [
+        "duplicateIssues",
+        "latestSourcePreserved"
+      ]
+    },
+    {
+      "backend": "firebase",
+      "testId": "POC-024",
+      "priority": "P1",
+      "fixtureSet": "L1-ILLUSTRATIVE",
+      "status": "NOT_RUN",
+      "requiredEvidenceKeys": [
+        "aggregateScope",
+        "countBasis"
+      ],
+      "oracleFields": [
+        "leaveRecords",
+        "trackingIssues",
+        "scopeSeparated"
+      ]
+    },
+    {
+      "backend": "firebase",
+      "testId": "POC-036",
+      "priority": "P1",
+      "fixtureSet": "SC01-20261116",
+      "status": "NOT_RUN",
+      "requiredEvidenceKeys": [
+        "sourceAsOf",
+        "projectionAsOf"
+      ],
+      "oracleFields": [
+        "projectionStatus",
+        "pretendedLatest",
+        "dedupeVerified"
+      ]
+    },
+    {
+      "backend": "firebase",
+      "testId": "POC-025",
+      "priority": "P0",
+      "fixtureSet": "SC01-DRAFT-v6",
+      "status": "NOT_RUN",
+      "requiredEvidenceKeys": [
+        "localState",
+        "remoteState",
+        "screen"
+      ],
+      "oracleFields": [
+        "remoteVerified",
+        "officialVersion",
+        "state"
+      ]
+    },
+    {
+      "backend": "firebase",
+      "testId": "POC-026",
+      "priority": "P0",
+      "fixtureSet": "A17-20261117",
+      "status": "NOT_RUN",
+      "requiredEvidenceKeys": [
+        "storageCheck",
+        "restartResult",
+        "receipt"
+      ],
+      "oracleFields": [
+        "durableConfirmedBeforeDisplay",
+        "serverReceiptAfterReconnect",
+        "offlineServerVerifiedShown"
+      ]
+    },
+    {
+      "backend": "firebase",
+      "testId": "POC-027",
+      "priority": "P0",
+      "fixtureSet": "SC01-20261116",
+      "status": "NOT_RUN",
+      "requiredEvidenceKeys": [
+        "loginState",
+        "storageIsolation",
+        "uiEvidence"
+      ],
+      "oracleFields": [
+        "crossAccountDisclosure",
+        "unsyncedWarningShown",
+        "originalAccountRecoverySignaled"
+      ]
+    },
+    {
+      "backend": "firebase",
+      "testId": "POC-028",
+      "priority": "P1",
+      "fixtureSet": "SC01-20261116",
+      "status": "NOT_RUN",
+      "requiredEvidenceKeys": [
+        "exception",
+        "uiEvidence"
+      ],
+      "oracleFields": [
+        "code",
+        "successShown"
+      ]
+    },
+    {
+      "backend": "firebase",
+      "testId": "POC-033",
+      "priority": "P1",
+      "fixtureSet": "SC01-20261116",
+      "status": "NOT_RUN",
+      "requiredEvidenceKeys": [
+        "versions",
+        "localOutbox",
+        "uiEvidence"
+      ],
+      "oracleFields": [
+        "code",
+        "silentOverwrite"
+      ]
+    },
+    {
+      "backend": "firebase",
+      "testId": "POC-031",
+      "priority": "P0",
+      "fixtureSet": "SC01-20261116",
+      "status": "NOT_RUN",
+      "requiredEvidenceKeys": [
+        "backupId",
+        "manifest",
+        "restoreProof"
+      ],
+      "oracleFields": [
+        "restoreVerified",
+        "linksIntact",
+        "integrityHashesMatch"
+      ]
+    },
+    {
+      "backend": "firebase",
+      "testId": "POC-032",
+      "priority": "P1",
+      "fixtureSet": "A17-20261117",
+      "status": "NOT_RUN",
+      "requiredEvidenceKeys": [
+        "metrics.json",
+        "pricingDate"
+      ],
+      "oracleFields": [
+        "metricsRecorded",
+        "percentilesRecorded",
+        "pricingDateRecorded",
+        "readWriteCountsRecorded"
+      ]
+    },
+    {
+      "backend": "postgres",
+      "testId": "POC-001",
+      "priority": "P0",
+      "fixtureSet": "A17-20261117",
+      "status": "NOT_RUN",
+      "requiredEvidenceKeys": [
+        "authzDecision",
+        "returnedIds",
+        "workspaceId"
+      ],
+      "oracleFields": [
+        "workspaceId",
+        "returnedCount",
+        "crossWorkspaceDisclosure"
+      ]
+    },
+    {
+      "backend": "postgres",
+      "testId": "POC-002",
+      "priority": "P0",
+      "fixtureSet": "A17-20261117",
+      "status": "NOT_RUN",
+      "requiredEvidenceKeys": [
+        "authzDecision",
+        "returnedFields",
+        "traceId"
+      ],
+      "oracleFields": [
+        "code",
+        "identifyingFieldsReturned"
+      ]
+    },
+    {
+      "backend": "postgres",
+      "testId": "POC-003",
+      "priority": "P0",
+      "fixtureSet": "SC01-20261116",
+      "status": "NOT_RUN",
+      "requiredEvidenceKeys": [
+        "responseFields",
+        "policyVersion"
+      ],
+      "oracleFields": [
+        "sensitiveReasonReturned",
+        "applicabilityAvailable"
+      ]
+    },
+    {
+      "backend": "postgres",
+      "testId": "POC-004",
+      "priority": "P0",
+      "fixtureSet": "A17-20261117",
+      "status": "NOT_RUN",
+      "requiredEvidenceKeys": [
+        "serverResponse",
+        "auditId"
+      ],
+      "oracleFields": [
+        "code",
+        "personalDataDisclosed"
+      ]
+    },
+    {
+      "backend": "postgres",
+      "testId": "POC-005",
+      "priority": "P0",
+      "fixtureSet": "SC01-20261116",
+      "status": "NOT_RUN",
+      "requiredEvidenceKeys": [
+        "principalId",
+        "scope",
+        "serverLog"
+      ],
+      "oracleFields": [
+        "code",
+        "scopeForgeryAccepted"
+      ]
+    },
+    {
+      "backend": "postgres",
+      "testId": "POC-029",
+      "priority": "P0",
+      "fixtureSet": "SC01-20261116",
+      "status": "NOT_RUN",
+      "requiredEvidenceKeys": [
+        "traceFields",
+        "exportFields",
+        "authz"
+      ],
+      "oracleFields": [
+        "sensitiveReasonDisclosed",
+        "exportMinimized",
+        "sourceScopeEnforced"
+      ]
+    },
+    {
+      "backend": "postgres",
+      "testId": "POC-035",
+      "priority": "P0",
+      "fixtureSet": "SC01-20261116",
+      "status": "NOT_RUN",
+      "requiredEvidenceKeys": [
+        "roleTrace",
+        "sqlPolicy/functionLogs"
+      ],
+      "oracleFields": [
+        "code",
+        "serverAuthorityNotBypassed"
+      ]
+    },
+    {
+      "backend": "postgres",
+      "testId": "POC-030",
+      "priority": "P1",
+      "fixtureSet": "SC01-20261116",
+      "status": "NOT_RUN",
+      "requiredEvidenceKeys": [
+        "termState",
+        "authzDecision"
+      ],
+      "oracleFields": [
+        "code",
+        "archivedSourceReadonly"
+      ]
+    },
+    {
+      "backend": "postgres",
+      "testId": "POC-008",
+      "priority": "P0",
+      "fixtureSet": "A17-20261117",
+      "status": "NOT_RUN",
+      "requiredEvidenceKeys": [
+        "queryCount",
+        "assertions"
+      ],
+      "oracleFields": [
+        "counts.P",
+        "counts.R",
+        "counts.N",
+        "counts.U",
+        "counts.registered",
+        "counts.arrived",
+        "counts.total"
+      ]
+    },
+    {
+      "backend": "postgres",
+      "testId": "POC-009",
+      "priority": "P0",
+      "fixtureSet": "SC01-20261116",
+      "status": "NOT_RUN",
+      "requiredEvidenceKeys": [
+        "versions",
+        "coverageResult",
+        "entryHash"
+      ],
+      "oracleFields": [
+        "attendance",
+        "leaveVersion",
+        "applicability",
+        "pendingPeriods",
+        "autoRewrite"
+      ]
+    },
+    {
+      "backend": "postgres",
+      "testId": "POC-015",
+      "priority": "P0",
+      "fixtureSet": "SC01-DRAFT-v6",
+      "status": "NOT_RUN",
+      "requiredEvidenceKeys": [
+        "officialVersion",
+        "draftOnly",
+        "issueStale"
+      ],
+      "oracleFields": [
+        "officialVersion",
+        "draftCommitted",
+        "issueEvidenceStale"
+      ]
+    },
+    {
+      "backend": "postgres",
+      "testId": "POC-016",
+      "priority": "P0",
+      "fixtureSet": "SC01-COMMITTED-v6",
+      "status": "NOT_RUN",
+      "requiredEvidenceKeys": [
+        "current",
+        "revision",
+        "receipt",
+        "event",
+        "attendance"
+      ],
+      "oracleFields": [
+        "officialVersion",
+        "revisionDelta",
+        "receiptDelta",
+        "eventDelta",
+        "attendance"
+      ]
+    },
+    {
+      "backend": "postgres",
+      "testId": "POC-006",
+      "priority": "P1",
+      "fixtureSet": "A17-20261117",
+      "status": "NOT_RUN",
+      "requiredEvidenceKeys": [
+        "membershipSnapshot",
+        "seatHistory"
+      ],
+      "oracleFields": [
+        "memberCount",
+        "stableIdentityUsed",
+        "effectiveEnrollmentUsed"
+      ]
+    },
+    {
+      "backend": "postgres",
+      "testId": "POC-007",
+      "priority": "P1",
+      "fixtureSet": "SC01-20261116",
+      "status": "NOT_RUN",
+      "requiredEvidenceKeys": [
+        "sessionRoster",
+        "enrollmentHistory"
+      ],
+      "oracleFields": [
+        "historicalRosterPreserved",
+        "historicalSeatPreserved"
+      ]
+    },
+    {
+      "backend": "postgres",
+      "testId": "POC-010",
+      "priority": "P1",
+      "fixtureSet": "A17-20261117",
+      "status": "NOT_RUN",
+      "requiredEvidenceKeys": [
+        "preview",
+        "excluded",
+        "commitCount"
+      ],
+      "oracleFields": [
+        "eligibleCountAtMost",
+        "protectedExcluded",
+        "committedWithoutConfirmation"
+      ]
+    },
+    {
+      "backend": "postgres",
+      "testId": "POC-011",
+      "priority": "P1",
+      "fixtureSet": "M04-PENDING",
+      "status": "NOT_RUN",
+      "requiredEvidenceKeys": [
+        "rateState",
+        "calendarVersion"
+      ],
+      "oracleFields": [
+        "rateState",
+        "officialRate",
+        "officialDayDenominator",
+        "officialPeriodDenominator"
+      ]
+    },
+    {
+      "backend": "postgres",
+      "testId": "POC-012",
+      "priority": "P1",
+      "fixtureSet": "L1-ILLUSTRATIVE",
+      "status": "NOT_RUN",
+      "requiredEvidenceKeys": [
+        "scopeIds",
+        "sourceVersions"
+      ],
+      "oracleFields": [
+        "snapshotsSeparated",
+        "formalStatisticsPublished"
+      ]
+    },
+    {
+      "backend": "postgres",
+      "testId": "POC-013",
+      "priority": "P1",
+      "fixtureSet": "SC01-20261116",
+      "status": "NOT_RUN",
+      "requiredEvidenceKeys": [
+        "segments",
+        "matcherResult"
+      ],
+      "oracleFields": [
+        "daily",
+        "morning",
+        "afternoon"
+      ]
+    },
+    {
+      "backend": "postgres",
+      "testId": "POC-014",
+      "priority": "P1",
+      "fixtureSet": "SC01-20261116",
+      "status": "NOT_RUN",
+      "requiredEvidenceKeys": [
+        "unknownReason",
+        "calendarRef"
+      ],
+      "oracleFields": [
+        "applicability",
+        "reason"
+      ]
+    },
+    {
+      "backend": "postgres",
+      "testId": "POC-034",
+      "priority": "P1",
+      "fixtureSet": "SC01-20261116",
+      "status": "NOT_RUN",
+      "requiredEvidenceKeys": [
+        "normalizedIntervals",
+        "rosterContext"
+      ],
+      "oracleFields": [
+        "halfOpenIntervals",
+        "effectiveEnrollmentChecked",
+        "currentClassGuessed"
+      ]
+    },
+    {
+      "backend": "postgres",
+      "testId": "POC-017",
+      "priority": "P0",
+      "fixtureSet": "SC01-20261116",
+      "status": "NOT_RUN",
+      "requiredEvidenceKeys": [
+        "versionHistory",
+        "receiptCount",
+        "conflicts"
+      ],
+      "oracleFields": [
+        "successes",
+        "conflicts",
+        "silentOverwrite"
+      ]
+    },
+    {
+      "backend": "postgres",
+      "testId": "POC-018",
+      "priority": "P0",
+      "fixtureSet": "SC01-20261116",
+      "status": "NOT_RUN",
+      "requiredEvidenceKeys": [
+        "requestHash",
+        "receiptId",
+        "revisionCount"
+      ],
+      "oracleFields": [
+        "revisionDelta",
+        "receiptCount",
+        "uniqueReceiptIds"
+      ]
+    },
+    {
+      "backend": "postgres",
+      "testId": "POC-019",
+      "priority": "P0",
+      "fixtureSet": "SC01-20261116",
+      "status": "NOT_RUN",
+      "requiredEvidenceKeys": [
+        "returnCode",
+        "currentVersion",
+        "receiptHash"
+      ],
+      "oracleFields": [
+        "code",
+        "revisionDelta",
+        "receiptLeaked"
+      ]
+    },
+    {
+      "backend": "postgres",
+      "testId": "POC-020",
+      "priority": "P0",
+      "fixtureSet": "SC01-20261116",
+      "status": "NOT_RUN",
+      "requiredEvidenceKeys": [
+        "prePostState",
+        "transactionTrace"
+      ],
+      "oracleFields": [
+        "rolledBack",
+        "currentVersion",
+        "revisionDelta",
+        "receiptDelta",
+        "eventDelta"
+      ]
+    },
+    {
+      "backend": "postgres",
+      "testId": "POC-021",
+      "priority": "P0",
+      "fixtureSet": "SC01-20261116",
+      "status": "NOT_RUN",
+      "requiredEvidenceKeys": [
+        "receiptLookup",
+        "revisionCount"
+      ],
+      "oracleFields": [
+        "receiptRecovered",
+        "revisionDelta",
+        "duplicateCommit"
+      ]
+    },
+    {
+      "backend": "postgres",
+      "testId": "POC-022",
+      "priority": "P1",
+      "fixtureSet": "SC01-COMMITTED-v6",
+      "status": "NOT_RUN",
+      "requiredEvidenceKeys": [
+        "evidenceVersions",
+        "issueStatus",
+        "sourceHashes"
+      ],
+      "oracleFields": [
+        "issueEvidenceStale",
+        "issueAutoResolved",
+        "attendance"
+      ]
+    },
+    {
+      "backend": "postgres",
+      "testId": "POC-023",
+      "priority": "P1",
+      "fixtureSet": "SC01-20261116",
+      "status": "NOT_RUN",
+      "requiredEvidenceKeys": [
+        "projectionKeys",
+        "eventIds",
+        "issueCount"
+      ],
+      "oracleFields": [
+        "duplicateIssues",
+        "latestSourcePreserved"
+      ]
+    },
+    {
+      "backend": "postgres",
+      "testId": "POC-024",
+      "priority": "P1",
+      "fixtureSet": "L1-ILLUSTRATIVE",
+      "status": "NOT_RUN",
+      "requiredEvidenceKeys": [
+        "aggregateScope",
+        "countBasis"
+      ],
+      "oracleFields": [
+        "leaveRecords",
+        "trackingIssues",
+        "scopeSeparated"
+      ]
+    },
+    {
+      "backend": "postgres",
+      "testId": "POC-036",
+      "priority": "P1",
+      "fixtureSet": "SC01-20261116",
+      "status": "NOT_RUN",
+      "requiredEvidenceKeys": [
+        "sourceAsOf",
+        "projectionAsOf"
+      ],
+      "oracleFields": [
+        "projectionStatus",
+        "pretendedLatest",
+        "dedupeVerified"
+      ]
+    },
+    {
+      "backend": "postgres",
+      "testId": "POC-025",
+      "priority": "P0",
+      "fixtureSet": "SC01-DRAFT-v6",
+      "status": "NOT_RUN",
+      "requiredEvidenceKeys": [
+        "localState",
+        "remoteState",
+        "screen"
+      ],
+      "oracleFields": [
+        "remoteVerified",
+        "officialVersion",
+        "state"
+      ]
+    },
+    {
+      "backend": "postgres",
+      "testId": "POC-026",
+      "priority": "P0",
+      "fixtureSet": "A17-20261117",
+      "status": "NOT_RUN",
+      "requiredEvidenceKeys": [
+        "storageCheck",
+        "restartResult",
+        "receipt"
+      ],
+      "oracleFields": [
+        "durableConfirmedBeforeDisplay",
+        "serverReceiptAfterReconnect",
+        "offlineServerVerifiedShown"
+      ]
+    },
+    {
+      "backend": "postgres",
+      "testId": "POC-027",
+      "priority": "P0",
+      "fixtureSet": "SC01-20261116",
+      "status": "NOT_RUN",
+      "requiredEvidenceKeys": [
+        "loginState",
+        "storageIsolation",
+        "uiEvidence"
+      ],
+      "oracleFields": [
+        "crossAccountDisclosure",
+        "unsyncedWarningShown",
+        "originalAccountRecoverySignaled"
+      ]
+    },
+    {
+      "backend": "postgres",
+      "testId": "POC-028",
+      "priority": "P1",
+      "fixtureSet": "SC01-20261116",
+      "status": "NOT_RUN",
+      "requiredEvidenceKeys": [
+        "exception",
+        "uiEvidence"
+      ],
+      "oracleFields": [
+        "code",
+        "successShown"
+      ]
+    },
+    {
+      "backend": "postgres",
+      "testId": "POC-033",
+      "priority": "P1",
+      "fixtureSet": "SC01-20261116",
+      "status": "NOT_RUN",
+      "requiredEvidenceKeys": [
+        "versions",
+        "localOutbox",
+        "uiEvidence"
+      ],
+      "oracleFields": [
+        "code",
+        "silentOverwrite"
+      ]
+    },
+    {
+      "backend": "postgres",
+      "testId": "POC-031",
+      "priority": "P0",
+      "fixtureSet": "SC01-20261116",
+      "status": "NOT_RUN",
+      "requiredEvidenceKeys": [
+        "backupId",
+        "manifest",
+        "restoreProof"
+      ],
+      "oracleFields": [
+        "restoreVerified",
+        "linksIntact",
+        "integrityHashesMatch"
+      ]
+    },
+    {
+      "backend": "postgres",
+      "testId": "POC-032",
+      "priority": "P1",
+      "fixtureSet": "A17-20261117",
+      "status": "NOT_RUN",
+      "requiredEvidenceKeys": [
+        "metrics.json",
+        "pricingDate"
+      ],
+      "oracleFields": [
+        "metricsRecorded",
+        "percentilesRecorded",
+        "pricingDateRecorded",
+        "readWriteCountsRecorded"
+      ]
+    }
+  ]
+}

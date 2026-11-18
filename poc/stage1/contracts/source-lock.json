@@ -1,0 +1,17 @@
+{
+  "schemaVersion": "1.0",
+  "sourceDocument": "CMN-Shared-Data-Architecture-Tech-Validation-v1.0",
+  "purpose": "Freeze test inputs before any adapter implementation",
+  "files": [
+    {
+      "path": "contracts/poc-test-matrix-v1.0.csv",
+      "sha256": "4e42d9bb4bcd071d784a558a96ae50cc3521fb2e433c27c819e76ca857bddad3",
+      "bytes": 8062
+    },
+    {
+      "path": "fixtures/canonical-fixtures-v1.0.json",
+      "sha256": "a2af65e8b86f2f212441b206a1457ca5eb76870375651a07ddaf0cd50508381f",
+      "bytes": 9286
+    }
+  ]
+}
