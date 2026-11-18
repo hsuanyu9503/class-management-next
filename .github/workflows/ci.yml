@@ -1,0 +1,29 @@
+name: CI - 檢查與建置
+
+# 依 Starter Kit V1.2 ci.yml 調整：本 PoC 沒有靜態網站，故以 Stage 1 契約／測試器取代 npm run build。
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+      - name: Node.js 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: 檢查結構與敏感內容
+        run: npm run check
+      - name: 執行流程政策測試
+        run: npm test
+      - name: Stage 1 全套（Stage0 21 項／Stage1 契約 14 項／執行器自我測試 20 項／72 筆 NOT_RUN 計畫）
+        run: npm run stage1:all
+      - name: 確認重新產生的計畫與鎖定檔案未被改動
+        run: git diff --exit-code -- poc/stage1
