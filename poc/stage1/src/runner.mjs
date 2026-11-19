@@ -1,5 +1,8 @@
 /** Pure executor shared by mock harness and future adapters. No implicit service calls. */
 import {evaluateOracle,validateAdapterEvidence} from './oracle.mjs';
+/** REV-002: an adapter's own `mode`/`backend` strings are self-declared and NOT trusted.
+ *  Stage 1 has no controlled attestation layer, so a BACKEND_REAL result can at best be
+ *  PENDING_ATTESTATION (oracle + evidence shape matched) or FAIL — never PASS. */
 const BACKENDS=new Set(['firebase','postgres']);
 export async function executeCase(caseSpec, adapter, fixtures) {
   if(!caseSpec?.testId || !fixtures?.datasets) throw Error('Invalid test case / fixture set');
@@ -12,7 +15,7 @@ export async function executeCase(caseSpec, adapter, fixtures) {
   const finishedAt=new Date().toISOString();
   if(!output||typeof output!=='object')throw Error('Adapter returned no output');
   const oracle=evaluateOracle(caseSpec,output.canonical);
-  const evidence=validateAdapterEvidence(caseSpec,output.evidence);
+  const evidence=validateAdapterEvidence(caseSpec,output.evidence,{rejectPlaceholders:adapter.mode==='BACKEND_REAL'});
   const success=oracle.ok&&evidence.ok;
   return {
     testId:caseSpec.testId,
@@ -20,7 +23,8 @@ export async function executeCase(caseSpec, adapter, fixtures) {
     backend:adapter.backend,
     fixtureSet:caseSpec.fixtureSet,
     startedAt,finishedAt,
-    status:adapter.mode==='HARNESS_MOCK'?(success?'HARNESS_PASS':'HARNESS_FAIL'):(success?'PASS':'FAIL'),
+    status:adapter.mode==='HARNESS_MOCK'?(success?'HARNESS_PASS':'HARNESS_FAIL'):(success?'PENDING_ATTESTATION':'FAIL'),
+    attested:false,
     failures:[...oracle.failures,...evidence.failures],
     // Recorded canonical/evidence, not a pass assertion from adapter.
     canonical:output.canonical??null,

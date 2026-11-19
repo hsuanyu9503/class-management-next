@@ -11,12 +11,14 @@ export function evaluateOracle(testCase, actual) {
   }
   return {ok:failures.length===0, failures};
 }
-export function validateAdapterEvidence(testCase, evidence) {
+const PLACEHOLDER=/^(placeholder|todo|tbd|n\/?a|none|null|dummy|fake|test|x+|-+|\?+)$|^synthetic_mock_/i;
+export function validateAdapterEvidence(testCase, evidence, {rejectPlaceholders=false}={}) {
   const failures=[];
   if(!evidence||typeof evidence!=='object'||Array.isArray(evidence))return {ok:false,failures:['Evidence object missing']};
   for(const key of testCase.requiredEvidenceKeys){
     const val=evidence[key];
     if(val===null||val===undefined||(typeof val==='string'&&!val.trim()))failures.push(`required evidence missing: ${key}`);
+    else if(rejectPlaceholders&&typeof val==='string'&&PLACEHOLDER.test(val.trim()))failures.push(`required evidence is a placeholder: ${key}`);
   }
   return {ok:failures.length===0,failures};
 }

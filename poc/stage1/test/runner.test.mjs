@@ -83,8 +83,10 @@ test('Mock cannot become official backend evidence',async()=>{
 test('Stage0 evidence fields available for FUTURE real backend output only',async()=>{
   const {toBackendEvidence}=await import('../src/evidence.mjs');
   const spec=byId.get('POC-008');
-  const sample={backend:'firebase',mode:'BACKEND_REAL',status:'PASS',canonical:{counts:{P:9,R:1,N:1,U:4,registered:11,arrived:10,total:15}},startedAt:'2026-11-19T00:00:00.000Z',finishedAt:'2026-11-19T00:00:01.000Z'};
-  const evidence=toBackendEvidence(spec,sample,createFixtureHash(fixtures),{evidenceFiles:['redacted/future-proof.json']});
+  // REV-002: a self-declared real result is PENDING_ATTESTATION (never PASS) and needs trace + files.
+  const sample={backend:'firebase',mode:'BACKEND_REAL',status:'PENDING_ATTESTATION',attested:false,canonical:{counts:{P:9,R:1,N:1,U:4,registered:11,arrived:10,total:15}},startedAt:'2026-11-19T00:00:00.000Z',finishedAt:'2026-11-19T00:00:01.000Z'};
+  const evidence=toBackendEvidence(spec,sample,createFixtureHash(fixtures),{traceId:'trace-future-0001',evidenceFiles:['redacted/future-proof.json']});
+  assert.equal(evidence.status,'BLOCKED');
   assert.deepEqual(Object.keys(evidence).sort(),['testId','backend','fixtureHash','gitCommit','status','expectedCanonical','actualCanonical','startedAt','finishedAt','evidenceFiles','traceId','notes'].sort());
   assert.equal(evidence.backend,'firebase');
   // Constructing this sample is a schema check, NOT a test run against Firebase.
