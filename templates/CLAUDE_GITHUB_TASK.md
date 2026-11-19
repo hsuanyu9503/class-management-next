@@ -1,5 +1,7 @@
 # 給 Claude Code 的開發啟動指令（複製後填入）
 
+> ⚠️ **本 PoC 適用說明**：本 Repository 是 Classroom Manager Next 技術驗證 PoC，**沒有** `pages.yml`、`release.yml`、`site/`、`scripts/build.mjs`、`scripts/package_release.py`、`scripts/verify_release.py`。本文件中關於網站建置、Pages 自動部署、Release／Tag／ZIP 的內容沿用自 Starter Kit V1.2 範本，**目前不適用**。唯一的 workflow 是 `.github/workflows/ci.yml` 的 `validate`（`check`／`test`／`stage1:all`）。另注意：GitHub Settings 已啟用 Pages（`pages-build-deployment`），若發佈來源為 `main`，合併後 Repository 檔案仍可能被公開；是否保留由專案負責人決定。
+
 你是本專案的主要程式開發與 GitHub 整合者。請先閱讀 `CLAUDE.md`、`docs/WORKFLOW.md`、`docs/SPEC.md`、`docs/DESIGN.md`、`docs/TECH.md`、`docs/HANDOFF.md` 和本次已核准的 ChatGPT → Claude 交接單。
 
 1. 先回報目前的 Repository、所在分支及 Commit SHA，並與交接單的基準版本比對。版本不一致先停止。

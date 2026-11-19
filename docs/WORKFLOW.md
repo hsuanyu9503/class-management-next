@@ -1,10 +1,12 @@
 # 三方網站開發 SOP｜V1.2
 
+> ⚠️ **本 PoC 適用說明**：本 Repository 是 Classroom Manager Next 技術驗證 PoC，**沒有** `pages.yml`、`release.yml`、`site/`、`scripts/build.mjs`、`scripts/package_release.py`、`scripts/verify_release.py`。本文件中關於網站建置、Pages 自動部署、Release／Tag／ZIP 的內容沿用自 Starter Kit V1.2 範本，**目前不適用**。唯一的 workflow 是 `.github/workflows/ci.yml` 的 `validate`（`check`／`test`／`stage1:all`）。另注意：GitHub Settings 已啟用 Pages（`pages-build-deployment`），若發佈來源為 `main`，合併後 Repository 檔案仍可能被公開；是否保留由專案負責人決定。
+
 ## 基本約定
 
 - **GitHub main Commit 是正式程式碼依據**；設計與需求決策寫入 `SPEC.md` 和 `DESIGN.md`。
 - **ChatGPT**：討論與規劃、視覺素材和設計審查；**Claude Code**：正式程式修改與 Git 操作；**你**：驗收、核准 PR 和正式 Release。
-- **合併 main ＝ 同意網站自動發布**；重要版 Tag 和 ZIP 由你確認後另行啟動 Release Actions。
+- **合併 main ＝ 同意成為正式基準**；本 PoC 沒有自動部署／Release workflow（Repository 層級的 Pages 設定另由你決定）。
 - 三方沒有自動共享對話：使用文件、交接單、固定 Commit SHA 傳遞正確資訊。
 - 依 `docs/RISK_POLICY.md` 分級 L1／L2／L3；L2/L3 在人工合併前必須執行 **ChatGPT 對實際差異的獨立審查**，並有 Claude 逐項回覆。GitHub CI 無法替代這個關卡。
 
@@ -33,8 +35,8 @@
 
 ## Release 與 ZIP
 
-- `pages.yml` 於 main push 自動部署；`ci.yml` 於 PR/main 檢查。
-- `release.yml` 由你手動啟動，它會自動建立 Tag、GitHub Release、ZIP 和外層 SHA-256 清單。
+- 本 PoC 只有 `ci.yml`（`validate`）於 PR/main 檢查；沒有 `pages.yml`。
+- 本 PoC 沒有 `release.yml`；以下 Release 敘述為範本參考。
 - Tag 對應主分支的 Git SHA；ZIP 裡 `VERSION.json` 有相同 SHA，`SHA256SUMS.txt` 校驗包內各檔。
 - 正式 Release 要先完成 `RELEASE_NOTES.md`、`TEST_REPORT.md`、`ACCEPTANCE.md` 並合併 main。完整規範見 [`RELEASE_AUTOMATION.md`](RELEASE_AUTOMATION.md)。
 - GitHub 的 Commit、Tag 與 Release 支援可追溯的程式回復；資料庫備份和復原是另一件事。

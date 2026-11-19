@@ -21,7 +21,9 @@ npm run stage1:all
 
 Windows PowerShell 請改用 `npm.cmd run stage1:all`。不需要 `npm install`（只用 Node 22 標準函式庫）。
 
-預期：Stage 0 21／21、Stage 1 契約 14／14、執行器自我測試 20／20、Firebase／PostgreSQL 72 筆 `NOT_RUN`。
+預期：Stage 0 21／21、Stage 1 契約 14／14、Stage 1 防護 3／3、自我測試 33／33（原 20 項＋審查修正 13 項）、Firebase／PostgreSQL 72 筆 `NOT_RUN`。
+
+審查修正（REV-001～004）說明：`poc/stage1/docs/Stage1-R1-審查修正說明.md`。
 mock 的 `HARNESS_PASS` 只測試執行器本身，**不是**任何後端 PASS。
 
 ## 未從 Starter Kit 導入的部分

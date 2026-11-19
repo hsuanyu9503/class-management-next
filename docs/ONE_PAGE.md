@@ -1,5 +1,7 @@
 # 一頁操作｜你 × ChatGPT × Claude Code × GitHub
 
+> ⚠️ **本 PoC 適用說明**：本 Repository 是 Classroom Manager Next 技術驗證 PoC，**沒有** `pages.yml`、`release.yml`、`site/`、`scripts/build.mjs`、`scripts/package_release.py`、`scripts/verify_release.py`。本文件中關於網站建置、Pages 自動部署、Release／Tag／ZIP 的內容沿用自 Starter Kit V1.2 範本，**目前不適用**。唯一的 workflow 是 `.github/workflows/ci.yml` 的 `validate`（`check`／`test`／`stage1:all`）。另注意：GitHub Settings 已啟用 Pages（`pages-build-deployment`），若發佈來源為 `main`，合併後 Repository 檔案仍可能被公開；是否保留由專案負責人決定。
+
 **新功能：** 你＋ChatGPT 整理 SPEC / DESIGN → Claude Code 技術審查 → claude/feature 分支開發 → CI 檢查 → ChatGPT 差異審查（依 L1／L2／L3）→ Claude 逐項修正 → 三方驗收 → 你核准 PR → **合併 main 自動部署 Pages** → 實站驗證。
 
 **視覺修改：** ChatGPT 提供 DESIGN / 圖片 / 動畫規格 → Claude Code 使用 feature 分支整合 → 自動測試與實機驗收 → 合併 main 自動部署。

@@ -23,7 +23,7 @@ jobs:
         run: npm run check
       - name: 執行流程政策測試
         run: npm test
-      - name: Stage 1 全套（Stage0 21 項／Stage1 契約 14 項／執行器自我測試 20 項／72 筆 NOT_RUN 計畫）
+      - name: Stage 1 全套（Stage0 21／契約 14／防護 3／自我測試 33／72 筆 NOT_RUN 計畫）
         run: npm run stage1:all
       - name: 確認重新產生的計畫與鎖定檔案未被改動
         run: git diff --exit-code -- poc/stage1

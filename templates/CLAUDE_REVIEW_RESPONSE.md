@@ -14,7 +14,7 @@
 |---|---|---|
 | npm run check | 未執行 | — |
 | npm test | 未執行 | — |
-| npm run build | 未執行 | — |
+| npm run stage1:all | 未執行 | — |
 
 ## 未解風險與新發現
 

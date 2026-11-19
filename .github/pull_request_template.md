@@ -25,7 +25,7 @@
 ## 測試紀錄
 - [ ] `npm run check`
 - [ ] `npm test`
-- [ ] `npm run build`
+- [ ] `npm run stage1:all`（本 PoC 無網站，取代範本的 `npm run build`）
 - [ ] 既有功能回歸測試
 - [ ] 手機／平板／桌面版面測試（依需求）
 - [ ] 需要時已檢查資料庫備份與遷移

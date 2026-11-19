@@ -25,7 +25,7 @@
 |---|---|---|
 | npm run check | 未執行 | — |
 | npm test | 未執行 | — |
-| npm run build | 未執行 | — |
+| npm run stage1:all | 未執行 | — |
 | 回歸／實機 | 未執行 | — |
 
 ## 4. 與原規格的差異

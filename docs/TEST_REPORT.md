@@ -8,7 +8,7 @@
 |---|---|---|
 | npm run check | 未執行 | — |
 | npm test | 未執行 | — |
-| npm run build | 未執行 | — |
+| npm run stage1:all | 未執行 | — |
 | 功能回歸 | 未執行 | — |
 | UI／多裝置 | 未執行 | — |
 | SQL / RLS / 同步（若適用） | 不適用 | — |

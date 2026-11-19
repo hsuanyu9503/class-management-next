@@ -1,5 +1,7 @@
 # GitHub 自動化與正式發布制度｜Starter Kit V1.1
 
+> ⚠️ **本 PoC 適用說明**：本 Repository 是 Classroom Manager Next 技術驗證 PoC，**沒有** `pages.yml`、`release.yml`、`site/`、`scripts/build.mjs`、`scripts/package_release.py`、`scripts/verify_release.py`。本文件中關於網站建置、Pages 自動部署、Release／Tag／ZIP 的內容沿用自 Starter Kit V1.2 範本，**目前不適用**。唯一的 workflow 是 `.github/workflows/ci.yml` 的 `validate`（`check`／`test`／`stage1:all`）。另注意：GitHub Settings 已啟用 Pages（`pages-build-deployment`），若發佈來源為 `main`，合併後 Repository 檔案仍可能被公開；是否保留由專案負責人決定。
+
 ## 目的：讓 Claude Code 做事、讓 GitHub 執行、讓你決策
 
 - **Claude Code**：在授權的本機或雲端環境讀取 repository、修改程式、建立 `feature/*`／`hotfix/*` 分支、推送並建立 Pull Request。Claude 的操作權限由你在 Claude 與 GitHub 端設定；本範本不會替你連接帳號。
