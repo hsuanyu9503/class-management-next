@@ -6,6 +6,9 @@
  *                              whose sourceTokens must appear in the locked CSV row.
  *   2. checkSafetyInvariants – rules hard-coded HERE (not in any JSON) that no expectation may relax.
  *   3. checkBaselineLock     – byte-level SHA-256/size lock of every fixed baseline file.
+ *   4. checkP0Pins           – all 20 P0 expectations pinned as literals in this file.
+ * Layers 1–4 all live inside the repository; scripts/verify-anchor.mjs compares them with an
+ * owner-controlled digest OUTSIDE the PR (REV-005).
  */
 import {isDeepStrictEqual} from 'node:util';
 import {getDataAtPath,sha256} from './common.mjs';
@@ -63,6 +66,46 @@ export function checkSafetyInvariants(oracles,matrix){
   return {ok:failures.length===0,failures};
 }
 
+/** REV-001 R2 / REV-005: P0 expectations pinned IN CODE, one literal per field, each traced to the
+ *  locked CSV expectedCanonical text (quoted). Not read from any JSON, so rewriting
+ *  canonical-oracles + oracle-approval + lock + manifest together still fails here.
+ *  Changing a pin is a code change to a protected file (see scripts/verify-anchor.mjs). */
+export const P0_PINNED=Object.freeze({
+  'POC-001':{workspaceId:'WS-A17',returnedCount:15,crossWorkspaceDisclosure:false}, // 15筆且僅 WS-A17
+  'POC-002':{code:'FORBIDDEN',identifyingFieldsReturned:0},                         // FORBIDDEN／無可識別 payload
+  'POC-003':{sensitiveReasonReturned:false,applicabilityAvailable:true},            // 僅可授權的適用提示／假別
+  'POC-004':{code:'FORBIDDEN',personalDataDisclosed:false},                         // FORBIDDEN／去識別
+  'POC-005':{code:'FORBIDDEN',scopeForgeryAccepted:false},                          // 拒絕不匹配 actor 身份及班級
+  'POC-008':{'counts.P':9,'counts.R':1,'counts.N':1,'counts.U':4,'counts.registered':11,'counts.arrived':10,'counts.total':15}, // P9 R1 N1 U4；T15，已登記11，到校10
+  'POC-009':{attendance:'N',leaveVersion:5,applicability:'partial',pendingPeriods:[5,6,7],autoRewrite:false}, // 部分適用，下午5–7待核對
+  'POC-015':{officialVersion:5,draftCommitted:false,issueEvidenceStale:false},      // 正式仍 v5；issue evidence 不過期
+  'POC-016':{officialVersion:6,revisionDelta:1,receiptDelta:1,eventDelta:1,attendance:'N'}, // v6, revision一次, receipt一次, event一次, Attendance N不變
+  'POC-017':{successes:1,conflicts:1,silentOverwrite:false},                        // 恰一成功，另一 VERSION_CONFLICT
+  'POC-018':{revisionDelta:1,receiptCount:1,uniqueReceiptIds:1},                    // 只一次正式改版與一次 revision，100次同一 receipt
+  'POC-019':{code:'OPERATION_REUSE_MISMATCH',revisionDelta:0,receiptLeaked:false},  // OPERATION_REUSE_MISMATCH
+  'POC-020':{rolledBack:true,currentVersion:5,revisionDelta:0,receiptDelta:0,eventDelta:0}, // 整筆回滾 current／revision／receipt／event
+  'POC-021':{receiptRecovered:true,revisionDelta:1,duplicateCommit:false},          // 取得同一正式結果，不二次執行
+  'POC-025':{remoteVerified:false,officialVersion:5,state:'DRAFT_PENDING_RECHECK'}, // 僅草稿／待重驗，不能正式成功
+  'POC-026':{durableConfirmedBeforeDisplay:true,serverReceiptAfterReconnect:true,offlineServerVerifiedShown:false}, // 只有證明 durable 才顯示本機已存
+  'POC-027':{crossAccountDisclosure:false,unsyncedWarningShown:true,originalAccountRecoverySignaled:true}, // 不同 principal 無法讀取舊快取／Outbox
+  'POC-029':{sensitiveReasonDisclosed:false,exportMinimized:true,sourceScopeEnforced:true}, // 資料源端拒絕或裁剪
+  'POC-031':{restoreVerified:true,linksIntact:true,integrityHashesMatch:true},      // current/revision/receipt/issue 結構一致；可核驗雜湊
+  'POC-035':{code:'FORBIDDEN',serverAuthorityNotBypassed:true},                     // 受控 API/RPC 仍執行明示的 principal+scope 驗證
+});
+
+export function checkP0Pins(oracles,matrix){
+  const failures=[];
+  const p0=matrix.filter(r=>r.priority==='P0').map(r=>r.testId).sort();
+  if(!isDeepStrictEqual(p0,Object.keys(P0_PINNED).sort()))failures.push(`P0 set in locked CSV differs from pinned set: ${p0}`);
+  for(const [id,pinned] of Object.entries(P0_PINNED)){
+    const spec=oracles.cases.find(c=>c.testId===id);
+    if(!spec){failures.push(`${id}: missing from oracles`);continue;}
+    if(spec.priority!=='P0')failures.push(`${id}: priority changed to ${spec.priority}`);
+    if(!isDeepStrictEqual(spec.expectedResult,pinned))failures.push(`${id}: expectedResult ${JSON.stringify(spec.expectedResult)} != pinned ${JSON.stringify(pinned)}`);
+  }
+  return {ok:failures.length===0,failures};
+}
+
 /** read(path) -> Buffer|null. Verifies fixed files byte-for-byte and classifies every package file. */
 export function checkBaselineLock(lock,deliveryManifest,read,listFiles){
   const failures=[],modifiedSinceDelivery=[];
@@ -80,10 +123,11 @@ export function checkBaselineLock(lock,deliveryManifest,read,listFiles){
   }
   const mutable=new Set(lock?.mutable??[]),added=new Set(lock?.addedSinceDelivery??[]),ignored=lock?.ignoredRuntimeOutputs??[];
   for(const p of delivered.keys())if(!fixed.has(p)&&!mutable.has(p))failures.push(`delivered file not classified fixed/mutable: ${p}`);
+  for(const p of mutable)if(!read(p))failures.push(`mutable file missing: ${p}`);
   for(const p of listFiles()){
     if(ignored.some(g=>p===g||(g.endsWith('/')&&p.startsWith(g))))continue;
     if(delivered.has(p)){
-      if(mutable.has(p)){const b=read(p);if(sha256(b)!==delivered.get(p).sha256)modifiedSinceDelivery.push(p);}
+      if(mutable.has(p)){const b=read(p);if(!b)failures.push(`listed file unreadable: ${p}`);else if(sha256(b)!==delivered.get(p).sha256)modifiedSinceDelivery.push(p);}
       continue;
     }
     if(p==='stage1-file-manifest.json'||fixed.has(p))continue;

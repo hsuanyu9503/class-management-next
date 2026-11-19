@@ -12,7 +12,7 @@ const required = [
   'templates/CHATGPT_TO_CLAUDE.md', 'templates/CLAUDE_TO_CHATGPT.md',
   'templates/CLAUDE_GITHUB_TASK.md', 'templates/CHATGPT_CODE_REVIEW.md',
   'templates/CHATGPT_REVIEW_REQUEST.md', 'templates/REVIEW_FIX_HANDOFF.md',
-  'templates/CLAUDE_REVIEW_RESPONSE.md', 'scripts/export_review_packet.py',
+  'templates/CLAUDE_REVIEW_RESPONSE.md', 'scripts/export_review_packet.py', 'scripts/verify-anchor.mjs',
   '.github/workflows/ci.yml', '.github/pull_request_template.md', '.gitattributes',
   'poc/stage1/package.json', 'poc/stage1/contracts/source-lock.json',
   'poc/stage1/contracts/poc-test-matrix-v1.0.csv',

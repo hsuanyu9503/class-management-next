@@ -4,7 +4,7 @@
 import {readdirSync,readFileSync,existsSync} from 'node:fs';
 import path from 'node:path';
 import {loadBaseline,jsonRead,ROOT} from '../src/common.mjs';
-import {checkOracleApproval,checkSafetyInvariants,checkBaselineLock} from '../src/contract-guard.mjs';
+import {checkOracleApproval,checkSafetyInvariants,checkBaselineLock,checkP0Pins} from '../src/contract-guard.mjs';
 
 // Hard-coded so that removing an entry from the lock file itself is detected.
 export const REQUIRED_FIXED=[
@@ -30,6 +30,7 @@ const lock=jsonRead('contracts/stage1-baseline-lock.json');
 const delivery=jsonRead('stage1-file-manifest.json');
 check('36 oracles match independent approval table (fixture-derived + CSV-traced)',checkOracleApproval(oracles,approval,matrix,fixtures));
 check('Non-relaxable safety invariants (hard-coded) hold for all 36',checkSafetyInvariants(oracles,matrix));
+check('20 P0 expectations equal literals pinned in code',checkP0Pins(oracles,matrix));
 const b=checkBaselineLock({...lock,mustBeFixed:REQUIRED_FIXED},delivery,read,()=>listFiles());
 check(`Fixed baseline: ${b.fixedCount} files match SHA-256/bytes; all package files classified`,b);
 console.log(JSON.stringify({stage1GuardsReady:failed.length===0,passedChecks:passed.length,failedChecks:failed.length,

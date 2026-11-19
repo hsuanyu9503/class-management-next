@@ -116,3 +116,41 @@ test('REV-002 recordable output is schema-valid and explicitly not a pass',async
   assert.ok(schema.required.every(k=>Object.hasOwn(e,k)));
   assert.ok(Object.keys(e).every(k=>Object.hasOwn(schema.properties,k)));
 });
+
+// ---------- R2：REV-005 coordinated multi-file tampering (reviewer's POC-017 counterexample) ----------
+import {checkP0Pins,P0_PINNED} from '../src/contract-guard.mjs';
+import {sha256} from '../src/common.mjs';
+test('R2 P0 pins: current oracles equal the 20 literals pinned in code',()=>{
+  const r=checkP0Pins(oracles,matrix);assert.ok(r.ok,r.failures.join('; '));
+  assert.equal(Object.keys(P0_PINNED).length,20);
+});
+test('REV-005 POC-017 successes:2/conflicts:0 with oracle+approval+lock+manifest all rewritten still fails',()=>{
+  const bad=mutateOracle('POC-017',r=>{r.successes=2;r.conflicts=0;});
+  const badApproval=mutateApproval('POC-017',c=>{c.fields.successes={value:2};c.fields.conflicts={value:0};});
+  // Rewrite lock and delivery manifest so every in-repo hash comparison is self-consistent.
+  const enc=o=>Buffer.from(JSON.stringify(o,null,2)+'\n');
+  const tampered={'contracts/canonical-oracles-v1.0.json':enc(bad),'contracts/oracle-approval-v1.0.json':enc(badApproval)};
+  const rehash=list=>list.map(f=>tampered[f.path]?{...f,bytes:tampered[f.path].length,sha256:sha256(tampered[f.path])}:f);
+  const badLock={...lock,fixed:rehash(lock.fixed)};
+  const badDelivery={...delivery,files:rehash(delivery.files)};
+  const badRead=p=>tampered[p]??read(p);
+  assert.equal(checkOracleApproval(bad,badApproval,matrix,fixtures).ok,true,'approval layer is consistent by construction');
+  assert.equal(checkSafetyInvariants(bad,matrix).ok,true,'generic invariants do not cover counts');
+  assert.equal(checkBaselineLock({...badLock,mustBeFixed:lock.fixed.map(f=>f.path)},badDelivery,badRead,files).ok,true,'lock is consistent by construction');
+  const pins=checkP0Pins(bad,matrix);
+  assert.equal(pins.ok,false);
+  assert.ok(pins.failures.some(f=>f.startsWith('POC-017')));
+});
+test('R2 every P0 field relaxation is caught by pins (all 20 cases)',()=>{
+  for(const id of Object.keys(P0_PINNED)){
+    for(const field of Object.keys(P0_PINNED[id])){
+      const bad=mutateOracle(id,r=>{const v=r[field];r[field]=typeof v==='number'?v+1:typeof v==='boolean'?!v:Array.isArray(v)?[]:`${v}_RELAXED`;});
+      assert.equal(checkP0Pins(bad,matrix).ok,false,`${id}.${field}`);
+    }
+  }
+});
+test('LOW checkBaselineLock reports a missing mutable file instead of throwing',()=>{
+  const noRunner=p=>p==='src/runner.mjs'?null:read(p);
+  const r=checkBaselineLock(lock,delivery,noRunner,files);
+  assert.ok(r.failures.some(f=>f.includes('src/runner.mjs')));
+});
