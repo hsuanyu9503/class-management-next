@@ -1,0 +1,103 @@
+{
+  "schemaVersion": "1.0",
+  "purpose": "REV-003：區分必須固定的基準來源（fixed，CI 逐檔核對 SHA-256 與大小）與允許經審查 PR 修改的程式／文件（mutable）。fixed 檔案若在 v1.0 交付清單中，其雜湊必須與交付清單一致；修訂 fixed 檔案必須另立新版本檔名並經審查。",
+  "deliveryManifest": "stage1-file-manifest.json",
+  "fixed": [
+    {
+      "path": "contracts/poc-test-matrix-v1.0.csv",
+      "bytes": 8062,
+      "sha256": "4e42d9bb4bcd071d784a558a96ae50cc3521fb2e433c27c819e76ca857bddad3"
+    },
+    {
+      "path": "fixtures/canonical-fixtures-v1.0.json",
+      "bytes": 9286,
+      "sha256": "a2af65e8b86f2f212441b206a1457ca5eb76870375651a07ddaf0cd50508381f"
+    },
+    {
+      "path": "contracts/source-lock.json",
+      "bytes": 529,
+      "sha256": "dc1b58bcfbfc140a81aa0a27246115242f88303d3d4960d07f144763f955f65e"
+    },
+    {
+      "path": "contracts/canonical-oracles-v1.0.json",
+      "bytes": 19819,
+      "sha256": "b17818cd6e5f12c1ce7c325773f6638458d4bd66591e3b3ed2d4477a1800f906"
+    },
+    {
+      "path": "contracts/oracle-approval-v1.0.json",
+      "bytes": 15270,
+      "sha256": "9bf5fc16cbc39610a4cea5b7a2c8c07b5a578c64b624ab419563ca2437f83860"
+    },
+    {
+      "path": "contracts/test-order-v1.0.json",
+      "bytes": 2319,
+      "sha256": "416a1f1ec35c9090a40b66c6c4bfeef726cd8bf819b586312f4a57f4b786f879"
+    },
+    {
+      "path": "contracts/evidence-schema-v1.0.json",
+      "bytes": 1375,
+      "sha256": "c42efc35b566712a6844ac534cc225061defe6b6a21d35c79465f408e69f00c5"
+    },
+    {
+      "path": "artifacts/stage1-72-backend-not-run-plan.json",
+      "bytes": 26832,
+      "sha256": "c4fa82f22f8b1d1545f86aff113cd2a16cd67e620d01f92c8e0ad498af519f22"
+    },
+    {
+      "path": "stage0-file-manifest.json",
+      "bytes": 3975,
+      "sha256": "41c008d12c4b03149113d97152e4fb4818d0e31a2eef2769470bc1e9893e34f8"
+    },
+    {
+      "path": "stage1-file-manifest.json",
+      "bytes": 6441,
+      "sha256": "2c6e1035ec46fba39b6dd90b5a689cd476f3a8301ca7fae008e6f6bd658aec16"
+    }
+  ],
+  "mutable": [
+    ".env.example",
+    ".gitignore",
+    ".nvmrc",
+    "README.md",
+    "adapters/README.md",
+    "artifacts/README.md",
+    "ci-example/stage0-validate.workflow.yml.sample",
+    "docs/Claude-Stage1-L1-審查提示詞.md",
+    "docs/PoC-階段順序與放行門檻.md",
+    "docs/Stage0-驗收決議與環境盤點.md",
+    "docs/Stage1-本次執行驗收報告.md",
+    "docs/Stage1-架構與驗收門檻.md",
+    "docs/Starter-Kit-v1.2-L1交接與CI說明.md",
+    "docs/Windows-本機自查與安全安裝順序.md",
+    "docs/官方參考與版本假設.md",
+    "docs/證據格式與安全記錄契約.md",
+    "evidence/README.md",
+    "package.json",
+    "reports/stage0-environment-this-runtime.json",
+    "reports/stage0-validation-this-runtime.json",
+    "scripts/check-env.mjs",
+    "scripts/make-plan.mjs",
+    "scripts/validate-stage0.mjs",
+    "scripts/validate-stage1.mjs",
+    "src/common.mjs",
+    "src/evidence.mjs",
+    "src/oracle.mjs",
+    "src/runner.mjs",
+    "test/mock-adapter.mjs",
+    "test/runner.test.mjs"
+  ],
+  "addedSinceDelivery": [
+    "contracts/oracle-approval-v1.0.json",
+    "contracts/stage1-baseline-lock.json",
+    "src/contract-guard.mjs",
+    "scripts/validate-stage1-guards.mjs",
+    "test/contract-guard.test.mjs",
+    "docs/Stage1-R1-審查修正說明.md"
+  ],
+  "ignoredRuntimeOutputs": [
+    "reports/stage0-environment-local.json",
+    "reports/stage0-validation-local.json",
+    "evidence/runs/",
+    "evidence/private/"
+  ]
+}

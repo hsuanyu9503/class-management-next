@@ -12,7 +12,8 @@
     "stage0:env": "node scripts/check-env.mjs",
     "stage1:validate": "node scripts/validate-stage1.mjs",
     "stage1:plan": "node scripts/make-plan.mjs",
-    "stage1:self-test": "node --test test/runner.test.mjs",
-    "stage1:all": "node scripts/validate-stage0.mjs && node scripts/validate-stage1.mjs && node --test test/runner.test.mjs && node scripts/make-plan.mjs"
+    "stage1:self-test": "node --test test/runner.test.mjs test/contract-guard.test.mjs",
+    "stage1:all": "node scripts/validate-stage0.mjs && node scripts/validate-stage1.mjs && node scripts/validate-stage1-guards.mjs && node --test test/runner.test.mjs test/contract-guard.test.mjs && node scripts/make-plan.mjs",
+    "stage1:guards": "node scripts/validate-stage1-guards.mjs"
   }
 }
