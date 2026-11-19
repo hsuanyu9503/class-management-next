@@ -1,0 +1,126 @@
+{
+  "artifactVersion": "1.0",
+  "generatedAtUtc": "2026-11-18",
+  "scope": "Stage0 static validation; user Windows machine and backend adapters not tested",
+  "stage0StaticChecks": {
+    "passed": 21,
+    "failed": 0
+  },
+  "backendTests": {
+    "firebase": "NOT_RUN",
+    "postgres": "NOT_RUN"
+  },
+  "fileCountExcludingManifest": 22,
+  "files": [
+    {
+      "path": ".env.example",
+      "bytes": 207,
+      "sha256": "b10867ea0a1d88d0f52afe16b180a931f66f6300ce90f8d6b04b7af4e10093ba"
+    },
+    {
+      "path": ".gitignore",
+      "bytes": 194,
+      "sha256": "c81efa361a00faffdfaf0076cd2d7ef8c2cf73b71aab51dbbd3afc4cf6f0268a"
+    },
+    {
+      "path": ".nvmrc",
+      "bytes": 3,
+      "sha256": "f14b4987904bcb5814e4459a057ed4d20f58a633152288a761214dcd28780b56"
+    },
+    {
+      "path": "README.md",
+      "bytes": 2609,
+      "sha256": "a1cd0ea96d199b49623e93672c75aa7ee97081771ad5dfb9bc7f126f16837839"
+    },
+    {
+      "path": "ci-example/stage0-validate.workflow.yml.sample",
+      "bytes": 547,
+      "sha256": "cc7fb3a72a697a39287ba9705fbc244a7c62e3972c04019fb50216350eaf2371"
+    },
+    {
+      "path": "contracts/evidence-schema-v1.0.json",
+      "bytes": 1375,
+      "sha256": "c42efc35b566712a6844ac534cc225061defe6b6a21d35c79465f408e69f00c5"
+    },
+    {
+      "path": "contracts/poc-test-matrix-v1.0.csv",
+      "bytes": 8062,
+      "sha256": "4e42d9bb4bcd071d784a558a96ae50cc3521fb2e433c27c819e76ca857bddad3"
+    },
+    {
+      "path": "contracts/source-lock.json",
+      "bytes": 529,
+      "sha256": "dc1b58bcfbfc140a81aa0a27246115242f88303d3d4960d07f144763f955f65e"
+    },
+    {
+      "path": "contracts/test-order-v1.0.json",
+      "bytes": 2319,
+      "sha256": "416a1f1ec35c9090a40b66c6c4bfeef726cd8bf819b586312f4a57f4b786f879"
+    },
+    {
+      "path": "docs/PoC-階段順序與放行門檻.md",
+      "bytes": 2022,
+      "sha256": "9323b7a9de6e2f6f5f6f630dc9d5902a03925c85fbd446d597a106c99a2f5b69"
+    },
+    {
+      "path": "docs/Stage0-驗收決議與環境盤點.md",
+      "bytes": 2585,
+      "sha256": "c086f12328abcdbe2b7a3de180b11aa8d9d7d3ce9e06dec1edd1b577d2694b96"
+    },
+    {
+      "path": "docs/Starter-Kit-v1.2-L1交接與CI說明.md",
+      "bytes": 1489,
+      "sha256": "d1379ce792cb1b0d8a6d78d002252a80b939cc65715b3ed2e909d517fc338903"
+    },
+    {
+      "path": "docs/Windows-本機自查與安全安裝順序.md",
+      "bytes": 2267,
+      "sha256": "530cf0f50041397b2a0ce8d4ee4f639199284afd3eb982818eb95b3ef83c0f87"
+    },
+    {
+      "path": "docs/官方參考與版本假設.md",
+      "bytes": 1299,
+      "sha256": "3074935a64783daae87d6da80678e9fef90bb44cd8592206d04dd1048e3b934a"
+    },
+    {
+      "path": "docs/證據格式與安全記錄契約.md",
+      "bytes": 1943,
+      "sha256": "1a360dde143c0399ec710ae9436ef77566ab61a13e4b9b34f8c8866645855655"
+    },
+    {
+      "path": "evidence/README.md",
+      "bytes": 376,
+      "sha256": "47b68c6becfcb935de9f8c47e2bd313d83fa3758ae7d70124b0d247297cf49f6"
+    },
+    {
+      "path": "fixtures/canonical-fixtures-v1.0.json",
+      "bytes": 9286,
+      "sha256": "a2af65e8b86f2f212441b206a1457ca5eb76870375651a07ddaf0cd50508381f"
+    },
+    {
+      "path": "package.json",
+      "bytes": 481,
+      "sha256": "f10b918cdb842491552287f467d9771e4d62466df2c30c8255a6fd4d759263e4"
+    },
+    {
+      "path": "reports/stage0-environment-this-runtime.json",
+      "bytes": 1610,
+      "sha256": "0cc4e766e45971cf637af649af62cd0a4baa540bb583e68b1c6a11ff5a406b74"
+    },
+    {
+      "path": "reports/stage0-validation-this-runtime.json",
+      "bytes": 1753,
+      "sha256": "66f8d0ea3e2cbd62dad7fd30a6f7756bafd8ff501d028d4f66c427a2b60064a9"
+    },
+    {
+      "path": "scripts/check-env.mjs",
+      "bytes": 2559,
+      "sha256": "7251ff9e9b1c343e5ad6cd10702d05e0205832a89b1264a2df6645b84ce81cce"
+    },
+    {
+      "path": "scripts/validate-stage0.mjs",
+      "bytes": 6676,
+      "sha256": "72188e94e9c22e9a948e3af7019fc5cafc489bfe30e286a5827da40105fd7a04"
+    }
+  ]
+}

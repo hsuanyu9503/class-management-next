@@ -1,0 +1,13 @@
+node_modules/
+.env
+.env.*
+!.env.example
+.firebase/
+.supabase/
+.cache/
+evidence/runs/
+evidence/private/
+reports/stage0-environment-local.json
+reports/stage0-validation-local.json
+*.log
+.DS_Store

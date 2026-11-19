@@ -1,0 +1,47 @@
+name: CI - 檢查與建置
+
+# 依 Starter Kit V1.2 ci.yml 調整：本 PoC 沒有靜態網站，故以 Stage 1 契約／測試器取代 npm run build。
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+      - name: Node.js 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: 檢查結構與敏感內容
+        run: npm run check
+      - name: 執行流程政策測試
+        run: npm test
+      - name: Stage 1 全套（Stage0 21／契約 14／防護 4／自我測試／72 筆 NOT_RUN 計畫）
+        run: npm run stage1:all
+      - name: 確認重新產生的計畫與鎖定檔案未被改動
+        run: git diff --exit-code -- poc/stage1
+
+  # REV-005：與 PR 之外、由負責人設定的 repository variable 比對受保護檔案 digest。
+  # 未設定或不一致即失敗；負責人核准後於 Settings 設定 CMN_STAGE1_ANCHOR_SHA256，再 Re-run 此 job。
+  baseline-anchor:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+      - name: Node.js 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: 受保護檔案清單與 digest
+        run: node scripts/verify-anchor.mjs --print
+      - name: 與負責人核准的基準比對
+        env:
+          CMN_STAGE1_ANCHOR_SHA256: ${{ vars.CMN_STAGE1_ANCHOR_SHA256 }}
+        run: node scripts/verify-anchor.mjs

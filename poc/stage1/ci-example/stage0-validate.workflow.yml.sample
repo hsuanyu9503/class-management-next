@@ -1,0 +1,22 @@
+# 僅供 Starter Kit v1.2 既有 CI 流程整合參考；不要直接覆寫 .github/workflows。
+name: stage0-contract-reference
+on:
+  pull_request:
+    paths:
+      - 'contracts/**'
+      - 'fixtures/**'
+      - 'scripts/**'
+      - 'package.json'
+      - '.nvmrc'
+  workflow_dispatch:
+jobs:
+  stage0-validate:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: '.nvmrc'
+      - run: npm run stage0:validate

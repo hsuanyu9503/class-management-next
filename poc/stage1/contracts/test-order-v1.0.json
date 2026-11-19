@@ -1,0 +1,126 @@
+{
+  "schemaVersion": "1.0",
+  "note": "Two adapters must run same 36 tests; groups sorted by risk, not separate criteria",
+  "groups": [
+    {
+      "groupId": "SEC",
+      "title": "身份/工作空間/授權",
+      "runOrder": [
+        "POC-001",
+        "POC-002",
+        "POC-003",
+        "POC-004",
+        "POC-005",
+        "POC-029",
+        "POC-035",
+        "POC-030"
+      ],
+      "allTestIds": [
+        "POC-001",
+        "POC-002",
+        "POC-003",
+        "POC-004",
+        "POC-005",
+        "POC-029",
+        "POC-030",
+        "POC-035"
+      ]
+    },
+    {
+      "groupId": "DOMAIN",
+      "title": "在籍/點名/請假/日曆",
+      "runOrder": [
+        "POC-008",
+        "POC-009",
+        "POC-015",
+        "POC-016",
+        "POC-006",
+        "POC-007",
+        "POC-010",
+        "POC-011",
+        "POC-012",
+        "POC-013",
+        "POC-014",
+        "POC-034"
+      ],
+      "allTestIds": [
+        "POC-006",
+        "POC-007",
+        "POC-008",
+        "POC-009",
+        "POC-010",
+        "POC-011",
+        "POC-012",
+        "POC-013",
+        "POC-014",
+        "POC-015",
+        "POC-016",
+        "POC-034"
+      ]
+    },
+    {
+      "groupId": "TX",
+      "title": "交易/版本/冪等",
+      "runOrder": [
+        "POC-017",
+        "POC-018",
+        "POC-019",
+        "POC-020",
+        "POC-021"
+      ],
+      "allTestIds": [
+        "POC-017",
+        "POC-018",
+        "POC-019",
+        "POC-020",
+        "POC-021"
+      ]
+    },
+    {
+      "groupId": "SYNC",
+      "title": "衍生/核對/統計",
+      "runOrder": [
+        "POC-022",
+        "POC-023",
+        "POC-024",
+        "POC-036"
+      ],
+      "allTestIds": [
+        "POC-022",
+        "POC-023",
+        "POC-024",
+        "POC-036"
+      ]
+    },
+    {
+      "groupId": "OFFLINE",
+      "title": "離線/切帳",
+      "runOrder": [
+        "POC-025",
+        "POC-026",
+        "POC-027",
+        "POC-028",
+        "POC-033"
+      ],
+      "allTestIds": [
+        "POC-025",
+        "POC-026",
+        "POC-027",
+        "POC-028",
+        "POC-033"
+      ]
+    },
+    {
+      "groupId": "DR",
+      "title": "復原/效能成本",
+      "runOrder": [
+        "POC-031",
+        "POC-032"
+      ],
+      "allTestIds": [
+        "POC-031",
+        "POC-032"
+      ]
+    }
+  ]
+}

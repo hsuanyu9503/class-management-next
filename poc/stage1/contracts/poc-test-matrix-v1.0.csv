@@ -1,0 +1,37 @@
+﻿testId,category,priority,fixtureSet,precondition,action,expectedCanonical,mustNotHappen,evidenceKeys,firebaseStatus,postgresStatus
+POC-001,identity,P0,A17-20261117,教師屬 WS-A17,getAuthorized 指定班級15筆,15筆且僅 WS-A17,跨 workspace 洩露,"authzDecision,returnedIds,workspaceId",NOT_RUN,NOT_RUN
+POC-002,identity,P0,A17-20261117,ACTOR-OTHER 未授權,讀 A17 Student／AttendanceEntry,FORBIDDEN／無可識別 payload,跨班推知存在與否,"authzDecision,returnedFields,traceId",NOT_RUN,NOT_RUN
+POC-003,identity,P0,SC01-20261116,同 principal 不含 leave.sensitive.read,讀請假摘要,僅可授權的適用提示／假別（依 scope）,醫療／家庭備註出現在查詢,"responseFields,policyVersion",NOT_RUN,NOT_RUN
+POC-004,identity,P0,A17-20261117,投影模式無個資授權,請求學生個別詳情 API,FORBIDDEN／去識別,因 UI 遮罩但底層已取得個資,"serverResponse,auditId",NOT_RUN,NOT_RUN
+POC-005,identity,P0,SC01-20261116,服務角色能接觸資料庫,直接呼叫受控更正 API 偽造 scope,拒絕不匹配 actor 身份及班級,server key 繞過所有授權檢查,"principalId,scope,serverLog",NOT_RUN,NOT_RUN
+POC-006,enrollment,P1,A17-20261117,日期有效 enrollment 已建立,用 studentId 和 enrollmentId 查當日名單,15人對應有效識別,以座號或姓名當主鍵,"membershipSnapshot,seatHistory",NOT_RUN,NOT_RUN
+POC-007,enrollment,P1,SC01-20261116,歷史在籍與目前不同,讀過去點名場次,保留當時有效名單與座號,歷史快照靜默跟著改,"sessionRoster,enrollmentHistory",NOT_RUN,NOT_RUN
+POC-008,attendance,P0,A17-20261117,15筆固定測資,重算狀態,P9 R1 N1 U4；T15，已登記11，到校10,把請假／遲到當主要互斥狀態,"queryCount,assertions",NOT_RUN,NOT_RUN
+POC-009,attendance,P0,SC01-20261116,Leave v5 AM；Attendance N all day,查出席與假單適用,部分適用，下午5–7待核對,自動改 N 或延長假單,"versions,coverageResult,entryHash",NOT_RUN,NOT_RUN
+POC-010,attendance,P1,A17-20261117,未登記 U 為07/09/13/15,批次預覽其餘到場,最多預覽4且排除需個別核對者,未經確認把 N/R 或有疑問者改 P,"preview,excluded,commitCount",NOT_RUN,NOT_RUN
+POC-011,calendar,P1,M04-PENDING,只有30日曆天與21平日,查本月正式出席率,UNKNOWN／暫不計算,使用21天或147節推定分母,"rateState,calendarVersion",NOT_RUN,NOT_RUN
+POC-012,calendar,P1,L1-ILLUSTRATIVE,L1虛構統計與 M04 pending,比對兩組快照,識別隔離且不可作正式率,假裝共用相同 M04 正式資料,"scopeIds,sourceVersions",NOT_RUN,NOT_RUN
+POC-013,leave,P1,SC01-20261116,上午第1～4節,覆蓋匹配每日及節次,daily=部分；上午=完全；下午=不適用（有已知來源）,未涵蓋下午被判全日適用,"segments,matcherResult",NOT_RUN,NOT_RUN
+POC-014,leave,P1,SC01-20261116,未取得可信日曆,匹配未知節次,可能適用／資料待確認,用推測課表判完全適用,"unknownReason,calendarRef",NOT_RUN,NOT_RUN
+POC-015,leave,P0,SC01-DRAFT-v6,正式 v5 且有草稿,儲存草稿並查來源與 issue,正式仍 v5；issue evidence 不過期,草稿產生正式 v6 revision,"officialVersion,draftOnly,issueStale",NOT_RUN,NOT_RUN
+POC-016,leave,P0,SC01-COMMITTED-v6,授權 actor + expected v5,正式提交 AM→全天 v6,"v6, revision一次, receipt一次, event一次, Attendance N不變",只改 Leave 或偷偷改 Attendance,"current,revision,receipt,event,attendance",NOT_RUN,NOT_RUN
+POC-017,revision,P0,SC01-20261116,cloud current=v5,兩裝置同時以 expectedVersion=5 提交不同意圖,恰一成功，另一 VERSION_CONFLICT,後寫入者靜默覆蓋,"versionHistory,receiptCount,conflicts",NOT_RUN,NOT_RUN
+POC-018,revision,P0,SC01-20261116,同一有效命令與 operationId,連續重送100次,只一次正式改版與一次 revision，100次同一 receipt,重複生 revision / 遞增版本,"requestHash,receiptId,revisionCount",NOT_RUN,NOT_RUN
+POC-019,revision,P0,SC01-20261116,同 operationId 已 commit,改 payload／actor／target 重用,OPERATION_REUSE_MISMATCH,洩漏原 actor 收據或再次寫入,"returnCode,currentVersion,receiptHash",NOT_RUN,NOT_RUN
+POC-020,revision,P0,SC01-20261116,注入 transaction 內寫 revision 失敗,正式提交,整筆回滾 current／revision／receipt／event,current v6 但 revision 缺失,"prePostState,transactionTrace",NOT_RUN,NOT_RUN
+POC-021,revision,P0,SC01-20261116,commit 實際成功但回應遺失,客戶端以原 operationId 查 receipt,取得同一正式結果，不二次執行,用新 operationId 再重複修改,"receiptLookup,revisionCount",NOT_RUN,NOT_RUN
+POC-022,tracking,P1,SC01-COMMITTED-v6,v5 issue evidence 與正式 v6,run derived job,原 evidence stale，issue 待重新核對，Attendance N不變,直接把 issue resolved 或改 N,"evidenceVersions,issueStatus,sourceHashes",NOT_RUN,NOT_RUN
+POC-023,tracking,P1,SC01-20261116,同 source event 重送十次,重播投影,冪等且不重複事項；只依最新來源版本,統計重複計數或舊事件覆蓋新投影,"projectionKeys,eventIds,issueCount",NOT_RUN,NOT_RUN
+POC-024,tracking,P1,L1-ILLUSTRATIVE,12個假單與20項事項,分別查計數,12件 LeaveRecord；20項 TrackingIssue,把事項總量當假單數,"aggregateScope,countBasis",NOT_RUN,NOT_RUN
+POC-025,offline,P0,SC01-DRAFT-v6,裝置離線,修改正式高風險請假意圖,僅草稿／待重驗，不能正式成功,離線狀態虛報 server_verified,"localState,remoteState,screen",NOT_RUN,NOT_RUN
+POC-026,offline,P0,A17-20261117,可信裝置且可持久存,離線新建L2 intent、重啟、恢復網路,只有證明 durable 才顯示本機已存；連網驗證後收 receipt,假裝永不遺失或未保存卻稱已保存,"storageCheck,restartResult,receipt",NOT_RUN,NOT_RUN
+POC-027,offline,P0,SC01-20261116,共用 iPad 有未同步資料,登出／切換另一 principal,不同 principal 無法讀取舊快取／Outbox；原使用者有明確恢復提示,跨帳可讀／無警示丟失,"loginState,storageIsolation,uiEvidence",NOT_RUN,NOT_RUN
+POC-028,offline,P1,SC01-20261116,本機容量不足或清除資料,保存草稿,LOCAL_SAVE_FAILED；不稱本機已可靠保存,暗中捨棄或誤報完成,"exception,uiEvidence",NOT_RUN,NOT_RUN
+POC-029,security,P0,SC01-20261116,敏感 reasonNote 已保存,科任／無權限查來源、投影、匯出,資料源端拒絕或裁剪,先送敏感資料再前端隱藏,"traceFields,exportFields,authz",NOT_RUN,NOT_RUN
+POC-030,security,P1,SC01-20261116,已封存學期,一般教師更正已封存正式來源,唯讀拒絕，例外需明確額外權限,一般登入任意覆寫封存資料,"termState,authzDecision",NOT_RUN,NOT_RUN
+POC-031,backup,P0,SC01-20261116,備份含 current+history+receipts+links,在隔離空間還原,current/revision/receipt/issue 結構一致；可核驗雜湊,只有可匯出無法還原,"backupId,manifest,restoreProof",NOT_RUN,NOT_RUN
+POC-032,performance,P1,A17-20261117,15人及模擬一學期資料,量測點名、核對與查詢,輸出吞吐、p50/p95/p99、讀寫量、月費推估原始證據,只宣稱免費／快速不附計數,"metrics.json,pricingDate",NOT_RUN,NOT_RUN
+POC-033,offline,P1,SC01-20261116,離線 conflict 且 expectedVersion 舊,恢復網路重送,VERSION_CONFLICT，提示保留雲端／草稿修訂,覆蓋雲端且顯示已成功,"versions,localOutbox,uiEvidence",NOT_RUN,NOT_RUN
+POC-034,temporal,P1,SC01-20261116,跨時段半開區間與跨學期在籍,計算多段請假、日期跨界,起含終不含；日曆與有效在籍逐日核對,跨期默認當前班級,"normalizedIntervals,rosterContext",NOT_RUN,NOT_RUN
+POC-035,security,P0,SC01-20261116,高權限 DB 連線／service role,測試直接越權路徑及請求注入,受控 API/RPC 仍執行明示的 principal+scope 驗證,倚賴 server key 讓任何 actor 存取,"roleTrace,sqlPolicy/functionLogs",NOT_RUN,NOT_RUN
+POC-036,projection,P1,SC01-20261116,來源投影延遲或失敗,查詢跨模組統計與提示,顯示 stale／derived_pending，重試後去重更新,舊值冒稱最新,"sourceAsOf,projectionAsOf",NOT_RUN,NOT_RUN

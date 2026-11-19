@@ -1,0 +1,685 @@
+{
+  "schemaVersion": "1.0",
+  "status": "PROPOSED_MACHINE_READABLE_NORMALIZATION",
+  "source": "contracts/poc-test-matrix-v1.0.csv",
+  "execution": "NOT_RUN_FOR_BOTH_BACKENDS",
+  "notes": [
+    "expectedResult 是原測試預期的技術中立欄位化表達；需在 Stage 1 審查欄位語意與可取得性。",
+    "不得以 adapter 宣告的 PASS 作為通過；必須取得後端實際狀態與可稽核證據。",
+    "Stage 1 的 fake adapter 僅測試執行器，永不得記入 backend evidence。"
+  ],
+  "cases": [
+    {
+      "testId": "POC-001",
+      "category": "identity",
+      "priority": "P0",
+      "fixtureSet": "A17-20261117",
+      "expectedCanonicalText": "15筆且僅 WS-A17",
+      "mustNotHappenText": "跨 workspace 洩露",
+      "expectedResult": {
+        "workspaceId": "WS-A17",
+        "returnedCount": 15,
+        "crossWorkspaceDisclosure": false
+      },
+      "requiredEvidenceKeys": [
+        "authzDecision",
+        "returnedIds",
+        "workspaceId"
+      ],
+      "status": "NOT_RUN"
+    },
+    {
+      "testId": "POC-002",
+      "category": "identity",
+      "priority": "P0",
+      "fixtureSet": "A17-20261117",
+      "expectedCanonicalText": "FORBIDDEN／無可識別 payload",
+      "mustNotHappenText": "跨班推知存在與否",
+      "expectedResult": {
+        "code": "FORBIDDEN",
+        "identifyingFieldsReturned": 0
+      },
+      "requiredEvidenceKeys": [
+        "authzDecision",
+        "returnedFields",
+        "traceId"
+      ],
+      "status": "NOT_RUN"
+    },
+    {
+      "testId": "POC-003",
+      "category": "identity",
+      "priority": "P0",
+      "fixtureSet": "SC01-20261116",
+      "expectedCanonicalText": "僅可授權的適用提示／假別（依 scope）",
+      "mustNotHappenText": "醫療／家庭備註出現在查詢",
+      "expectedResult": {
+        "sensitiveReasonReturned": false,
+        "applicabilityAvailable": true
+      },
+      "requiredEvidenceKeys": [
+        "responseFields",
+        "policyVersion"
+      ],
+      "status": "NOT_RUN"
+    },
+    {
+      "testId": "POC-004",
+      "category": "identity",
+      "priority": "P0",
+      "fixtureSet": "A17-20261117",
+      "expectedCanonicalText": "FORBIDDEN／去識別",
+      "mustNotHappenText": "因 UI 遮罩但底層已取得個資",
+      "expectedResult": {
+        "code": "FORBIDDEN",
+        "personalDataDisclosed": false
+      },
+      "requiredEvidenceKeys": [
+        "serverResponse",
+        "auditId"
+      ],
+      "status": "NOT_RUN"
+    },
+    {
+      "testId": "POC-005",
+      "category": "identity",
+      "priority": "P0",
+      "fixtureSet": "SC01-20261116",
+      "expectedCanonicalText": "拒絕不匹配 actor 身份及班級",
+      "mustNotHappenText": "server key 繞過所有授權檢查",
+      "expectedResult": {
+        "code": "FORBIDDEN",
+        "scopeForgeryAccepted": false
+      },
+      "requiredEvidenceKeys": [
+        "principalId",
+        "scope",
+        "serverLog"
+      ],
+      "status": "NOT_RUN"
+    },
+    {
+      "testId": "POC-006",
+      "category": "enrollment",
+      "priority": "P1",
+      "fixtureSet": "A17-20261117",
+      "expectedCanonicalText": "15人對應有效識別",
+      "mustNotHappenText": "以座號或姓名當主鍵",
+      "expectedResult": {
+        "memberCount": 15,
+        "stableIdentityUsed": true,
+        "effectiveEnrollmentUsed": true
+      },
+      "requiredEvidenceKeys": [
+        "membershipSnapshot",
+        "seatHistory"
+      ],
+      "status": "NOT_RUN"
+    },
+    {
+      "testId": "POC-007",
+      "category": "enrollment",
+      "priority": "P1",
+      "fixtureSet": "SC01-20261116",
+      "expectedCanonicalText": "保留當時有效名單與座號",
+      "mustNotHappenText": "歷史快照靜默跟著改",
+      "expectedResult": {
+        "historicalRosterPreserved": true,
+        "historicalSeatPreserved": true
+      },
+      "requiredEvidenceKeys": [
+        "sessionRoster",
+        "enrollmentHistory"
+      ],
+      "status": "NOT_RUN"
+    },
+    {
+      "testId": "POC-008",
+      "category": "attendance",
+      "priority": "P0",
+      "fixtureSet": "A17-20261117",
+      "expectedCanonicalText": "P9 R1 N1 U4；T15，已登記11，到校10",
+      "mustNotHappenText": "把請假／遲到當主要互斥狀態",
+      "expectedResult": {
+        "counts.P": 9,
+        "counts.R": 1,
+        "counts.N": 1,
+        "counts.U": 4,
+        "counts.registered": 11,
+        "counts.arrived": 10,
+        "counts.total": 15
+      },
+      "requiredEvidenceKeys": [
+        "queryCount",
+        "assertions"
+      ],
+      "status": "NOT_RUN"
+    },
+    {
+      "testId": "POC-009",
+      "category": "attendance",
+      "priority": "P0",
+      "fixtureSet": "SC01-20261116",
+      "expectedCanonicalText": "部分適用，下午5–7待核對",
+      "mustNotHappenText": "自動改 N 或延長假單",
+      "expectedResult": {
+        "attendance": "N",
+        "leaveVersion": 5,
+        "applicability": "partial",
+        "pendingPeriods": [
+          5,
+          6,
+          7
+        ],
+        "autoRewrite": false
+      },
+      "requiredEvidenceKeys": [
+        "versions",
+        "coverageResult",
+        "entryHash"
+      ],
+      "status": "NOT_RUN"
+    },
+    {
+      "testId": "POC-010",
+      "category": "attendance",
+      "priority": "P1",
+      "fixtureSet": "A17-20261117",
+      "expectedCanonicalText": "最多預覽4且排除需個別核對者",
+      "mustNotHappenText": "未經確認把 N/R 或有疑問者改 P",
+      "expectedResult": {
+        "eligibleCountAtMost": 4,
+        "protectedExcluded": true,
+        "committedWithoutConfirmation": 0
+      },
+      "requiredEvidenceKeys": [
+        "preview",
+        "excluded",
+        "commitCount"
+      ],
+      "status": "NOT_RUN"
+    },
+    {
+      "testId": "POC-011",
+      "category": "calendar",
+      "priority": "P1",
+      "fixtureSet": "M04-PENDING",
+      "expectedCanonicalText": "UNKNOWN／暫不計算",
+      "mustNotHappenText": "使用21天或147節推定分母",
+      "expectedResult": {
+        "rateState": "UNKNOWN",
+        "officialRate": null,
+        "officialDayDenominator": null,
+        "officialPeriodDenominator": null
+      },
+      "requiredEvidenceKeys": [
+        "rateState",
+        "calendarVersion"
+      ],
+      "status": "NOT_RUN"
+    },
+    {
+      "testId": "POC-012",
+      "category": "calendar",
+      "priority": "P1",
+      "fixtureSet": "L1-ILLUSTRATIVE",
+      "expectedCanonicalText": "識別隔離且不可作正式率",
+      "mustNotHappenText": "假裝共用相同 M04 正式資料",
+      "expectedResult": {
+        "snapshotsSeparated": true,
+        "formalStatisticsPublished": false
+      },
+      "requiredEvidenceKeys": [
+        "scopeIds",
+        "sourceVersions"
+      ],
+      "status": "NOT_RUN"
+    },
+    {
+      "testId": "POC-013",
+      "category": "leave",
+      "priority": "P1",
+      "fixtureSet": "SC01-20261116",
+      "expectedCanonicalText": "daily=部分；上午=完全；下午=不適用（有已知來源）",
+      "mustNotHappenText": "未涵蓋下午被判全日適用",
+      "expectedResult": {
+        "daily": "partial",
+        "morning": "full",
+        "afternoon": "not_applicable"
+      },
+      "requiredEvidenceKeys": [
+        "segments",
+        "matcherResult"
+      ],
+      "status": "NOT_RUN"
+    },
+    {
+      "testId": "POC-014",
+      "category": "leave",
+      "priority": "P1",
+      "fixtureSet": "SC01-20261116",
+      "expectedCanonicalText": "可能適用／資料待確認",
+      "mustNotHappenText": "用推測課表判完全適用",
+      "expectedResult": {
+        "applicability": "possible",
+        "reason": "CALENDAR_UNKNOWN"
+      },
+      "requiredEvidenceKeys": [
+        "unknownReason",
+        "calendarRef"
+      ],
+      "status": "NOT_RUN"
+    },
+    {
+      "testId": "POC-015",
+      "category": "leave",
+      "priority": "P0",
+      "fixtureSet": "SC01-DRAFT-v6",
+      "expectedCanonicalText": "正式仍 v5；issue evidence 不過期",
+      "mustNotHappenText": "草稿產生正式 v6 revision",
+      "expectedResult": {
+        "officialVersion": 5,
+        "draftCommitted": false,
+        "issueEvidenceStale": false
+      },
+      "requiredEvidenceKeys": [
+        "officialVersion",
+        "draftOnly",
+        "issueStale"
+      ],
+      "status": "NOT_RUN"
+    },
+    {
+      "testId": "POC-016",
+      "category": "leave",
+      "priority": "P0",
+      "fixtureSet": "SC01-COMMITTED-v6",
+      "expectedCanonicalText": "v6, revision一次, receipt一次, event一次, Attendance N不變",
+      "mustNotHappenText": "只改 Leave 或偷偷改 Attendance",
+      "expectedResult": {
+        "officialVersion": 6,
+        "revisionDelta": 1,
+        "receiptDelta": 1,
+        "eventDelta": 1,
+        "attendance": "N"
+      },
+      "requiredEvidenceKeys": [
+        "current",
+        "revision",
+        "receipt",
+        "event",
+        "attendance"
+      ],
+      "status": "NOT_RUN"
+    },
+    {
+      "testId": "POC-017",
+      "category": "revision",
+      "priority": "P0",
+      "fixtureSet": "SC01-20261116",
+      "expectedCanonicalText": "恰一成功，另一 VERSION_CONFLICT",
+      "mustNotHappenText": "後寫入者靜默覆蓋",
+      "expectedResult": {
+        "successes": 1,
+        "conflicts": 1,
+        "silentOverwrite": false
+      },
+      "requiredEvidenceKeys": [
+        "versionHistory",
+        "receiptCount",
+        "conflicts"
+      ],
+      "status": "NOT_RUN"
+    },
+    {
+      "testId": "POC-018",
+      "category": "revision",
+      "priority": "P0",
+      "fixtureSet": "SC01-20261116",
+      "expectedCanonicalText": "只一次正式改版與一次 revision，100次同一 receipt",
+      "mustNotHappenText": "重複生 revision / 遞增版本",
+      "expectedResult": {
+        "revisionDelta": 1,
+        "receiptCount": 1,
+        "uniqueReceiptIds": 1
+      },
+      "requiredEvidenceKeys": [
+        "requestHash",
+        "receiptId",
+        "revisionCount"
+      ],
+      "status": "NOT_RUN"
+    },
+    {
+      "testId": "POC-019",
+      "category": "revision",
+      "priority": "P0",
+      "fixtureSet": "SC01-20261116",
+      "expectedCanonicalText": "OPERATION_REUSE_MISMATCH",
+      "mustNotHappenText": "洩漏原 actor 收據或再次寫入",
+      "expectedResult": {
+        "code": "OPERATION_REUSE_MISMATCH",
+        "revisionDelta": 0,
+        "receiptLeaked": false
+      },
+      "requiredEvidenceKeys": [
+        "returnCode",
+        "currentVersion",
+        "receiptHash"
+      ],
+      "status": "NOT_RUN"
+    },
+    {
+      "testId": "POC-020",
+      "category": "revision",
+      "priority": "P0",
+      "fixtureSet": "SC01-20261116",
+      "expectedCanonicalText": "整筆回滾 current／revision／receipt／event",
+      "mustNotHappenText": "current v6 但 revision 缺失",
+      "expectedResult": {
+        "rolledBack": true,
+        "currentVersion": 5,
+        "revisionDelta": 0,
+        "receiptDelta": 0,
+        "eventDelta": 0
+      },
+      "requiredEvidenceKeys": [
+        "prePostState",
+        "transactionTrace"
+      ],
+      "status": "NOT_RUN"
+    },
+    {
+      "testId": "POC-021",
+      "category": "revision",
+      "priority": "P0",
+      "fixtureSet": "SC01-20261116",
+      "expectedCanonicalText": "取得同一正式結果，不二次執行",
+      "mustNotHappenText": "用新 operationId 再重複修改",
+      "expectedResult": {
+        "receiptRecovered": true,
+        "revisionDelta": 1,
+        "duplicateCommit": false
+      },
+      "requiredEvidenceKeys": [
+        "receiptLookup",
+        "revisionCount"
+      ],
+      "status": "NOT_RUN"
+    },
+    {
+      "testId": "POC-022",
+      "category": "tracking",
+      "priority": "P1",
+      "fixtureSet": "SC01-COMMITTED-v6",
+      "expectedCanonicalText": "原 evidence stale，issue 待重新核對，Attendance N不變",
+      "mustNotHappenText": "直接把 issue resolved 或改 N",
+      "expectedResult": {
+        "issueEvidenceStale": true,
+        "issueAutoResolved": false,
+        "attendance": "N"
+      },
+      "requiredEvidenceKeys": [
+        "evidenceVersions",
+        "issueStatus",
+        "sourceHashes"
+      ],
+      "status": "NOT_RUN"
+    },
+    {
+      "testId": "POC-023",
+      "category": "tracking",
+      "priority": "P1",
+      "fixtureSet": "SC01-20261116",
+      "expectedCanonicalText": "冪等且不重複事項；只依最新來源版本",
+      "mustNotHappenText": "統計重複計數或舊事件覆蓋新投影",
+      "expectedResult": {
+        "duplicateIssues": 0,
+        "latestSourcePreserved": true
+      },
+      "requiredEvidenceKeys": [
+        "projectionKeys",
+        "eventIds",
+        "issueCount"
+      ],
+      "status": "NOT_RUN"
+    },
+    {
+      "testId": "POC-024",
+      "category": "tracking",
+      "priority": "P1",
+      "fixtureSet": "L1-ILLUSTRATIVE",
+      "expectedCanonicalText": "12件 LeaveRecord；20項 TrackingIssue",
+      "mustNotHappenText": "把事項總量當假單數",
+      "expectedResult": {
+        "leaveRecords": 12,
+        "trackingIssues": 20,
+        "scopeSeparated": true
+      },
+      "requiredEvidenceKeys": [
+        "aggregateScope",
+        "countBasis"
+      ],
+      "status": "NOT_RUN"
+    },
+    {
+      "testId": "POC-025",
+      "category": "offline",
+      "priority": "P0",
+      "fixtureSet": "SC01-DRAFT-v6",
+      "expectedCanonicalText": "僅草稿／待重驗，不能正式成功",
+      "mustNotHappenText": "離線狀態虛報 server_verified",
+      "expectedResult": {
+        "remoteVerified": false,
+        "officialVersion": 5,
+        "state": "DRAFT_PENDING_RECHECK"
+      },
+      "requiredEvidenceKeys": [
+        "localState",
+        "remoteState",
+        "screen"
+      ],
+      "status": "NOT_RUN"
+    },
+    {
+      "testId": "POC-026",
+      "category": "offline",
+      "priority": "P0",
+      "fixtureSet": "A17-20261117",
+      "expectedCanonicalText": "只有證明 durable 才顯示本機已存；連網驗證後收 receipt",
+      "mustNotHappenText": "假裝永不遺失或未保存卻稱已保存",
+      "expectedResult": {
+        "durableConfirmedBeforeDisplay": true,
+        "serverReceiptAfterReconnect": true,
+        "offlineServerVerifiedShown": false
+      },
+      "requiredEvidenceKeys": [
+        "storageCheck",
+        "restartResult",
+        "receipt"
+      ],
+      "status": "NOT_RUN"
+    },
+    {
+      "testId": "POC-027",
+      "category": "offline",
+      "priority": "P0",
+      "fixtureSet": "SC01-20261116",
+      "expectedCanonicalText": "不同 principal 無法讀取舊快取／Outbox；原使用者有明確恢復提示",
+      "mustNotHappenText": "跨帳可讀／無警示丟失",
+      "expectedResult": {
+        "crossAccountDisclosure": false,
+        "unsyncedWarningShown": true,
+        "originalAccountRecoverySignaled": true
+      },
+      "requiredEvidenceKeys": [
+        "loginState",
+        "storageIsolation",
+        "uiEvidence"
+      ],
+      "status": "NOT_RUN"
+    },
+    {
+      "testId": "POC-028",
+      "category": "offline",
+      "priority": "P1",
+      "fixtureSet": "SC01-20261116",
+      "expectedCanonicalText": "LOCAL_SAVE_FAILED；不稱本機已可靠保存",
+      "mustNotHappenText": "暗中捨棄或誤報完成",
+      "expectedResult": {
+        "code": "LOCAL_SAVE_FAILED",
+        "successShown": false
+      },
+      "requiredEvidenceKeys": [
+        "exception",
+        "uiEvidence"
+      ],
+      "status": "NOT_RUN"
+    },
+    {
+      "testId": "POC-029",
+      "category": "security",
+      "priority": "P0",
+      "fixtureSet": "SC01-20261116",
+      "expectedCanonicalText": "資料源端拒絕或裁剪",
+      "mustNotHappenText": "先送敏感資料再前端隱藏",
+      "expectedResult": {
+        "sensitiveReasonDisclosed": false,
+        "exportMinimized": true,
+        "sourceScopeEnforced": true
+      },
+      "requiredEvidenceKeys": [
+        "traceFields",
+        "exportFields",
+        "authz"
+      ],
+      "status": "NOT_RUN"
+    },
+    {
+      "testId": "POC-030",
+      "category": "security",
+      "priority": "P1",
+      "fixtureSet": "SC01-20261116",
+      "expectedCanonicalText": "唯讀拒絕，例外需明確額外權限",
+      "mustNotHappenText": "一般登入任意覆寫封存資料",
+      "expectedResult": {
+        "code": "FORBIDDEN",
+        "archivedSourceReadonly": true
+      },
+      "requiredEvidenceKeys": [
+        "termState",
+        "authzDecision"
+      ],
+      "status": "NOT_RUN"
+    },
+    {
+      "testId": "POC-031",
+      "category": "backup",
+      "priority": "P0",
+      "fixtureSet": "SC01-20261116",
+      "expectedCanonicalText": "current/revision/receipt/issue 結構一致；可核驗雜湊",
+      "mustNotHappenText": "只有可匯出無法還原",
+      "expectedResult": {
+        "restoreVerified": true,
+        "linksIntact": true,
+        "integrityHashesMatch": true
+      },
+      "requiredEvidenceKeys": [
+        "backupId",
+        "manifest",
+        "restoreProof"
+      ],
+      "status": "NOT_RUN"
+    },
+    {
+      "testId": "POC-032",
+      "category": "performance",
+      "priority": "P1",
+      "fixtureSet": "A17-20261117",
+      "expectedCanonicalText": "輸出吞吐、p50/p95/p99、讀寫量、月費推估原始證據",
+      "mustNotHappenText": "只宣稱免費／快速不附計數",
+      "expectedResult": {
+        "metricsRecorded": true,
+        "percentilesRecorded": true,
+        "pricingDateRecorded": true,
+        "readWriteCountsRecorded": true
+      },
+      "requiredEvidenceKeys": [
+        "metrics.json",
+        "pricingDate"
+      ],
+      "status": "NOT_RUN"
+    },
+    {
+      "testId": "POC-033",
+      "category": "offline",
+      "priority": "P1",
+      "fixtureSet": "SC01-20261116",
+      "expectedCanonicalText": "VERSION_CONFLICT，提示保留雲端／草稿修訂",
+      "mustNotHappenText": "覆蓋雲端且顯示已成功",
+      "expectedResult": {
+        "code": "VERSION_CONFLICT",
+        "silentOverwrite": false
+      },
+      "requiredEvidenceKeys": [
+        "versions",
+        "localOutbox",
+        "uiEvidence"
+      ],
+      "status": "NOT_RUN"
+    },
+    {
+      "testId": "POC-034",
+      "category": "temporal",
+      "priority": "P1",
+      "fixtureSet": "SC01-20261116",
+      "expectedCanonicalText": "起含終不含；日曆與有效在籍逐日核對",
+      "mustNotHappenText": "跨期默認當前班級",
+      "expectedResult": {
+        "halfOpenIntervals": true,
+        "effectiveEnrollmentChecked": true,
+        "currentClassGuessed": false
+      },
+      "requiredEvidenceKeys": [
+        "normalizedIntervals",
+        "rosterContext"
+      ],
+      "status": "NOT_RUN"
+    },
+    {
+      "testId": "POC-035",
+      "category": "security",
+      "priority": "P0",
+      "fixtureSet": "SC01-20261116",
+      "expectedCanonicalText": "受控 API/RPC 仍執行明示的 principal+scope 驗證",
+      "mustNotHappenText": "倚賴 server key 讓任何 actor 存取",
+      "expectedResult": {
+        "code": "FORBIDDEN",
+        "serverAuthorityNotBypassed": true
+      },
+      "requiredEvidenceKeys": [
+        "roleTrace",
+        "sqlPolicy/functionLogs"
+      ],
+      "status": "NOT_RUN"
+    },
+    {
+      "testId": "POC-036",
+      "category": "projection",
+      "priority": "P1",
+      "fixtureSet": "SC01-20261116",
+      "expectedCanonicalText": "顯示 stale／derived_pending，重試後去重更新",
+      "mustNotHappenText": "舊值冒稱最新",
+      "expectedResult": {
+        "projectionStatus": "STALE_OR_PENDING",
+        "pretendedLatest": false,
+        "dedupeVerified": true
+      },
+      "requiredEvidenceKeys": [
+        "sourceAsOf",
+        "projectionAsOf"
+      ],
+      "status": "NOT_RUN"
+    }
+  ]
+}

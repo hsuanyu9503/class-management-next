@@ -1,0 +1,334 @@
+{
+  "metadata": {
+    "name": "CMN Architecture PoC Canonical Fixtures",
+    "schemaVersion": "1.0",
+    "generatedAt": "2026-11-18",
+    "synthetic": true,
+    "timeZone": "Asia/Taipei",
+    "mustNotMergeDatasets": [
+      "A17-20261117",
+      "SC01-20261116"
+    ],
+    "warning": "All IDs and names fictional; never substitute actual student data."
+  },
+  "principals": [
+    {
+      "principalId": "ACTOR-TEACHER",
+      "workspaceId": "WS-A17",
+      "capabilities": [
+        "attendance.read",
+        "attendance.write",
+        "leave.applicability.read"
+      ]
+    },
+    {
+      "principalId": "ACTOR-SC01-TEACHER",
+      "workspaceId": "WS-SC01",
+      "capabilities": [
+        "attendance.read",
+        "attendance.revise",
+        "leave.read",
+        "leave.revise",
+        "issue.read"
+      ]
+    },
+    {
+      "principalId": "ACTOR-OTHER",
+      "workspaceId": "WS-FOREIGN",
+      "capabilities": []
+    }
+  ],
+  "datasets": {
+    "A17-20261117": {
+      "workspaceId": "WS-A17",
+      "datasetType": "independent_daily_attendance",
+      "termId": "TERM-115-1-A17",
+      "classId": "CLASS-606-A17",
+      "sessionId": "AS-A17-20261117-DAILY",
+      "date": "2026-11-17",
+      "kind": "daily",
+      "studentCount": 15,
+      "counts": {
+        "P": 9,
+        "R": 1,
+        "N": 1,
+        "U": 4,
+        "registered": 11,
+        "arrived": 10
+      },
+      "rows": [
+        {
+          "studentId": "ST-A17-0001",
+          "enrollmentId": "EN-A17-1151-0001",
+          "seatNo": 1,
+          "displayName": "王子軒",
+          "attendanceStatus": "P"
+        },
+        {
+          "studentId": "ST-A17-0002",
+          "enrollmentId": "EN-A17-1151-0002",
+          "seatNo": 2,
+          "displayName": "李育辰",
+          "attendanceStatus": "R"
+        },
+        {
+          "studentId": "ST-A17-0003",
+          "enrollmentId": "EN-A17-1151-0003",
+          "seatNo": 3,
+          "displayName": "林芷好",
+          "attendanceStatus": "P"
+        },
+        {
+          "studentId": "ST-A17-0004",
+          "enrollmentId": "EN-A17-1151-0004",
+          "seatNo": 4,
+          "displayName": "張庭瑋",
+          "attendanceStatus": "P"
+        },
+        {
+          "studentId": "ST-A17-0005",
+          "enrollmentId": "EN-A17-1151-0005",
+          "seatNo": 5,
+          "displayName": "陳品安",
+          "attendanceStatus": "P"
+        },
+        {
+          "studentId": "ST-A17-0006",
+          "enrollmentId": "EN-A17-1151-0006",
+          "seatNo": 6,
+          "displayName": "黃語彤",
+          "attendanceStatus": "P"
+        },
+        {
+          "studentId": "ST-A17-0007",
+          "enrollmentId": "EN-A17-1151-0007",
+          "seatNo": 7,
+          "displayName": "吳承浩",
+          "attendanceStatus": "U"
+        },
+        {
+          "studentId": "ST-A17-0008",
+          "enrollmentId": "EN-A17-1151-0008",
+          "seatNo": 8,
+          "displayName": "鄭心瑤",
+          "attendanceStatus": "P"
+        },
+        {
+          "studentId": "ST-A17-0009",
+          "enrollmentId": "EN-A17-1151-0009",
+          "seatNo": 9,
+          "displayName": "高承翰",
+          "attendanceStatus": "U"
+        },
+        {
+          "studentId": "ST-A17-0010",
+          "enrollmentId": "EN-A17-1151-0010",
+          "seatNo": 10,
+          "displayName": "賴怡萱",
+          "attendanceStatus": "P"
+        },
+        {
+          "studentId": "ST-A17-0011",
+          "enrollmentId": "EN-A17-1151-0011",
+          "seatNo": 11,
+          "displayName": "何彥廷",
+          "attendanceStatus": "N"
+        },
+        {
+          "studentId": "ST-A17-0012",
+          "enrollmentId": "EN-A17-1151-0012",
+          "seatNo": 12,
+          "displayName": "蔡昀昕",
+          "attendanceStatus": "P"
+        },
+        {
+          "studentId": "ST-A17-0013",
+          "enrollmentId": "EN-A17-1151-0013",
+          "seatNo": 13,
+          "displayName": "周子睿",
+          "attendanceStatus": "U"
+        },
+        {
+          "studentId": "ST-A17-0014",
+          "enrollmentId": "EN-A17-1151-0014",
+          "seatNo": 14,
+          "displayName": "盧欣蓉",
+          "attendanceStatus": "P"
+        },
+        {
+          "studentId": "ST-A17-0015",
+          "enrollmentId": "EN-A17-1151-0015",
+          "seatNo": 15,
+          "displayName": "許呈翔",
+          "attendanceStatus": "U"
+        }
+      ],
+      "applicableLeaveRecordIds": [],
+      "note": "Not same student identity as SC01 even though seatNo 07 matches."
+    },
+    "SC01-20261116": {
+      "workspaceId": "WS-SC01",
+      "datasetType": "independent_attendance_leave_reconciliation",
+      "termId": "TERM-115-1-SC01",
+      "classId": "CLASS-606-SC01",
+      "date": "2026-11-16",
+      "dailySessionId": "AS-SC01-20261116-DAILY",
+      "rosterCounts": {
+        "P": 9,
+        "R": 1,
+        "N": 2,
+        "U": 3
+      },
+      "student": {
+        "studentId": "ST-SC01-0007",
+        "enrollmentId": "EN-SC01-1151-0007",
+        "seatNo": 7,
+        "displayName": "學生 A",
+        "validFrom": "2026-09-01",
+        "validTo": null
+      },
+      "attendance": {
+        "attendanceEntryId": "AT-20261116-07",
+        "version": 4,
+        "status": "N",
+        "scope": "daily",
+        "events": []
+      },
+      "leave": {
+        "leaveRecordId": "LV-007",
+        "version": 5,
+        "recordEffect": "active",
+        "teacherConfirmation": "pending",
+        "administrativeApproval": "unintegrated",
+        "leaveTypeId": "SICK-LEAVE",
+        "coverageSegments": [
+          {
+            "segmentId": "LVC-007-1",
+            "startLocalDate": "2026-11-16",
+            "endLocalDateExclusive": "2026-11-17",
+            "dayPart": "AM",
+            "periodRefs": [
+              1,
+              2,
+              3,
+              4
+            ],
+            "timeZone": "Asia/Taipei"
+          }
+        ],
+        "lastRevisionAt": "2026-11-16T15:20:00+08:00"
+      },
+      "issue": {
+        "issueId": "CR-20261116-001",
+        "progress": "needs_action",
+        "checkConclusion": "not_checked",
+        "evidence": [
+          {
+            "sourceType": "LeaveRecord",
+            "sourceId": "LV-007",
+            "sourceVersion": 5
+          },
+          {
+            "sourceType": "AttendanceEntry",
+            "sourceId": "AT-20261116-07",
+            "sourceVersion": 4
+          }
+        ],
+        "question": "下午第5–7節缺少現有請假涵蓋，需核對"
+      },
+      "expectedApplicability": "partial",
+      "remainingPeriodsToCheck": [
+        5,
+        6,
+        7
+      ]
+    },
+    "SC01-DRAFT-v6": {
+      "baseDataset": "SC01-20261116",
+      "proposal": {
+        "targetId": "LV-007",
+        "expectedVersion": 5,
+        "proposedCoverage": "2026-11-16 full-day",
+        "draftVersionLabel": "v6 草稿"
+      },
+      "mustRemainOfficialVersion": 5,
+      "issueEvidenceStale": false
+    },
+    "SC01-COMMITTED-v6": {
+      "baseDataset": "SC01-20261116",
+      "hypotheticalOnly": true,
+      "successRequires": "verified auth + expectedVersion 5 + atomic current/revision/receipt/event",
+      "targetVersion": 6,
+      "leaveCoverageAfter": "2026-11-16 full-day",
+      "attendanceMustRemain": "N",
+      "originalIssueEvidenceStale": true
+    },
+    "M04-PENDING": {
+      "workspaceId": "WS-A17",
+      "month": "2026-11",
+      "calendarDays": 30,
+      "weekdayDays": 21,
+      "weekendDays": 9,
+      "attendanceDayDenominator": null,
+      "attendancePeriodDenominator": null,
+      "officialAttendanceRate": null,
+      "dataState": "missing_calendar_and_policy"
+    },
+    "L1-ILLUSTRATIVE": {
+      "workspaceId": "WS-ILLUSTRATIVE-ONLY",
+      "month": "2026-11",
+      "leaveRecordsCount": 12,
+      "trackingIssueCount": 20,
+      "trackingDistribution": {
+        "needs_action": 10,
+        "in_progress": 2,
+        "resolved": 8
+      },
+      "leaveCoveragePersonDaysIllustration": 18,
+      "predictedPeriodsIllustration": 126,
+      "verifiedForOfficialStatistics": false,
+      "cannotMergeWith": "M04-PENDING"
+    },
+    "OFFLINE-CONFLICT": {
+      "workspaceId": "WS-SC01",
+      "targetId": "AT-20261116-07",
+      "cloudVersion": 4,
+      "localExpectedVersion": 3,
+      "cloudStatus": "P",
+      "localProposedStatus": "N",
+      "expected": "VERSION_CONFLICT",
+      "hypotheticalOnly": true
+    }
+  },
+  "invariants": {
+    "attendance": "T=P+R+N+U",
+    "registered": "P+R+N",
+    "arrived": "P+R",
+    "noAutomaticAttendanceRewriteFromLeave": true,
+    "noOfficialChangeFromDraft": true,
+    "noCrossDatasetIdentityFromSeatNo": true
+  },
+  "canonicalCommand": {
+    "schemaVersion": "1.0",
+    "workspaceId": "WS-SC01",
+    "operationId": "OP-SC01-EXAMPLE-0001",
+    "commandType": "LeaveRecord.Revise",
+    "targetType": "LeaveRecord",
+    "targetId": "LV-007",
+    "expectedVersion": 5,
+    "intent": {
+      "coverageChange": "AM_TO_FULL_DAY",
+      "reasonCode": "SOURCE_CORRECTION"
+    },
+    "clientCreatedAt": "2026-11-16T15:30:00+08:00"
+  },
+  "canonicalCommittedReceipt": {
+    "status": "committed",
+    "operationId": "OP-SC01-EXAMPLE-0001",
+    "targetId": "LV-007",
+    "previousVersion": 5,
+    "currentVersion": 6,
+    "derivedStatus": "pending",
+    "hypotheticalOnly": true
+  }
+}

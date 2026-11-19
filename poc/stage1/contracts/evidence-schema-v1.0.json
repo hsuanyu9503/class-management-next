@@ -1,0 +1,83 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "cmn-stage0-evidence-v1.0",
+  "type": "object",
+  "required": [
+    "testId",
+    "backend",
+    "fixtureHash",
+    "status",
+    "expectedCanonical",
+    "actualCanonical",
+    "startedAt",
+    "finishedAt"
+  ],
+  "properties": {
+    "testId": {
+      "type": "string",
+      "pattern": "^POC-0(?:0[1-9]|[12][0-9]|3[0-6])$"
+    },
+    "backend": {
+      "enum": [
+        "firebase",
+        "postgres"
+      ]
+    },
+    "fixtureHash": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "gitCommit": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "status": {
+      "enum": [
+        "NOT_RUN",
+        "PASS",
+        "FAIL",
+        "BLOCKED",
+        "SKIPPED"
+      ]
+    },
+    "expectedCanonical": {
+      "type": "string"
+    },
+    "actualCanonical": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "startedAt": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "finishedAt": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "evidenceFiles": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "traceId": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "notes": {
+      "type": "string"
+    }
+  },
+  "additionalProperties": false
+}

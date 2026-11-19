@@ -1,0 +1,684 @@
+{
+  "schemaVersion": "1.0",
+  "status": "PROPOSED_PENDING_HUMAN_APPROVAL",
+  "purpose": "獨立於 canonical-oracles 的預期映射清單（REV-001）。每個欄位不是指向已鎖定 fixtures 的路徑（由 fixtures 重算），就是逐欄列出的值；sourceTokens 必須出現在已鎖定 CSV 同一列文字中，作為來源追溯。",
+  "approval": {
+    "approvedBy": null,
+    "approvedAt": null,
+    "note": "由 Claude 依鎖定 CSV／fixtures 轉錄，尚待專案負責人／獨立審查核准；核准前不可視為已核准預期。"
+  },
+  "cases": [
+    {
+      "testId": "POC-001",
+      "sourceTokens": [
+        "15筆",
+        "WS-A17",
+        "跨 workspace 洩露"
+      ],
+      "fields": {
+        "workspaceId": {
+          "fixture": "datasets.A17-20261117.workspaceId"
+        },
+        "returnedCount": {
+          "fixture": "datasets.A17-20261117.studentCount"
+        },
+        "crossWorkspaceDisclosure": {
+          "value": false
+        }
+      }
+    },
+    {
+      "testId": "POC-002",
+      "sourceTokens": [
+        "FORBIDDEN",
+        "無可識別 payload"
+      ],
+      "fields": {
+        "code": {
+          "value": "FORBIDDEN"
+        },
+        "identifyingFieldsReturned": {
+          "value": 0
+        }
+      }
+    },
+    {
+      "testId": "POC-003",
+      "sourceTokens": [
+        "僅可授權",
+        "醫療／家庭備註出現在查詢"
+      ],
+      "fields": {
+        "sensitiveReasonReturned": {
+          "value": false
+        },
+        "applicabilityAvailable": {
+          "value": true
+        }
+      }
+    },
+    {
+      "testId": "POC-004",
+      "sourceTokens": [
+        "FORBIDDEN",
+        "去識別",
+        "底層已取得個資"
+      ],
+      "fields": {
+        "code": {
+          "value": "FORBIDDEN"
+        },
+        "personalDataDisclosed": {
+          "value": false
+        }
+      }
+    },
+    {
+      "testId": "POC-005",
+      "sourceTokens": [
+        "拒絕不匹配 actor 身份及班級",
+        "偽造 scope"
+      ],
+      "fields": {
+        "code": {
+          "value": "FORBIDDEN"
+        },
+        "scopeForgeryAccepted": {
+          "value": false
+        }
+      }
+    },
+    {
+      "testId": "POC-006",
+      "sourceTokens": [
+        "15人對應有效識別",
+        "enrollmentId",
+        "以座號或姓名當主鍵"
+      ],
+      "fields": {
+        "memberCount": {
+          "fixture": "datasets.A17-20261117.studentCount"
+        },
+        "stableIdentityUsed": {
+          "value": true
+        },
+        "effectiveEnrollmentUsed": {
+          "value": true
+        }
+      }
+    },
+    {
+      "testId": "POC-007",
+      "sourceTokens": [
+        "保留當時有效名單與座號",
+        "歷史快照靜默跟著改"
+      ],
+      "fields": {
+        "historicalRosterPreserved": {
+          "value": true
+        },
+        "historicalSeatPreserved": {
+          "value": true
+        }
+      }
+    },
+    {
+      "testId": "POC-008",
+      "sourceTokens": [
+        "P9 R1 N1 U4",
+        "T15",
+        "已登記11",
+        "到校10"
+      ],
+      "fields": {
+        "counts.P": {
+          "fixture": "datasets.A17-20261117.counts.P"
+        },
+        "counts.R": {
+          "fixture": "datasets.A17-20261117.counts.R"
+        },
+        "counts.N": {
+          "fixture": "datasets.A17-20261117.counts.N"
+        },
+        "counts.U": {
+          "fixture": "datasets.A17-20261117.counts.U"
+        },
+        "counts.registered": {
+          "fixture": "datasets.A17-20261117.counts.registered"
+        },
+        "counts.arrived": {
+          "fixture": "datasets.A17-20261117.counts.arrived"
+        },
+        "counts.total": {
+          "fixture": "datasets.A17-20261117.studentCount"
+        }
+      }
+    },
+    {
+      "testId": "POC-009",
+      "sourceTokens": [
+        "部分適用",
+        "下午5–7待核對",
+        "Leave v5",
+        "Attendance N",
+        "自動改 N"
+      ],
+      "fields": {
+        "attendance": {
+          "fixture": "datasets.SC01-20261116.attendance.status"
+        },
+        "leaveVersion": {
+          "fixture": "datasets.SC01-20261116.leave.version"
+        },
+        "applicability": {
+          "fixture": "datasets.SC01-20261116.expectedApplicability"
+        },
+        "pendingPeriods": {
+          "fixture": "datasets.SC01-20261116.remainingPeriodsToCheck"
+        },
+        "autoRewrite": {
+          "value": false
+        }
+      }
+    },
+    {
+      "testId": "POC-010",
+      "sourceTokens": [
+        "最多預覽4",
+        "排除需個別核對者",
+        "未經確認"
+      ],
+      "fields": {
+        "eligibleCountAtMost": {
+          "fixture": "datasets.A17-20261117.counts.U"
+        },
+        "protectedExcluded": {
+          "value": true
+        },
+        "committedWithoutConfirmation": {
+          "value": 0
+        }
+      }
+    },
+    {
+      "testId": "POC-011",
+      "sourceTokens": [
+        "UNKNOWN",
+        "暫不計算",
+        "推定分母"
+      ],
+      "fields": {
+        "rateState": {
+          "value": "UNKNOWN"
+        },
+        "officialRate": {
+          "fixture": "datasets.M04-PENDING.officialAttendanceRate"
+        },
+        "officialDayDenominator": {
+          "fixture": "datasets.M04-PENDING.attendanceDayDenominator"
+        },
+        "officialPeriodDenominator": {
+          "fixture": "datasets.M04-PENDING.attendancePeriodDenominator"
+        }
+      }
+    },
+    {
+      "testId": "POC-012",
+      "sourceTokens": [
+        "識別隔離",
+        "不可作正式率"
+      ],
+      "fields": {
+        "snapshotsSeparated": {
+          "value": true
+        },
+        "formalStatisticsPublished": {
+          "fixture": "datasets.L1-ILLUSTRATIVE.verifiedForOfficialStatistics"
+        }
+      }
+    },
+    {
+      "testId": "POC-013",
+      "sourceTokens": [
+        "daily=部分",
+        "上午=完全",
+        "下午=不適用"
+      ],
+      "fields": {
+        "daily": {
+          "value": "partial"
+        },
+        "morning": {
+          "value": "full"
+        },
+        "afternoon": {
+          "value": "not_applicable"
+        }
+      }
+    },
+    {
+      "testId": "POC-014",
+      "sourceTokens": [
+        "可能適用",
+        "資料待確認",
+        "未取得可信日曆"
+      ],
+      "fields": {
+        "applicability": {
+          "value": "possible"
+        },
+        "reason": {
+          "value": "CALENDAR_UNKNOWN"
+        }
+      }
+    },
+    {
+      "testId": "POC-015",
+      "sourceTokens": [
+        "正式仍 v5",
+        "issue evidence 不過期",
+        "草稿產生正式 v6 revision"
+      ],
+      "fields": {
+        "officialVersion": {
+          "fixture": "datasets.SC01-DRAFT-v6.mustRemainOfficialVersion"
+        },
+        "draftCommitted": {
+          "value": false
+        },
+        "issueEvidenceStale": {
+          "fixture": "datasets.SC01-DRAFT-v6.issueEvidenceStale"
+        }
+      }
+    },
+    {
+      "testId": "POC-016",
+      "sourceTokens": [
+        "v6",
+        "revision一次",
+        "receipt一次",
+        "event一次",
+        "Attendance N不變"
+      ],
+      "fields": {
+        "officialVersion": {
+          "fixture": "datasets.SC01-COMMITTED-v6.targetVersion"
+        },
+        "revisionDelta": {
+          "value": 1
+        },
+        "receiptDelta": {
+          "value": 1
+        },
+        "eventDelta": {
+          "value": 1
+        },
+        "attendance": {
+          "fixture": "datasets.SC01-COMMITTED-v6.attendanceMustRemain"
+        }
+      }
+    },
+    {
+      "testId": "POC-017",
+      "sourceTokens": [
+        "恰一成功",
+        "VERSION_CONFLICT",
+        "靜默覆蓋"
+      ],
+      "fields": {
+        "successes": {
+          "value": 1
+        },
+        "conflicts": {
+          "value": 1
+        },
+        "silentOverwrite": {
+          "value": false
+        }
+      }
+    },
+    {
+      "testId": "POC-018",
+      "sourceTokens": [
+        "只一次正式改版與一次 revision",
+        "100次同一 receipt"
+      ],
+      "fields": {
+        "revisionDelta": {
+          "value": 1
+        },
+        "receiptCount": {
+          "value": 1
+        },
+        "uniqueReceiptIds": {
+          "value": 1
+        }
+      }
+    },
+    {
+      "testId": "POC-019",
+      "sourceTokens": [
+        "OPERATION_REUSE_MISMATCH",
+        "洩漏原 actor 收據或再次寫入"
+      ],
+      "fields": {
+        "code": {
+          "value": "OPERATION_REUSE_MISMATCH"
+        },
+        "revisionDelta": {
+          "value": 0
+        },
+        "receiptLeaked": {
+          "value": false
+        }
+      }
+    },
+    {
+      "testId": "POC-020",
+      "sourceTokens": [
+        "整筆回滾",
+        "current／revision／receipt／event"
+      ],
+      "fields": {
+        "rolledBack": {
+          "value": true
+        },
+        "currentVersion": {
+          "fixture": "datasets.SC01-20261116.leave.version"
+        },
+        "revisionDelta": {
+          "value": 0
+        },
+        "receiptDelta": {
+          "value": 0
+        },
+        "eventDelta": {
+          "value": 0
+        }
+      }
+    },
+    {
+      "testId": "POC-021",
+      "sourceTokens": [
+        "取得同一正式結果",
+        "不二次執行"
+      ],
+      "fields": {
+        "receiptRecovered": {
+          "value": true
+        },
+        "revisionDelta": {
+          "value": 1
+        },
+        "duplicateCommit": {
+          "value": false
+        }
+      }
+    },
+    {
+      "testId": "POC-022",
+      "sourceTokens": [
+        "原 evidence stale",
+        "issue 待重新核對",
+        "Attendance N不變",
+        "直接把 issue resolved"
+      ],
+      "fields": {
+        "issueEvidenceStale": {
+          "fixture": "datasets.SC01-COMMITTED-v6.originalIssueEvidenceStale"
+        },
+        "issueAutoResolved": {
+          "value": false
+        },
+        "attendance": {
+          "fixture": "datasets.SC01-COMMITTED-v6.attendanceMustRemain"
+        }
+      }
+    },
+    {
+      "testId": "POC-023",
+      "sourceTokens": [
+        "冪等且不重複事項",
+        "只依最新來源版本"
+      ],
+      "fields": {
+        "duplicateIssues": {
+          "value": 0
+        },
+        "latestSourcePreserved": {
+          "value": true
+        }
+      }
+    },
+    {
+      "testId": "POC-024",
+      "sourceTokens": [
+        "12件 LeaveRecord",
+        "20項 TrackingIssue",
+        "把事項總量當假單數"
+      ],
+      "fields": {
+        "leaveRecords": {
+          "fixture": "datasets.L1-ILLUSTRATIVE.leaveRecordsCount"
+        },
+        "trackingIssues": {
+          "fixture": "datasets.L1-ILLUSTRATIVE.trackingIssueCount"
+        },
+        "scopeSeparated": {
+          "value": true
+        }
+      }
+    },
+    {
+      "testId": "POC-025",
+      "sourceTokens": [
+        "僅草稿／待重驗",
+        "不能正式成功",
+        "server_verified"
+      ],
+      "fields": {
+        "remoteVerified": {
+          "value": false
+        },
+        "officialVersion": {
+          "fixture": "datasets.SC01-DRAFT-v6.mustRemainOfficialVersion"
+        },
+        "state": {
+          "value": "DRAFT_PENDING_RECHECK"
+        }
+      }
+    },
+    {
+      "testId": "POC-026",
+      "sourceTokens": [
+        "只有證明 durable 才顯示本機已存",
+        "連網驗證後收 receipt"
+      ],
+      "fields": {
+        "durableConfirmedBeforeDisplay": {
+          "value": true
+        },
+        "serverReceiptAfterReconnect": {
+          "value": true
+        },
+        "offlineServerVerifiedShown": {
+          "value": false
+        }
+      }
+    },
+    {
+      "testId": "POC-027",
+      "sourceTokens": [
+        "不同 principal 無法讀取舊快取／Outbox",
+        "明確恢復提示"
+      ],
+      "fields": {
+        "crossAccountDisclosure": {
+          "value": false
+        },
+        "unsyncedWarningShown": {
+          "value": true
+        },
+        "originalAccountRecoverySignaled": {
+          "value": true
+        }
+      }
+    },
+    {
+      "testId": "POC-028",
+      "sourceTokens": [
+        "LOCAL_SAVE_FAILED",
+        "不稱本機已可靠保存"
+      ],
+      "fields": {
+        "code": {
+          "value": "LOCAL_SAVE_FAILED"
+        },
+        "successShown": {
+          "value": false
+        }
+      }
+    },
+    {
+      "testId": "POC-029",
+      "sourceTokens": [
+        "資料源端拒絕或裁剪",
+        "先送敏感資料再前端隱藏"
+      ],
+      "fields": {
+        "sensitiveReasonDisclosed": {
+          "value": false
+        },
+        "exportMinimized": {
+          "value": true
+        },
+        "sourceScopeEnforced": {
+          "value": true
+        }
+      }
+    },
+    {
+      "testId": "POC-030",
+      "sourceTokens": [
+        "唯讀拒絕",
+        "例外需明確額外權限"
+      ],
+      "fields": {
+        "code": {
+          "value": "FORBIDDEN"
+        },
+        "archivedSourceReadonly": {
+          "value": true
+        }
+      }
+    },
+    {
+      "testId": "POC-031",
+      "sourceTokens": [
+        "current/revision/receipt/issue 結構一致",
+        "可核驗雜湊"
+      ],
+      "fields": {
+        "restoreVerified": {
+          "value": true
+        },
+        "linksIntact": {
+          "value": true
+        },
+        "integrityHashesMatch": {
+          "value": true
+        }
+      }
+    },
+    {
+      "testId": "POC-032",
+      "sourceTokens": [
+        "p50/p95/p99",
+        "讀寫量",
+        "月費推估原始證據"
+      ],
+      "fields": {
+        "metricsRecorded": {
+          "value": true
+        },
+        "percentilesRecorded": {
+          "value": true
+        },
+        "pricingDateRecorded": {
+          "value": true
+        },
+        "readWriteCountsRecorded": {
+          "value": true
+        }
+      }
+    },
+    {
+      "testId": "POC-033",
+      "sourceTokens": [
+        "VERSION_CONFLICT",
+        "覆蓋雲端且顯示已成功"
+      ],
+      "fields": {
+        "code": {
+          "fixture": "datasets.OFFLINE-CONFLICT.expected"
+        },
+        "silentOverwrite": {
+          "value": false
+        }
+      }
+    },
+    {
+      "testId": "POC-034",
+      "sourceTokens": [
+        "起含終不含",
+        "有效在籍逐日核對",
+        "跨期默認當前班級"
+      ],
+      "fields": {
+        "halfOpenIntervals": {
+          "value": true
+        },
+        "effectiveEnrollmentChecked": {
+          "value": true
+        },
+        "currentClassGuessed": {
+          "value": false
+        }
+      }
+    },
+    {
+      "testId": "POC-035",
+      "sourceTokens": [
+        "principal+scope 驗證",
+        "倚賴 server key"
+      ],
+      "fields": {
+        "code": {
+          "value": "FORBIDDEN"
+        },
+        "serverAuthorityNotBypassed": {
+          "value": true
+        }
+      }
+    },
+    {
+      "testId": "POC-036",
+      "sourceTokens": [
+        "stale／derived_pending",
+        "重試後去重更新",
+        "舊值冒稱最新"
+      ],
+      "fields": {
+        "projectionStatus": {
+          "value": "STALE_OR_PENDING"
+        },
+        "pretendedLatest": {
+          "value": false
+        },
+        "dedupeVerified": {
+          "value": true
+        }
+      }
+    }
+  ]
+}
