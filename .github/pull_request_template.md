@@ -25,7 +25,8 @@
 ## 測試紀錄
 - [ ] `npm run check`
 - [ ] `npm test`
-- [ ] `npm run stage1:all`（本 PoC 無網站，取代範本的 `npm run build`）
+- [ ] `npm run stage1:all`（本 PoC 無網站建置步驟）
+- [ ] CI `validate` 與 `baseline-anchor` 皆成功且對應同一 Head SHA（`baseline-anchor` 需負責人核准 digest）
 - [ ] 既有功能回歸測試
 - [ ] 手機／平板／桌面版面測試（依需求）
 - [ ] 需要時已檢查資料庫備份與遷移

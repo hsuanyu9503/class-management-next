@@ -30,7 +30,8 @@
 - 一般功能完成只提交 PR，不用生成 ZIP。本 PoC 沒有 `pages.yml`；合併必須經專案負責人核准。
 - 本 PoC **沒有** `release.yml`：不建立 GitHub Release；不要自行創建或覆蓋 Tag。
 - 本 PoC 沒有 `scripts/package_release.py`；不得以 ZIP 名稱推定 Git 版本，一律以 Commit SHA 為準。
-- 本 PoC 的驗證命令是 `npm run check`、`npm test`、`npm run stage1:all`（Windows：`npm.cmd`）；`docs/RELEASE_AUTOMATION.md` 為範本參考，不適用。
+- 本 PoC 的驗證命令是 `npm run check`、`npm test`、`npm run stage1:all`（Windows：`npm.cmd`）；網站／部署／發行相關範本已移至 `docs/starter-kit-reference/`，不適用。
+- 受保護檔案（鎖定基準、防護程式、測試、`ci.yml`）的變更會改變 `scripts/verify-anchor.mjs` 的 digest；`baseline-anchor` 需負責人重新核准 repository variable `CMN_STAGE1_ANCHOR_SHA256`。不得要求或代替負責人設定此變數。
 
 ## 每次交付需附
 

@@ -1,12 +1,10 @@
 # ChatGPT × Claude 交叉 Code Review SOP｜V1.2
 
-> ⚠️ **本 PoC 適用說明**：本 Repository 是 Classroom Manager Next 技術驗證 PoC，**沒有** `pages.yml`、`release.yml`、`site/`、`scripts/build.mjs`、`scripts/package_release.py`、`scripts/verify_release.py`。本文件中關於網站建置、Pages 自動部署、Release／Tag／ZIP 的內容沿用自 Starter Kit V1.2 範本，**目前不適用**。唯一的 workflow 是 `.github/workflows/ci.yml` 的 `validate`（`check`／`test`／`stage1:all`）。另注意：GitHub Settings 已啟用 Pages（`pages-build-deployment`），若發佈來源為 `main`，合併後 Repository 檔案仍可能被公開；是否保留由專案負責人決定。
-
 ## 一、權責和邊界
 
 - **Claude Code（作者）**：實作、單元／回歸測試、提交 PR、匯出固定版本差異、逐條回應審查問題；修復後重新執行測試。
 - **ChatGPT（第二視角）**：在可取得 PR 真實程式差異／原始檔案時，獨立對照 SPEC／DESIGN／TECH，指出具體風險；不能從摘要或截圖假裝看過完整程式庫。
-- **你（負責人）**：確定風險級別、範圍與取捨；批准或駁回合併與 Release。ChatGPT 不能直接代表你點擊 GitHub 的 Approve／Merge。
+- **你（負責人）**：確定風險級別、範圍與取捨；批准或駁回合併與基準 digest（本 PoC 無 Release）。ChatGPT 不能直接代表你點擊 GitHub 的 Approve／Merge。
 - **GitHub**：`validate` 自動狀態檢查與分支保護；它**不會自行強制**確認 ChatGPT 曾經審查，除非日後另行實作受信任的審查機制。
 
 ## 二、開始 Code Review 前（固定版本）

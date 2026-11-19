@@ -28,7 +28,7 @@ mock 的 `HARNESS_PASS` 只測試執行器本身，**不是**任何後端 PASS�
 
 ## 未從 Starter Kit 導入的部分
 
-依 `docs/ADOPT_EXISTING.md`「只導入適合現有技術棧的部分」：
+依 `docs/starter-kit-reference/ADOPT_EXISTING.md`「只導入適合現有技術棧的部分」（該資料夾保存不適用於本 PoC 的範本文件）：
 
 - `site/`、`scripts/build.mjs`：本 PoC 沒有網站。
 - `.github/workflows/pages.yml`、`release.yml`、`scripts/package_release.py`、`scripts/verify_release.py`：PoC 不做自動部署或發行。
