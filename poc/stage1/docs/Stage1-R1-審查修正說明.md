@@ -35,3 +35,33 @@
 
 - 已直接修正 `CLAUDE.md`、`docs/WORKFLOW.md` 中會誤導操作的句子；PR 模板與測試紀錄範本的 `npm run build` 改為 `npm run stage1:all`。
 - 其他沿用範本、提到 Pages／Release／site 的文件加上「本 PoC 適用說明」標示；`tests/poc_docs_policy.test.mjs` 會在缺少標示時失敗。
+
+---
+
+# R2｜第 2 輪複驗修正（審查 Head `a59da0447bae3705ee7bc0fed71ebc9b8caf380e`）
+
+複驗結論 CHANGES REQUESTED：REV-002 已解除（Stage 1 範圍），REV-001／REV-005 HIGH、REV-003／REV-004 MEDIUM 仍需修正。核心反例：在同一 PR 內同步改寫 POC-017 的 oracle、approval、lock、manifest（不動 CSV／fixtures／防護程式），`stage1:all` 仍然全綠。
+
+## REV-001／REV-005：協同竄改
+
+1. **P0 逐案固定預期寫入程式**：`src/contract-guard.mjs` 的 `P0_PINNED` 以字面值列出全部 20 個 P0 案例的完整 `expectedResult`（含 POC-017／018／020／031），每案註明鎖定 CSV 的原文；不讀取任何 JSON。另檢查 CSV 的 P0 集合與釘選集合完全一致。
+2. **PR 之外的受信任基準**：`scripts/verify-anchor.mjs` 計算受保護檔案的單一 digest。受保護檔案包含 10 個 fixed 基準、lock、防護程式、runner／oracle／evidence、測試、`ci.yml`、`package.json`、`.gitattributes`，以及此腳本本身。CI 新增 `baseline-anchor` job，把 digest 與 GitHub repository variable `CMN_STAGE1_ANCHOR_SHA256` 比對。
+   - 這個變數只有負責人能在 Settings 設定，PR 無法修改；設定變數就是負責人對該基準的核准紀錄。
+   - 未設定時以 `PENDING_OWNER_APPROVAL` 失敗，不一致時以 `ANCHOR_MISMATCH` 失敗（fail closed）。
+3. **負向測試**：
+   - `test/contract-guard.test.mjs`：POC-017 `successes:2／conflicts:0` 並同步改寫四份檔案（approval、generic 斷言、lock 在構造上都一致）→ P0 pin 失敗；20 個 P0 的每一個欄位放寬都會被攔截。
+   - `tests/anchor.test.mjs`：在暫存副本重現同一個四檔協同竄改 → `ANCHOR_MISMATCH`；未設定變數 → `PENDING_OWNER_APPROVAL`。
+   - 以套件副本實測審查者的反例：`stage1:all` exit 1（POC-017 pin），`verify-anchor` exit 1（digest 不同）。
+
+**殘餘風險（無法在 PR 內解決，已明示）：** 修改 `.github/workflows/ci.yml` 或 `scripts/verify-anchor.mjs` 的 PR 可以跳過比對。這兩個檔案都在受保護集合中，因此 digest 一定會改變；負責人在更新變數前必須逐行審查這類差異。更強的防護（例如以 `pull_request_target` 從 `main` 執行比對邏輯）只能在本 PR 合併後另立 PR 導入。
+
+## REV-003：協同竄改與健壯性
+
+- 協同竄改由上述外部錨定處理；`stage1-baseline-lock.json` 的定位修正為「PR 內一致性檢查」，不再單獨宣稱不可變。
+- LOW：`checkBaselineLock()` 遇到缺失的 mutable 檔案時，改為回報失敗項目，不再因 `sha256(null)` 拋出 TypeError；已補測試。
+
+## REV-004：繼承文件矛盾
+
+- `docs/WORKFLOW.md`、`docs/ONE_PAGE.md`、`docs/SETUP_CHECKLIST.md`、`templates/CLAUDE_GITHUB_TASK.md` 逐句改寫為 PoC 版本：只有 CI，不部署、不發行，並加入基準核准關卡。
+- 網站／部署／發行 SOP 移到 `docs/starter-kit-reference/`：`RELEASE_AUTOMATION`、`INSTALL`、`RELEASE_NOTES`、`ACCEPTANCE`、`ADOPT_EXISTING`、`CHANGELOG`、`REVIEW_UPGRADE_NOTES`、`templates/RELEASE_APPROVAL`，並附 README 標明不適用。
+- `tests/poc_docs_policy.test.mjs` 用指令句型偵測操作文件；以 `a59da04` 的舊檔驗證，審查者指出的句子全部能被偵測。
