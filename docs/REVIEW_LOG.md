@@ -7,7 +7,7 @@
 - PR URL：`https://github.com/hsuanyu9503/class-management-next/pull/1`
 - Base SHA：`aff18f0a67a1fb5c6a550f8b1774ee34701c34a0`
 - 風險等級及理由：`L2；新增可執行測試器與 CI workflow；無正式資料、秘密、部署權限。最終等級由專案負責人決定`
-- 使用者決策：`未核准`
+- 使用者決策：`已核准合併（2026-11-19，臺灣）`；PR #1 已合併為 `fdcb5b9a0788584f7a35ff507e1daff3dd7d29ec`
 
 ### 第 1 輪審查（Reviewed Head `211716e561867a0c2bd5c64e4d3f432ca027f42a`）
 
@@ -76,3 +76,30 @@
 
 - 修改 `ci.yml`／`verify-anchor.mjs` 的 PR 可以跳過比對，需人工逐行審查；`pull_request_target` 強化需另立 PR，在本 PR 合併後導入。
 - 未在 Windows 執行 `npm.cmd`。
+
+### 第 3 輪複驗與合併決議（Reviewed Head `635587b4685973413132a8a148446be300b99bbc`）
+
+- 最後 Reviewed Head：`635587b46859`（完整 SHA 如上）
+- ChatGPT 結論：`CONDITIONALLY APPROVED`
+- 問題狀態（限已驗證範圍）：
+
+| ID | 狀態 | 範圍說明 |
+|---|---|---|
+| REV-001 | RESOLVED | 獨立預期清單＋寫死的安全斷言＋P0 釘選 |
+| REV-002 | RESOLVED | Stage 1 範圍：自稱 `BACKEND_REAL` 的結果最多 `PENDING_ATTESTATION`；正式 attestation 尚未實作 |
+| REV-003 | RESOLVED | PR 內一致性檢查；多檔協同竄改交由外部錨定 |
+| REV-004 | RESOLVED | PoC 操作文件已改寫；網站／發行 SOP 移至 `docs/starter-kit-reference/` |
+| REV-005 | RESOLVED | P0 釘選＋外部錨定；修改 `ci.yml`／`verify-anchor.mjs` 可略過比對的殘餘風險仍存在，已明示 |
+
+- **外部錨定**：專案負責人已設定 repository variable `CMN_STAGE1_ANCHOR_SHA256` = `e33380c24bc58bdc3ada4c2ce2d0796e8f23deb7871078ccf0f756475bb934e9`（29 份受保護檔案）。Claude 未設定、也未修改此值。
+- **合併前 CI**（[run 44486915175](https://github.com/hsuanyu9503/class-management-next/actions/runs/44486915175)，Head `635587b…`）：`validate` success；`baseline-anchor` 第 1 次 failure（`PENDING_OWNER_APPROVAL`，預期），設定錨定值後第 2 次 **success**。兩項必要檢查於合併前皆通過。
+- **Ruleset**：`main-protection` 經**負責人核對**為 Active、Target `main`、Bypass list 為空、要求 PR、必要檢查、禁止 force push。Claude 只能確認 `main` `protected: true`，無法讀取細項。
+- **合併決議**：專案負責人正式核准合併；PR #1 已於 2026-11-19 21:20:35（臺灣）合併，Merge Commit `fdcb5b9a0788584f7a35ff507e1daff3dd7d29ec`；合併後的樹與 Reviewed Head 相同。
+- **合併後 CI**（[run 44532509377](https://github.com/hsuanyu9503/class-management-next/actions/runs/44532509377)，push `main`，commit `fdcb5b9…`）：`validate` success、`baseline-anchor` success。
+- **正式核准身分**：ChatGPT 的獨立審查報告**不是** GitHub 帳號的正式 Approve；合併由專案負責人以自己的 GitHub 帳號執行。
+
+## Stage 1 收尾 PR（L1 文件）
+
+- 範圍：只修改 `docs/`；不修改 `src/`、`scripts/`、`tests/`、`.github/workflows/` 或任何受保護的基準契約。外部錨定 digest 必須維持 `e33380c2…34e9`。
+- Base：`fdcb5b9a0788584f7a35ff507e1daff3dd7d29ec`；Head 與審查結論：見該 PR。
+- ChatGPT 結論：`未審查`

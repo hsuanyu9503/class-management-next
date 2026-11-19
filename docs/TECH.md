@@ -7,7 +7,7 @@
 - 性質：Classroom Manager Next **獨立技術驗證 PoC**，非正式網站。
 - 執行環境：Node.js 22+，僅標準函式庫；無相依套件。
 - 自動檢查：`scripts/check.mjs`、`tests/*.test.mjs`、`poc/stage1` 的 `stage1:all`。
-- CI：`.github/workflows/ci.yml` 的 `validate`（`contents: read`，不使用 secrets）。
+- CI：`.github/workflows/ci.yml` 的 `validate`（`contents: read`，不使用 secrets）與 `baseline-anchor`（把 29 份受保護檔案的 digest 與負責人設定的 repository variable `CMN_STAGE1_ANCHOR_SHA256` 比對）。
 - 部署／發行：**無**（未導入 Pages／Release workflow）。
 - 後端候選：Firebase、PostgreSQL —— **皆未選定、皆 `NOT_RUN`**。
 
