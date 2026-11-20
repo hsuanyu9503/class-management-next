@@ -1,0 +1,12 @@
+rules_version = '2';
+// S2-B2 batch 1 placeholder: DENY EVERYTHING for client SDK access.
+// This is NOT the S2-B1 product authorization. Client writes stay forbidden
+// (decision C) and client reads stay forbidden until D-01/D-02 are decided.
+// Do not relax these rules to make a smoke test pass.
+service cloud.firestore {
+  match /databases/{database}/documents {
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

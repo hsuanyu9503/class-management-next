@@ -409,3 +409,25 @@
 - 本段與 `docs/HANDOFF.md` 的狀態更新另以一個 commit 提交，只修改這兩份交接文件。
 - 原審查結論適用於 `b8d2b39cfccc40151704ecd3c87fafa6a09e597a`；新增的交接紀錄 commit **尚未經 ChatGPT 審查**，待增量確認。
 - 使用者驗收：**未完成**。合併決定：**未核准**。
+
+### PR #3 合併後事實（2026-11-20，另記；不改寫上方各輪紀錄）
+
+- 使用者已合併 PR #3：Merge SHA `b0f35af9388a2e75b0a141d692d59ecbf5ece446`，PR 最終 Head `d4b32ae4f6df00e50c753eb84a72e8b877b0358d`。
+- ChatGPT 已檢查 R6 Reviewed Head（`b8d2b39…`）到合併版本的增量：只有 HANDOFF 與 REVIEW_LOG，授權規格、資料模型與案例未改變。
+- 合併後 CI [run 44698127108](https://github.com/hsuanyu9503/class-management-next/actions/runs/44698127108) 成功。
+- 合併不代表 D-01～D-16 已核准；72 筆後端案例仍為 `NOT_RUN`。
+
+## S2-B2 第 1 批｜本機 Emulator 基礎設施與後端證據認證設計
+
+- Base SHA：`b0f35af9388a2e75b0a141d692d59ecbf5ece446`
+- Reviewed Head SHA：`[尚未審查]`
+- 風險等級（初評）：**L2**，但信任邊界相關內容（本機 guard、認證設計）建議採 **L3 深度**審查。
+  - 理由：新增可執行的測試基礎設施與第三方開發相依（firebase-tools 與 627 個套件）；沒有正式資料、憑證、部署、CI 變更。
+  - 最終等級由負責人決定。
+- 範圍：
+  - `poc/stage2/`：Emulator 設定、拒絕一切的佔位規則、本機 guard、REST 用戶端、虛構資料載入、guard 單元測試、冒煙、負向控制、總控腳本、鎖檔；
+  - `docs/stage2/S2B2-B1-PLAN.md`、`S2B2-ATTESTATION.md`、`S2B2-ADAPTER-PLAN.md`；
+  - `docs/HANDOFF.md`、`docs/REVIEW_LOG.md`。
+- 不修改：Stage 1 鎖定檔、fixtures、`P0_PINNED`、安全斷言、外部錨定、`.github/workflows/`、根目錄 `package.json`、`tests/`。
+- ChatGPT 結論：`未審查`
+- 使用者決策：`未核准`

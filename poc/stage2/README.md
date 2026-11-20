@@ -1,0 +1,65 @@
+# PoC Stage 2｜S2-B2 第 1 批：本機 Emulator 基礎設施冒煙
+
+> **這不是後端契約測試。** 這裡只驗證「本機 Firebase Auth／Firestore Emulator 能啟動、只連本機、能載入與清除虛構資料、預設拒絕 client 存取」。Stage 1 的 36 項契約與 72 筆計畫維持 `NOT_RUN`；冒煙成功不等於任何 POC 案例 PASS。
+
+## 需求（依已安裝的 firebase-tools 15.35.0 原始碼確認）
+
+| 項目 | 需求 | 來源 |
+|---|---|---|
+| Node.js | `>=20`（本專案基準 22） | `firebase-tools` 的 `package.json` `engines` |
+| Java | **21 以上** | `node_modules/firebase-tools/lib/emulator/commandUtils.js`：`MIN_SUPPORTED_JAVA_MAJOR_VERSION = 21` |
+| Firestore Emulator | `cloud-firestore-emulator-v1.22.0.jar`（firebase-tools 首次執行時下載，並以 MD5 `5d74cc6bee9e18560d2eae2c6440fd13` 核對） | `lib/emulator/downloadableEmulatorInfo.json` |
+| Auth Emulator | 內建於 firebase-tools（JavaScript，不需下載） | firebase-tools |
+
+官方文件網站（`firebase.google.com`）在本次執行環境的網路政策下無法連線，因此**沒有**以官方文件核對；上表全部來自實際安裝的套件原始碼。
+
+## 執行
+
+```bash
+cd poc/stage2
+npm ci
+npm run s2:guard-test
+npm run s2:smoke
+```
+
+- 只安裝在 `poc/stage2/node_modules`（專案本地），不需要全域安裝 firebase-tools。版本以 `package-lock.json` 鎖定（`firebase-tools` 精確版本 `15.35.0`）。
+- `s2:smoke` 會依序執行：guard 單元測試 → 4 個「未啟動 Emulator 或設定錯誤」的負向控制 → `firebase emulators:exec` 正向冒煙 → 「規則放寬」負向控制 → 確認 Emulator 已停止 → 「斷線」負向控制。全部符合預期才回傳 0。
+- 執行紀錄寫到 `evidence/runs/infra-smoke-latest.json`（已列入 `.gitignore`，不提交）。
+
+## 只連本機的保證
+
+- `firebase.json`：所有 Emulator 綁定 `127.0.0.1`，關閉 UI；專案 ID 固定為 `demo-cmn-s2b2`。firebase-tools 對 `demo-` 專案會略過對正式服務的呼叫（`lib/emulator/adminSdkConfig.js`）。
+- `src/local-guard.mjs`：在任何網路請求之前檢查，任一不符即失敗：
+  - `FIRESTORE_EMULATOR_HOST`、`FIREBASE_AUTH_EMULATOR_HOST` 必須存在，且必須是 loopback 的 `host:port`。缺少時直接失敗，**不會**退回任何雲端端點。
+  - 專案必須是 `demo-` 開頭。
+  - 環境中不得有憑證類變數（`GOOGLE_APPLICATION_CREDENTIALS`、`FIREBASE_TOKEN` 等）。
+  - `FIREBASE_CONFIG` 只接受 `emulators:exec` 為 demo 專案產生的固定形狀。
+  - `firebase.json` 的每個 Emulator 都必須綁定 loopback，且 UI 必須關閉。
+- `src/emu-client.mjs`：每一個請求的 URL 在送出前都再檢查一次是否為 loopback `http`，並且不允許重新導向。
+- firebase-tools 的遠端 MOTD 請求以 `CI=1` 關閉；使用統計只在使用者明確 opt-in 時才會送出（`lib/track.js` 的 `usageEnabled()`），本執行環境沒有 opt-in。
+
+## 預設拒絕
+
+`firestore.rules` 是**拒絕一切**的佔位規則，**不是** S2-B1 的產品授權規則。冒煙會以三種 client 身分驗證全部被拒（403）：
+
+- 匿名讀取；
+- 已登入的讀取；
+- 已登入的寫入。
+
+另外有一個負向控制：把規則換成 `test/negative-controls/permissive.rules`（只用於負向控制，預設設定不會引用）時，冒煙**必須失敗**，以證明那些 403 確實來自規則。
+
+冒煙用 Emulator 專用的 `Authorization: Bearer owner` 繞過規則來載入與檢查虛構資料。這個 owner token **只在 Emulator 有效**，不是正式憑證。
+
+## 檔案
+
+| 檔案 | 用途 |
+|---|---|
+| `firebase.json` | Emulator 設定（loopback、UI 關閉） |
+| `firestore.rules` | 拒絕一切的佔位規則 |
+| `src/local-guard.mjs` | 只連本機的 guard |
+| `src/emu-client.mjs` | Emulator REST 用戶端（不用 Firebase SDK、不用憑證） |
+| `src/seed.mjs` | 從**唯讀**的 Stage 1 fixtures 產生 A17 虛構資料，路徑依 S2-B1 資料模型 |
+| `test/guard.test.mjs` | guard 單元測試（不需 Emulator） |
+| `test/smoke.mjs` | 在 `emulators:exec` 內執行的冒煙 |
+| `test/negative-controls/` | 規則放寬負向控制（不用於正常執行） |
+| `scripts/run-smoke.mjs` | 冒煙與全部負向控制的總控 |

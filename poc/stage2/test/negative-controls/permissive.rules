@@ -1,0 +1,11 @@
+rules_version = '2';
+// NEGATIVE CONTROL ONLY. Never referenced by firebase.json and never a product rule.
+// run-smoke.mjs loads it through firebase.permissive.json to prove that the smoke's
+// deny-* steps really fail when rules are relaxed (i.e. the 403s come from the rules).
+service cloud.firestore {
+  match /databases/{database}/documents {
+    match /{document=**} {
+      allow read, write: if true;
+    }
+  }
+}
