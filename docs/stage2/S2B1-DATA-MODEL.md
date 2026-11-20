@@ -1,9 +1,10 @@
-# S2-B1｜Firebase 資料模型規格 v0.4（草案）
+# S2-B1｜Firebase 資料模型規格 v0.5（草案）
 
 > **狀態：設計文件，未實作。** 本文件沒有對應的 Firestore 資料、Security Rules、SDK 或可執行程式；所有 Stage 2 後端案例維持 `NOT_RUN`。
 > 依據：架構決策 A（班級精確授權）、B（敏感請假資訊分離）、C（正式修改只經受控 API）；Stage 1 正式基準 `fdcb5b9a0788584f7a35ff507e1daff3dd7d29ec`（契約與 fixtures 不修改）。
 > v0.2：回應 PR #3 審查 R1（REV-002、REV-004、REV-005、REV-006 與 `hasSensitiveNote` 最小揭露）。
 > v0.3：回應 PR #3 審查 R2（REV-007 Auth Binding 狀態欄位、REV-008 稽核分為 `auditLog` 與 `auditSummaries`）。
+> v0.5：回應 PR #3 審查 R4（grant 綁定特定 membership 與版本；新增 I-22）。
 > v0.4：回應 PR #3 審查 R3（`rolePreset` 改為版本化的 capability 上限並新增 `rolePresetVersion`；敏感資料存取只依 grant，membership 不含 `leave.sensitive.*`；I-19、I-21 修訂）。
 > 相關文件：[授權](S2B1-AUTHORIZATION.md)｜[存取矩陣](S2B1-ACCESS-MATRIX.md)｜[契約對照](S2B1-CONTRACT-TRACEABILITY.md)
 
@@ -101,9 +102,10 @@ workspaces/{wid}/auditSummaries/{summaryId}                       管理稽核�
 | 欄位 | 說明 |
 |---|---|
 | `grantId`、`principalId`、`classId` | 只授予一個 principal 在一個班級 |
+| `membershipId`、`membershipVersion` | grant 綁定的 class membership 及建立當下的 `version`；該 membership 撤銷、過期、暫停或有任何更新時，grant 永久失效（授權文件 §7.4、I-22） |
 | `capability` | `leave.sensitive.read` 或 `leave.sensitive.revise`，一筆 grant 只授予一種 |
-| `grantedBy`、`grantedAt`、`reasonCode` | `grantedBy` 不可等於 `principalId` |
-| `expiresAt` | **必填**，不得無期限 |
+| `grantedBy`、`grantedAt`、`reasonCode` | `grantedBy` 不可等於 `principalId`；`reasonCode` 格式 `^[A-Z][A-Z0-9_]{2,63}$`，允許清單由 D-06 決定 |
+| `expiresAt` | **必填**，不得無期限；固定格式 `YYYY-MM-DDTHH:MM:SSZ`（UTC），格式錯誤的 grant 無效；最長期限由 D-06 決定 |
 | `status` | `active` → `revoked`（單向）；過期由時間判斷，不需改狀態 |
 | `revokedBy`、`revokedAt`、`revokeReasonCode` | 撤銷時寫入 |
 
@@ -231,6 +233,7 @@ grant 只能新增或從 `active` 改為 `revoked`，其他欄位建立後不可
 | I-18 | 不得自我授權：membership、sensitive grant、Auth Binding 的建立者、修改者不可是被授權者本人 | 決策 A、B |
 | I-19 | 授權必須同時滿足：Auth Binding `active` 且 token 簽發時間不早於 `activatedAt`、Principal `active`、Membership 有效（含 `principalId`、`workspaceId`、必要欄位）；三者各自檢查。**自我讀取**（讀自己的 membership、grant、收據）也適用，沒有例外（D-14） | REV-007、REV-010 |
 | I-20 | `auditSummaries` 不含任何班級資料存取事件；只具 `audit.read` 的管理者無法從中推知任何班級或學生的資料是否存在或被存取 | REV-008、決策 B |
+| I-22 | sensitive grant 只在其綁定的 membership（`membershipId`）有效，且 `membership.version = membershipVersion` 時生效；重新建立或恢復 membership 不會恢復舊 grant（D-16）；敏感備註只經 grant 路徑存取，不經 membership capability | REV-013、生命週期 |
 | I-21 | membership 的有效 capability = `capabilities` ∩ `rolePreset@rolePresetVersion` 的預設值；經 API 寫入時 `capabilities` 必須是該預設值的子集；`rolePreset` 與 `rolePresetVersion` 建立後不可修改。`leave.sensitive.*` 不在 membership 上，只由有效 grant 授予（§7）；`sensitive.grant.manage` 不在任何 preset，只能依 D-06 定義的程序指派，D-06 前沒有人持有 | REV-009、REV-011、D-06、D-12 |
 
 ## 6. 與 Stage 1 fixtures 的對應

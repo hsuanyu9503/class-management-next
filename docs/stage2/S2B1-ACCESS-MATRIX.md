@@ -1,8 +1,9 @@
-# S2-B1｜存取授權矩陣 v0.4（草案）
+# S2-B1｜存取授權矩陣 v0.5（草案）
 
 > **狀態：設計文件，未實作，未驗證。** 矩陣描述預期的授權結果，不是任何後端的測試結果。
 > v0.2：回應 PR #3 審查 R1（分支 C／W、fixture 能力清單不擴權、敏感 grant、D-05 與所有待決事項的預設拒絕）。
 > v0.3：回應 PR #3 審查 R2（稽核分層、科任 `attendance.write` 不可手動加入、Auth Binding）。
+> v0.5：回應 PR #3 審查 R4（敏感備註改依 §7.3 preset 資格與綁定 membership 的 grant；D-15 前全部拒絕）。
 > v0.4：回應 PR #3 審查 R3（preset 是 capability 上限、自我讀取條件、敏感存取只依 grant、fixture 的 preset 對應）。
 > 相關文件：[資料模型](S2B1-DATA-MODEL.md)｜[授權](S2B1-AUTHORIZATION.md)｜[契約對照](S2B1-CONTRACT-TRACEABILITY.md)
 
@@ -38,8 +39,8 @@
 | `leaveRecords`（修改） | `leave.revise` | W | — | — | — | — |
 | `leaveRecords/*/revisions` | `leave.revise` | R | — | — | — | — |
 | 請假適用提示（`leave-applicability` View） | `leave.applicability.read` | R | R | — | — | — |
-| `leaveSensitiveNotes`＋其 revisions（讀） | 該班任一有效 class membership＋有效 read grant（`leave.sensitive.read` 只由 grant 授予） | R*（預設無；D-06 前停用） | R*（同左） | — | — | — |
-| `leaveSensitiveNotes`（修改） | 該班任一有效 class membership＋有效 revise grant（`leave.sensitive.revise` 只由 grant 授予） | W*（預設無；D-06 前停用） | — | — | — | — |
+| `leaveSensitiveNotes`＋其 revisions（讀） | C-sens：綁定在有效 class membership 上的有效 read grant，且該 membership 的 preset 依授權 §7.3 具資格（D-15） | R*（提案；需 D-06＋D-09＋D-15，目前拒絕） | —（不具資格） | — | —（不具資格） | — |
+| `leaveSensitiveNotes`（修改） | C-sens：同上，但為 revise grant | W*（提案；需 D-06＋D-09＋D-15，目前拒絕） | —（不具資格） | — | —（不具資格） | — |
 | `trackingIssues` | `issue.read` | R | — | — | — | — |
 | `views`（`roster-display`） | `roster.read` | R (D-09) | R (D-09) | — | — | — |
 | `views`（`attendance-summary`） | `attendance.read` | R | R | — | — | — |
