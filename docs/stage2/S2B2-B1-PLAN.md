@@ -70,8 +70,11 @@ npm run s2:occupied-real # 真實 Emulator 已占用時的非破壞性回歸
 - **前置條件是硬性停止**：任何前置條件失敗（例如 Emulator 連接埠已被占用），總控立刻以 exit 2 結束，不再執行任何負向控制、冒煙或清除。
 - **「未啟動」與「斷線」等負向控制只用唯讀探測**（`test/probe.mjs`，只送 GET），不再重用會寫入與清除的冒煙。
 - **只清除自己擁有的環境**：冒煙在任何寫入前先證明 Emulator 是空的（Firestore 沒有任何根集合、Auth 沒有帳號）；再寫入本次執行的 nonce 標記 `_smokeOwnership/{RUN_NONCE}`；清除前再確認標記仍然只有自己那一份。任一不符 → 拒絕且不送任何寫入或刪除（`src/ownership.mjs`）。
-- **排他性**：每次啟動 Emulator 前與結束後都確認 5 個連接埠（8080、9099、4400、4500、9150）關閉；Emulator 綁定這些固定埠；同時間的另一個執行會在前置檢查停止（firebase-tools 本身的埠衝突行為未另外測試）。
+- **排他性**：每次啟動 Emulator 前與結束後都確認 5 個連接埠（8080、9099、4400、4500、9150）**確實關閉**；Emulator 綁定這些固定埠；同時間的另一個執行會在前置檢查停止（firebase-tools 本身的埠衝突行為未另外測試）。
 - 冒煙沒有 `RUN_NONCE` 時在任何請求前拒絕。
+- **連接埠三態判斷（S2B2-REV-003）**：`src/port-state.mjs` 只在明確的 `ECONNREFUSED` 時判為 `closed`；連線成功為 `open`；`EACCES`、`EPERM`、逾時與其他任何錯誤都是 `unknown`。`open` 與 `unknown` 都讓前置條件立刻停止（exit 2），並輸出連接埠、狀態與錯誤碼。沒有其他錯誤碼被當成 `closed`。
+- 總控邏輯移到 `src/orchestrator.mjs`，可注入連接埠探測與子程序啟動，以便測試「停止後沒有啟動任何 probe 或 CLI」；`scripts/run-smoke.mjs` 只是入口。
+- **安全宣稱的界線**：空環境檢查與 nonce 標記用來避免誤刪他人的 Emulator 資料，**不是**原子鎖，也不能對抗惡意的本機程序。
 
 修正前後的對照（以假 HTTP 伺服器記錄實際請求）：
 
@@ -80,11 +83,25 @@ npm run s2:occupied-real # 真實 Emulator 已占用時的非破壞性回歸
 | 8080／9099 已被另一個程序占用 | exit 1，對占用者送出 104 個請求，**包含** `DELETE` documents 與 `DELETE` accounts | exit 2，`PRECONDITION FAILED`，對占用者 **0** 個請求 |
 | 冒煙連到已有資料的外來 Emulator | 先 `DELETE` 清空，再 `PATCH` 寫入 | 拒絕，沒有 `DELETE`／`PATCH`／寫入用 `POST` |
 
+連接埠探測結果對總控的影響（`test/port-state.test.mjs`，以注入的探測結果與記錄啟動次數的假子程序驗證）：
+
+| 探測結果 | 判定 | 前置條件 | 之後啟動的 probe／CLI |
+|---|---|---|---|
+| 連線成功（占用） | `open` | exit 2 | 0／0 |
+| `ECONNREFUSED` | `closed` | 通過 | 正常執行（正向控制：5／2） |
+| `EACCES` | `unknown` | exit 2 | 0／0 |
+| `EPERM` | `unknown` | exit 2 | 0／0 |
+| 逾時 | `unknown` | exit 2 | 0／0 |
+| 其他錯誤（`EHOSTUNREACH` 等） | `unknown` | exit 2 | 0／0 |
+
+- 同樣的停止規則也在 Emulator 停止後的檢查中驗證：正向冒煙後偵測到上述任一非 `closed` 結果 → 停止，不執行規則放寬的 CLI 與斷線探測。
+- 變異測試：把錯誤改回當成 `closed`，或把判斷改成只擋 `open`，新測試分別有 7 項與 12 項失敗。
+
 ### 5.2 測試結果
 
 | 命令 | 內容 | 結果 |
 |---|---|---|
-| `npm run s2:test` | guard 8 項＋非破壞性 6 項（不需 Emulator） | 14／14 通過 |
+| `npm run s2:test` | guard 8 項＋連接埠三態與總控停止 28 項＋非破壞性 6 項（不需 Emulator） | 42／42 通過 |
 | `npm run s2:smoke` | 總控：guard → 唯讀負向 ×4 → 正向冒煙 → 規則放寬負向 → 斷線唯讀負向，每次 Emulator 啟動前後檢查連接埠 | exit 0，12 項檢查全部符合 |
 | `npm run s2:occupied-real` | 在**真實** Emulator 內先放入外來文件與帳號，再執行總控 | 總控 exit 2、停在前置條件、沒有執行冒煙或探測；外來文件與帳號**不變** |
 
@@ -93,16 +110,16 @@ npm run s2:occupied-real # 真實 Emulator 已占用時的非破壞性回歸
 | 檢查 | 預期 | 結果 |
 |---|---|---|
 | guard 單元測試 | 8／8 通過 | 符合 |
-| 前置：負向控制前連接埠關閉 | 關閉 | 符合 |
+| 前置：負向控制前連接埠確實關閉 | 全部 `ECONNREFUSED` | 符合 |
 | 負向：Emulator 未啟動 | 唯讀探測失敗（連線被拒） | 符合 |
 | 負向：`FIRESTORE_EMULATOR_HOST=firestore.googleapis.com:443` | 在任何請求前被 guard 拒絕 | 符合 |
 | 負向：環境中有 `GOOGLE_APPLICATION_CREDENTIALS` | 被 guard 拒絕 | 符合 |
 | 負向：沒有 Emulator 設定 | 被 guard 拒絕，不退回雲端 | 符合 |
-| 前置：正向冒煙前連接埠關閉 | 關閉 | 符合 |
+| 前置：正向冒煙前連接埠確實關閉 | 全部 `ECONNREFUSED` | 符合 |
 | **正向：`firebase emulators:exec` 冒煙** | 14 步全部通過 | 符合 |
-| 前置：規則放寬負向前連接埠關閉 | 關閉 | 符合 |
+| 前置：規則放寬負向前連接埠確實關閉 | 全部 `ECONNREFUSED` | 符合 |
 | 負向：規則換成 allow-all | 冒煙在 `deny-anonymous-read` 失敗 | 符合 |
-| 前置：全部執行後連接埠關閉 | 關閉 | 符合 |
+| 前置：全部執行後連接埠確實關閉 | 全部 `ECONNREFUSED` | 符合 |
 | 負向：Emulator 停止後（斷線） | 唯讀探測失敗 | 符合 |
 
 正向冒煙的 14 步：

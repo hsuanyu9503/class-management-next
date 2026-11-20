@@ -54,7 +54,7 @@ test('orchestrator: emulator ports already occupied → immediate stop, zero req
   try {
     const r = await runNode(['scripts/run-smoke.mjs'], {});
     assert.equal(r.code, 2, r.out);
-    assert.match(r.out, /PRECONDITION FAILED: precondition \(before negatives\): emulator ports closed/);
+    assert.match(r.out, /PRECONDITION FAILED: precondition \(before negatives\): emulator ports confirmed closed/);
     assert.doesNotMatch(r.out, /POSITIVE|NEGATIVE/);
     assert.deepEqual(f.requests, [], 'no request of any kind may reach the occupying Firestore');
     assert.deepEqual(a.requests, [], 'no request of any kind may reach the occupying Auth');

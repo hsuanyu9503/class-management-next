@@ -442,3 +442,17 @@
 
 - 範圍未擴大：未修改 Stage 1 鎖定檔、CI、外部錨定、防護斷言或待決權限；72 筆後端計畫維持 `NOT_RUN`。
 
+### R2 複驗（ChatGPT，Reviewed Head `9aac895704248ca6657da74350b2bb7e6adb94a1`）
+
+- 結論：**CHANGES REQUESTED**。S2B2-REV-001 原始占用情境已修正；S2B2-REV-002 設計層面結案（不代表隔離已實作或已驗證；D-17 仍待決）。
+- 新增 S2B2-REV-003（MEDIUM）：`portState()` 把所有 socket 錯誤與逾時當成「關閉」，在 `EACCES`／逾時時前置條件被錯誤放行。
+- 審查者的獨立測試：10／14 通過，4 項失敗都涉及本機 HTTP 連線，審查環境回報 `EACCES`，所以不視為產品缺陷，也不宣稱獨立 14／14 通過。真實 Emulator 冒煙未由審查者獨立重跑成功。
+
+### R2 回應（Claude，新 Head 見 PR #4）
+
+| 編號 | 等級 | 處理 | 證據 |
+|---|---|---|---|
+| S2B2-REV-003 | MEDIUM | **已修正**：`src/port-state.mjs` 回傳 `open`／`closed`／`unknown`；只有 `ECONNREFUSED` 是 `closed`；`open` 與 `unknown` 都讓前置條件 exit 2 並輸出連接埠與錯誤碼；第一個結果生效、socket 一律銷毀。總控邏輯移到 `src/orchestrator.mjs`，可注入探測與子程序 | `test/port-state.test.mjs`：占用、`ECONNREFUSED`、`EACCES`、`EPERM`、逾時、其他錯誤；在第一次與 Emulator 停止後的檢查都斷言 probe／CLI 啟動次數（非 `closed` 時為 0）；變異測試確認新測試會抓到回歸 |
+
+- 未擴大安全宣稱：空環境檢查與 nonce 標記不是原子鎖，也不能對抗惡意本機程序（已寫入 README 與 PLAN）。
+- 範圍未擴大：未修改 Stage 1 鎖定檔、CI、外部錨定、防護斷言或待決權限；72 筆後端計畫維持 `NOT_RUN`。

@@ -28,7 +28,7 @@ const out = (r.stdout || '') + (r.stderr || '');
 const after = { doc: (await fs.get(DOC, EMULATOR_OWNER)).json?.fields, accounts: Number((await au.countAccounts()).json?.recordsCount ?? -1) };
 const result = {
   kind: 'REAL_OCCUPIED_REGRESSION', orchestratorExit: r.status,
-  stoppedAtPrecondition: /PRECONDITION FAILED: precondition \(before negatives\): emulator ports closed/.test(out),
+  stoppedAtPrecondition: /PRECONDITION FAILED: precondition \(before negatives\): emulator ports confirmed closed/.test(out),
   ranAnySmokeOrProbe: /POSITIVE|NEGATIVE/.test(out),
   foreignDocUnchanged: JSON.stringify(before.doc) === JSON.stringify(after.doc) && before.doc !== undefined,
   foreignAccountsUnchanged: before.accounts === after.accounts && before.accounts === 1,
