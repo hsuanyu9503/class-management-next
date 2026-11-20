@@ -1,8 +1,9 @@
-# S2-B1｜Firebase 資料模型規格 v0.2（草案）
+# S2-B1｜Firebase 資料模型規格 v0.3（草案）
 
 > **狀態：設計文件，未實作。** 本文件沒有對應的 Firestore 資料、Security Rules、SDK 或可執行程式；所有 Stage 2 後端案例維持 `NOT_RUN`。
 > 依據：架構決策 A（班級精確授權）、B（敏感請假資訊分離）、C（正式修改只經受控 API）；Stage 1 正式基準 `fdcb5b9a0788584f7a35ff507e1daff3dd7d29ec`（契約與 fixtures 不修改）。
 > v0.2：回應 PR #3 審查 R1（REV-002、REV-004、REV-005、REV-006 與 `hasSensitiveNote` 最小揭露）。
+> v0.3：回應 PR #3 審查 R2（REV-007 Auth Binding 狀態欄位、REV-008 稽核分為 `auditLog` 與 `auditSummaries`）。
 > 相關文件：[授權](S2B1-AUTHORIZATION.md)｜[存取矩陣](S2B1-ACCESS-MATRIX.md)｜[契約對照](S2B1-CONTRACT-TRACEABILITY.md)
 
 ## 1. 設計原則
@@ -44,7 +45,8 @@ workspaces/{wid}/events/{eventId}                                 領域事件�
 workspaces/{wid}/classes/{cid}/trackingIssues/{issueId}           核對事項（衍生）
 workspaces/{wid}/classes/{cid}/views/{viewId}                     一般展示／投影 View（衍生，去敏）
 workspaces/{wid}/stats/{statId}                                   統計快照（衍生）
-workspaces/{wid}/auditLog/{auditId}                               授權決策與操作稽核（不可變）
+workspaces/{wid}/auditLog/{auditId}                               完整安全稽核（不可變；沒有任何 API 可讀，D-11）
+workspaces/{wid}/auditSummaries/{summaryId}                       管理稽核摘要（不可變；白名單動作與欄位，`audit.read` 可讀）
 ```
 
 ## 3. 集合與欄位
@@ -55,7 +57,17 @@ workspaces/{wid}/auditLog/{auditId}                               授權決策�
 
 **`principals/{principalId}`**：`principalId`（與文件 ID 相同）、`status`（`active`／`disabled`；`disabled` 時所有授權失效）、`createdAt`、`updatedAt`。
 
-**`authBindings/{authUid}`**：`authUid`、`principalId`、`status`、`boundAt`。一個 Firebase Auth UID 只能綁定一個 principal；綁定只由受控 API 建立。
+**`authBindings/{authUid}`**（REV-007；生命週期見授權文件 §6.7）
+
+| 欄位 | 說明 |
+|---|---|
+| `authUid`、`principalId` | 一個 `authUid` 同一時間只綁定一個 principal |
+| `status` | `active`／`disabled`／`revoked`；只有 `active` 可以通過授權 |
+| `activatedAt` | 本次綁定生效的時間；**簽發時間早於此值的 token 一律拒絕** |
+| `bindingVersion` | 每次重新綁定 +1 |
+| `disabledAt`、`disabledBy`、`revokedAt`、`revokedBy`、`reasonCode` | 狀態變更紀錄 |
+
+綁定的建立與變更方式待決（D-13）；決定前不提供 API。
 
 ### 3.2 工作空間、學期、日曆、班級
 
@@ -153,7 +165,9 @@ grant 只能新增或從 `active` 改為 `revoked`，其他欄位建立後不可
 
 **`events/{eventId}`**：`eventId`、`operationId`、`eventType`、`sourceType`、`sourceId`、`sourceVersion`、`occurredAt`。每次正式提交**恰好 1 筆**（POC-016 `eventDelta = 1`）。事件只帶 ID 與版本，不帶敏感文字。不可變。
 
-**`auditLog/{auditId}`**：`auditId`、`principalId`（可為 null，例如未綁定的 UID）、`authUidHash`、`action`、`resourceRef`（工作空間管理資源記 collection＋文件 ID；**班級資料資源只記 collection＋`classId`＋文件 ID 的 SHA-256**，不記 `studentId` 或原始文件 ID，避免只有 `audit.read` 的管理者藉稽核推知班級資料）、`decision`（`allow`／`deny`）、`reasonCode`、`policyVersion`、`traceId`、`at`。拒絕的請求和每一次敏感資料讀取都要記錄（POC-004、POC-005）。不記錄敏感文字或學生姓名。不可變。
+**`auditLog/{auditId}`**（完整安全稽核）：`auditId`、`principalId`（可為 null，例如未綁定的 UID）、`authUid`、`action`、`resourceRef`（完整的 collection 與文件 ID）、`decision`（`allow`／`deny`）、`reasonCode`、`policyVersion`、`traceId`、`at`。記錄所有允許與拒絕，包括每一次敏感備註讀取、grant 與 Auth Binding 的變更（POC-004、POC-005）。不記錄敏感文字或學生姓名。**沒有任何 API 可以讀取**，存取程序待決（D-11）。不可變。
+
+**`auditSummaries/{summaryId}`**（管理稽核摘要，REV-008）：只包含授權文件 §6.6 的白名單動作與白名單欄位：`summaryId`、`at`、`actorPrincipalId`、`action`、`targetType`、`targetId`、`targetPrincipalId`、`decision`、`reasonCode`。**不包含任何班級資料存取事件**，也不包含 `studentId`、班級資料文件 ID 或其雜湊、`traceId`。v0.2 曾以文件 ID 的 SHA-256 雜湊作為去識別方式；因為 ID 少且可列舉，雜湊可被逐一試算還原，v0.3 已移除這個作法。由受控 API 與 `auditLog` 在同一交易寫入。不可變。
 
 ### 3.8 衍生資料
 
@@ -188,7 +202,8 @@ grant 只能新增或從 `active` 改為 `revoked`，其他欄位建立後不可
 | `derivedProgress` | 路徑 | 無（以 `operationId` 對應收據） |
 | `events` | 路徑 | 無（以 `sourceId` 對應來源；只供衍生工作，不開放讀取） |
 | `stats` | 路徑 | 欄位（班級統計必填；工作空間統計為 null） |
-| `auditLog` | 路徑 | 無（`resourceRef` 只記 ID） |
+| `auditLog` | 路徑 | 無（`resourceRef` 記完整參照；不開放讀取） |
+| `auditSummaries` | 路徑 | 無（只有工作空間管理目標；`targetId` 可以是 `classId`，但只出現在 `class.*` 動作） |
 
 ## 5. 不變條件
 
@@ -203,15 +218,18 @@ grant 只能新增或從 `active` 改為 `revoked`，其他欄位建立後不可
 | I-07 | 每次正式提交使 current `version` 恰好 +1，並在同一交易寫入**恰好 1 筆** Revision、**恰好 1 筆** Receipt、**恰好 1 筆** Event；任一失敗則全部回滾 | POC-016、POC-018、POC-020 |
 | I-08 | `expectedVersion` 不等於 current `version` 時以 `VERSION_CONFLICT` 拒絕且不寫入 | POC-017、POC-033 |
 | I-09 | 同一工作空間內：相同 `operationId`＋相同 `requestHash` 回傳原收據、不再寫入；相同 `operationId`＋不同 `requestHash`（包括不同 principal）以 `OPERATION_REUSE_MISMATCH` 拒絕、不寫入、不回傳原收據的任何欄位 | POC-018、POC-019、POC-021 |
-| I-10 | Revision、Receipt、Event、AuditLog 建立後不可修改或刪除；衍生進度另存於 `derivedProgress` | POC-031、POC-036 |
-| I-11 | 敏感文字與「是否有敏感備註」只存在 `leaveSensitiveNotes`；其他集合（含 Event、Receipt、Revision 摘要、View、Stats、AuditLog、匯出）都不得包含 | POC-003、POC-029 |
+| I-10 | Revision、Receipt、Event、`auditLog`、`auditSummaries` 建立後不可修改或刪除；衍生進度另存於 `derivedProgress` | POC-031、POC-036 |
+| I-11 | 敏感文字與「是否有敏感備註」只存在 `leaveSensitiveNotes`；其他集合（含 Event、Receipt、Revision 摘要、View、Stats、`auditLog`、`auditSummaries`、匯出）都不得包含 | POC-003、POC-029 |
 | I-12 | 草稿不是正式資料：S2-B1 不在 Firestore 定義草稿集合；草稿不得產生正式 Revision，也不得使核對事項的 evidence 過期 | POC-015、POC-025 |
 | I-13 | 衍生資料記錄 `sourceVersion`／`sourceAsOf`；來源較新時標示 stale 或 `STALE_OR_PENDING`，不得冒稱最新 | POC-022、POC-036 |
 | I-14 | 日曆 `trustState = unknown` 時，統計 `rateState = UNKNOWN`，分母為 null | POC-011、POC-014 |
 | I-15 | `archived` 學期的正式資料，只能由具 `archive.revise` 的明確授權經 API 修改 | POC-030 |
 | I-16 | 不同資料集（例如 `A17-20261117` 與 `SC01-20261116`）不合併身分；以 `workspaceId` 隔離 | fixtures `mustNotMergeDatasets` |
 | I-17 | membership 的 capability 必須與 `scopeType` 相符；`scopeType = workspace` 的 membership 不授予任何班級資料存取 | 決策 A |
-| I-18 | 不得自我授權：membership 與 sensitive grant 的建立者、修改者不可是被授權者本人 | 決策 A、B |
+| I-18 | 不得自我授權：membership、sensitive grant、Auth Binding 的建立者、修改者不可是被授權者本人 | 決策 A、B |
+| I-19 | 授權必須同時滿足：Auth Binding `active` 且 token 簽發時間不早於 `activatedAt`、Principal `active`、Membership 有效；三者各自檢查 | REV-007 |
+| I-20 | `auditSummaries` 不含任何班級資料存取事件；只具 `audit.read` 的管理者無法從中推知任何班級或學生的資料是否存在或被存取 | REV-008、決策 B |
+| I-21 | membership 的 `capabilities` 必須是其 `rolePreset` 預設值的子集（`leave.sensitive.*` 只能經 grant 流程加入）；`rolePreset` 建立後不可修改 | REV-009、D-12 |
 
 ## 6. 與 Stage 1 fixtures 的對應
 

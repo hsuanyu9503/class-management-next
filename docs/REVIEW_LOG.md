@@ -152,3 +152,45 @@
 | R1 交叉檢查（31 項，針對 REV-001～006） | 新 Head 31／31；以同一腳本檢查舊 Head `af1ffc2`：26 項失敗，證明檢查能偵測原本的矛盾 |
 
 > 交叉檢查腳本不提交到 Repository（本 PR 維持純文件範圍），隨審查包附上。
+
+### 第 2 輪審查（Reviewed Head `c19910316e1cc4b1025d3ea7be436b0358a2142b`）
+
+- ChatGPT 結論：`CHANGES REQUESTED`。REV-001～006 的主要問題已修正；新增 REV-007、REV-008（HIGH）、REV-009（MEDIUM），以及文件測試前置條件的要求。
+
+### Claude 逐項回覆（R2）
+
+- 審查版本 Head SHA：`c19910316e1cc4b1025d3ea7be436b0358a2142b`
+- 修正後 Head SHA：`見 PR #3 最新 commit 與交接訊息`
+
+| ID | 處理結果 | 修改位置 | 驗證證據 | 待使用者決策 |
+|---|---|---|---|---|
+| REV-007 | 已修 | AUTHORIZATION §6.1 步驟 2／2a：binding `status = active`、token `iat ≥ activatedAt`、principal `active`、membership 有效，三者各自檢查；§6.7 binding 生命週期（建立、停用、撤銷、重新綁定、失效）與生效時機；DATA-MODEL §3.1 binding 欄位、I-19；ACCESS-MATRIX 前提說明 | N-23～N-28；評估程式：移除 binding 狀態檢查 → N-23、N-24 失敗；移除 `activatedAt` 檢查 → N-25 失敗 | D-13（binding 由誰管理） |
+| REV-008 | 已修 | AUTHORIZATION §6.6：稽核分為 `auditLog`（完整，沒有任何 API 可讀）與 `auditSummaries`（白名單動作與欄位，不含任何班級資料事件、grant 與 binding 事件）；移除 v0.2 的文件 ID 雜湊作法並說明原因；`audit.read` 只限同一工作空間；DATA-MODEL §3.7、I-10、I-11、I-20；ACCESS-MATRIX §3 | N-29～N-32；評估程式：把 `leave.sensitive.read` 放進摘要白名單 → N-29、N-31 失敗；開放 `auditLog` → N-30 失敗；允許跨工作空間 → N-32 失敗 | D-11（完整稽核的調閱程序） |
+| REV-009 | 已修 | AUTHORIZATION §5：D-05 無例外，例外政策標為待負責人核准；membership capability 必須是 preset 預設值的子集，`rolePreset` 不可修改；§6.2／§6.3 步驟 5：評估時忽略超出 preset 的 capability；§6.3 步驟 9；DATA-MODEL I-21；ACCESS-MATRIX §2、§3 | N-33～N-37；評估程式：允許手動加入 → N-33、N-34 失敗；評估時不忽略超出 preset 的 capability → N-37 失敗 | D-05、D-12 |
+| 前置條件 | 已修 | AUTHORIZATION §11：每個案例有「前置條件」欄，並寫明未核准時只能驗證預設拒絕；N-02 拆成 N-02a（D-09 未核准 → `FORBIDDEN`）與 N-02b（D-09 已核准 → 允許）；敏感 grant 正向案例（N-06～N-09b、N-29s）標示 D-06＋D-09 | 評估程式：每個有前置條件的案例在 `approvals = []` 下重新評估，都必須是 `FORBIDDEN`／`DISABLED`；把未啟用的 capability 當成已啟用 → 6 個案例失敗；§11 前置條件與 §13 JSON 必須一致 | D-06、D-09 |
+
+**額外修正（Claude 自查發現）**
+
+- `sensitive.grant.manage` 原本沒有任何指派方式：它不在 preset 中，而新的子集規則又禁止手動加入。現在明確寫成由 D-06 決定指派程序，並新增 N-09b 作為 N-09 的對照組，確認 N-09 被拒的原因確實是「授予自己」。
+- 評估程式在開發過程中找到 3 處 §11 與 §13 不一致（N-04 前置條件、N-07b 漏列、N-36 前置條件），已修正。
+- 評估程式的第一版沒有任何案例能偵測「評估時不忽略超出 preset 的 capability」，所以新增 N-37。
+
+**新的負向測試規格**
+
+- §13 新增機器可讀的授權案例（31 個），只是資料，不是程式。
+- 審查用評估程式（不提交）的做法：
+  - 從文件本身解析 capability 表、preset 表、稽核白名單與 §11 前置條件，再依 §6、§7、§12 的規則評估每個案例；
+  - 另做 8 種「故意放寬規則」的變異測試，每一種都會讓特定案例失敗。
+- 這不是只檢查關鍵字是否存在：只要表格與案例互相矛盾，或規則被放寬，就會失敗。
+
+**已執行的測試（本機 Linux、Node 22）**
+
+| 命令／操作 | 結果 |
+|---|---|
+| npm run check | 成功 |
+| npm test | 成功 15／15 |
+| npm run stage1:all | 成功：Stage0 21、契約 14、防護 4、執行器 37、72 筆 NOT_RUN |
+| verify-anchor（負責人核准值） | ANCHOR_OK（29 份受保護檔案未變） |
+| 文件交叉檢查 v0.1 | 11／11（新增「稽核動作名稱不得與 capability 名稱重複」） |
+| R1 交叉檢查 | 31／31 |
+| R2 授權案例評估 | 31／31；8 種變異全部被偵測 |

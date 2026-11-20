@@ -1,7 +1,8 @@
-# S2-B1｜存取授權矩陣 v0.2（草案）
+# S2-B1｜存取授權矩陣 v0.3（草案）
 
 > **狀態：設計文件，未實作，未驗證。** 矩陣描述預期的授權結果，不是任何後端的測試結果。
 > v0.2：回應 PR #3 審查 R1（分支 C／W、fixture 能力清單不擴權、敏感 grant、D-05 與所有待決事項的預設拒絕）。
+> v0.3：回應 PR #3 審查 R2（稽核分層、科任 `attendance.write` 不可手動加入、Auth Binding）。
 > 相關文件：[資料模型](S2B1-DATA-MODEL.md)｜[授權](S2B1-AUTHORIZATION.md)｜[契約對照](S2B1-CONTRACT-TRACEABILITY.md)
 
 ## 1. 如何閱讀
@@ -29,7 +30,7 @@
 |---|---|---|---|---|---|---|
 | `attendanceSessions`（含 `rosterSnapshot`，無姓名）、`entries` | `attendance.read` | R | R | — | — | — |
 | 班級名單（含 `displayName`，經 API 組合 `students`＋`enrollments`） | `roster.read` | R (D-09) | R (D-09) | — | — | — |
-| 建立場次、登記點名 | `attendance.write` | W | —（D-05 預設拒絕） | — | — | — |
+| 建立場次、登記點名 | `attendance.write` | W | —（D-05 預設拒絕；不能手動加入，N-33） | — | — | — |
 | 更正已提交的點名 | `attendance.revise` | W | — | — | — | — |
 | `entries/*/revisions` | `attendance.revise` | R | — | — | — | — |
 | `leaveRecords`（摘要，讀） | `leave.read` | R | — | — | — | — |
@@ -58,19 +59,23 @@
 | `calendars`（讀） | 同工作空間任一有效 class membership；或 `calendar.manage` | R | R | R (D-09) | — | — |
 | `calendars`（管理） | `calendar.manage` | — | — | W (D-09) | — | — |
 | `memberships`（自己的，讀） | 無 | R | R | R | R | — |
-| `memberships`（他人的，讀／管理） | `membership.manage` | — | — | R、W (D-09)；**不含自己** | — | — |
+| `memberships`（他人的，讀／管理） | `membership.manage`；capability 只能是 preset 預設值的子集，`rolePreset` 不可修改（I-21） | — | — | R、W (D-09)；**不含自己** | — | — |
 | `sensitiveGrants`（自己的，讀） | 無 | R | R | R | R | — |
 | `sensitiveGrants`（建立／撤銷他人的） | `sensitive.grant.manage` | — | — | 停用（D-06；且不在 preset 中） | — | — |
-| `auditLog` | `audit.read` | — | — | R (D-09) | — | — |
+| `auditSummaries`（管理稽核摘要，白名單動作與欄位） | `audit.read`，只限同一工作空間 | — | — | R (D-09) | — | — |
+| `auditLog`（完整安全稽核） | 無（沒有任何 API 可讀；D-11） | — | — | — | — | — |
+| `authBindings`（他人的） | 無（D-13 前不提供 API） | — | — | — | — | — |
 | `operationReceipts`（他人的） | 無任何 capability 可讀 | — | — | — | — | — |
 | `derivedProgress`、`events` | 無（只供伺服器） | — | — | — | — | — |
 | `accessIndex` | 無（D-02 前不建立） | — | — | — | — | — |
+
+**所有角色的前提**：Auth Binding `active` 且 token 簽發時間不早於 `activatedAt`、Principal `active`、Membership 有效，三者各自檢查（I-19）。任一不成立，上面所有格都變成 `—`。
 
 ## 4. 伺服器端
 
 | 主體 | 可寫入 | 限制 |
 |---|---|---|
-| 受控 API | current、Revision、Receipt、Event、`derivedProgress`（建立）、AuditLog、membership、grant | 每個請求都必須完成授權文件 §6 的全部步驟；Admin 權限不等於授權通過 |
+| 受控 API | current、Revision、Receipt、Event、`derivedProgress`（建立）、`auditLog`、`auditSummaries`、membership、grant | 每個請求都必須完成授權文件 §6 的全部步驟；Admin 權限不等於授權通過 |
 | 衍生工作（事件消費者） | `trackingIssues`、`views`、`stats`、`derivedProgress`（更新） | 只讀事件與正式來源；冪等；**不寫正式 current，也不修改收據** |
 | Client SDK | 無 | 一律拒絕 |
 
