@@ -367,3 +367,45 @@
 - 如上表所述，binding、token、membership 的時間欄位只靠格式假設。
 - D-01～D-16 未核准的部分維持拒絕或停用；`INVALID_INPUT` 仍是提案代碼。
 - Firebase／PostgreSQL 72 筆後端案例仍為 `NOT_RUN`；模型、文件、mock 與 CI 成功都不能當成後端安全驗證通過。
+
+### 第 7 次審查：收尾複驗（審查者稱 R6；Reviewed Head `b8d2b39cfccc40151704ecd3c87fafa6a09e597a`）
+
+- 審查日期：2026-11-20
+- 審查者：ChatGPT，獨立審查，L3 深度。最終風險與驗收決策由使用者決定。
+- 審查對象：
+  - Base：`4a842e7399d8fb64f3a0bc6650581920cd38890f`
+  - 前輪 Head：`221d15567e0aebe0b8a5f5e2555360cf1a25f5bd`
+  - Reviewed Head：`b8d2b39cfccc40151704ecd3c87fafa6a09e597a`
+- **結論**：收尾複驗通過。REV-016、REV-017 結案，文件與模型可進入使用者驗收，本輪未發現新增阻擋項目。
+  - 結論只適用於上述 Reviewed Head 的文件與模型範圍。
+  - **不代表**真實後端驗證通過、D-01～D-16 已核准、使用者已驗收、GitHub 正式 Approve，或已授權合併。
+
+| ID | 結案狀態 | 審查者依據 |
+|---|---|---|
+| REV-016 | 已修正，結案 | 既有 grant 與建立 grant 共用原因碼驗證（[規則](https://github.com/hsuanyu9503/class-management-next/blob/b8d2b39cfccc40151704ecd3c87fafa6a09e597a/docs/stage2/S2B1-AUTHORIZATION.md#L224)）。獨立重現：<br>• `ABC\n`、前後空白、非法字元、非字串、長度 2／65、缺少原因碼時，該 grant 無效，沒有其他有效 grant 時為 `FORBIDDEN`；<br>• 長度 3／64 為 `ALLOW`；<br>• 一筆無效 grant 加另一筆有效 grant 為 `ALLOW` |
+| REV-017 | 已修正，結案 | §13 已正確限縮證據範圍（[規則](https://github.com/hsuanyu9503/class-management-next/blob/b8d2b39cfccc40151704ecd3c87fafa6a09e597a/docs/stage2/S2B1-AUTHORIZATION.md#L637)）：<br>• 嚴格時間驗證涵蓋建立請求的 `expiresAt`、既有 grant 的 `expiresAt`／`grantedAt`、模型 `now`；<br>• binding `activatedAt`、token `tokenIat`、membership `validFrom`／`validToExclusive` 仍依賴上游格式假設，已揭露並要求實作階段補驗證 |
+
+**ChatGPT 獨立複驗取得的證據**（由審查者執行，與下方 Claude 自行執行的結果分開記錄）
+
+- 180／180 模型案例通過，含 127 個控制案例與核准條件真子集檢查。
+- 40／40 變異被偵測；`skip-existing-grant-reason` 被 7 個案例偵測。
+- crosscheck v0.1、crosscheck R1 均通過。
+- R5 原有 169 個案例內容未變更。
+- 完整與增量審查包的內容與固定 Head 相符。
+- R5 → R6 只變更 `docs/HANDOFF.md`、`docs/REVIEW_LOG.md`、`docs/stage2/S2B1-AUTHORIZATION.md`、`docs/stage2/S2B1-DATA-MODEL.md`。
+- 線上 PR Head 與 Reviewed Head 相符；查核時 PR 尚未合併。
+- 同一 Reviewed Head 的 CI `validate`、`baseline-anchor` 均成功：[run 44695301336](https://github.com/hsuanyu9503/class-management-next/actions/runs/44695301336)。
+
+**Claude 先前自行執行的結果**（提交 Reviewed Head 時，乾淨 clone）：check、npm test 15／15、stage1:all、verify-anchor、兩支交叉檢查、評估程式 180／180、40 種變異全部被偵測。
+
+**未驗證範圍（證據邊界）**
+
+- 72 筆真實後端案例仍為 `NOT_RUN`。
+- 模型通過**不代表**已驗證：實際 token 驗證、權威資料來源、Security Rules／受控 API、交易、並行、實際稽核寫入，或其他未納入模型的操作。
+- binding／token 時間與 membership 日期的格式與真實日期合法性，模型尚未驗證。
+
+**本紀錄之後的變更**
+
+- 本段與 `docs/HANDOFF.md` 的狀態更新另以一個 commit 提交，只修改這兩份交接文件。
+- 原審查結論適用於 `b8d2b39cfccc40151704ecd3c87fafa6a09e597a`；新增的交接紀錄 commit **尚未經 ChatGPT 審查**，待增量確認。
+- 使用者驗收：**未完成**。合併決定：**未核准**。

@@ -6,13 +6,20 @@
 
 - 專案：Classroom Manager Next 技術驗證 PoC
 - 階段：**PoC Stage 1 已合併**（Merged Baseline）。合併後驗收狀態依下方實際 CI 證據記錄。
-- 目前任務：**S2-B1** Firebase 資料模型與權限規格 v0.1（文件 PR，`docs/stage2/`，未實作）。Stage 1 收尾已由 PR #2 合併（`4a842e7399d8fb64f3a0bc6650581920cd38890f`）。
+- 目前任務：**S2-B1** Firebase 資料模型與權限規格 v0.7（PR #3，文件 PR，`docs/stage2/`，未實作）。Stage 1 收尾已由 PR #2 合併（`4a842e7399d8fb64f3a0bc6650581920cd38890f`）。
+- **S2-B1 狀態：R6 文件與模型獨立審查通過，待使用者驗收與合併決策。**
+  - 審查適用的 Reviewed Head：`b8d2b39cfccc40151704ecd3c87fafa6a09e597a`。
+  - 之後新增的交接紀錄 commit 只改 `docs/HANDOFF.md`、`docs/REVIEW_LOG.md`，待增量確認。
+  - 審查通過**不代表**後端驗證通過、D-01～D-16 已核准、使用者已驗收、GitHub 正式 Approve 或合併授權。
 - 基準分支：`main`
 - 正式基準 Commit（Merge Commit）：`fdcb5b9a0788584f7a35ff507e1daff3dd7d29ec`
 - 下一階段：PoC Stage 2｜Firebase Adapter 技術驗證，**尚未開始實作**（準備清單見 `docs/STAGE2_PREP.md`；S2-B1 只有設計文件）
 - S2-B1 架構決策（負責人已確認）：A 班級精確授權、B 敏感請假資訊分離、C 正式修改只經受控 API。待決事項 D-01～D-16（含決定前的預設拒絕值與解除阻擋條件）見 `docs/stage2/S2B1-AUTHORIZATION.md` §12。
-- 下一位負責人：ChatGPT（收尾 PR 的 L1 差異審查）→ 你（是否合併收尾 PR、是否啟動 Stage 2）
-- 最近更新：2026-11-19（臺灣）
+- 下一位負責人：**你（使用者）**：
+  - 驗收 S2-B1 文件；
+  - 決定 PR #3 是否合併、風險分級、D-01～D-16 與 `INVALID_INPUT` 代碼；
+  - 是否啟動 S2-B2。
+- 最近更新：2026-11-20（臺灣）
 
 ## PR #1 正式合併紀錄
 
@@ -105,6 +112,7 @@
 | 2026-11-20 | ChatGPT → Claude | 複驗 `e588deb532ae`：CHANGES REQUESTED（REV-015 MEDIUM；§6.6 錯誤代碼；N-29 文字），無新增 HIGH | R5 集中修正 |
 | 2026-11-20 | Claude → ChatGPT | S2-B1 R5（v0.6，Head `221d15567e0a`） | L3 深度複驗 |
 | 2026-11-20 | ChatGPT → Claude | 審查 `221d15567e0a`：文件與模型範圍**有條件通過**，可進入使用者驗收；剩 REV-016、REV-017（LOW） | 收尾修正 |
-| 2026-11-20 | Claude → ChatGPT | S2-B1 收尾（v0.7，新 Head 見 PR #3） | 收尾複驗；之後由你驗收（有條件通過不是合併授權） |
+| 2026-11-20 | Claude → ChatGPT | S2-B1 收尾（v0.7，Head `b8d2b39cfccc`） | 收尾複驗 |
+| 2026-11-20 | ChatGPT → 你 | 收尾複驗 `b8d2b39cfccc`：通過，REV-016、REV-017 結案，文件與模型可進入使用者驗收 | 使用者驗收與合併決策（待決） |
 
 > 規格的正式變更請同步修改 SPEC／TECH，不要只在這裡留下新決策。
