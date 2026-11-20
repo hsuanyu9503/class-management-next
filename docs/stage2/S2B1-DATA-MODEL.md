@@ -1,9 +1,10 @@
-# S2-B1｜Firebase 資料模型規格 v0.5（草案）
+# S2-B1｜Firebase 資料模型規格 v0.6（草案）
 
 > **狀態：設計文件，未實作。** 本文件沒有對應的 Firestore 資料、Security Rules、SDK 或可執行程式；所有 Stage 2 後端案例維持 `NOT_RUN`。
 > 依據：架構決策 A（班級精確授權）、B（敏感請假資訊分離）、C（正式修改只經受控 API）；Stage 1 正式基準 `fdcb5b9a0788584f7a35ff507e1daff3dd7d29ec`（契約與 fixtures 不修改）。
 > v0.2：回應 PR #3 審查 R1（REV-002、REV-004、REV-005、REV-006 與 `hasSensitiveNote` 最小揭露）。
 > v0.3：回應 PR #3 審查 R2（REV-007 Auth Binding 狀態欄位、REV-008 稽核分為 `auditLog` 與 `auditSummaries`）。
+> v0.6：回應 PR #3 審查 R5（grant 的時間與原因碼改依授權文件 §7.6 嚴格驗證）。
 > v0.5：回應 PR #3 審查 R4（grant 綁定特定 membership 與版本；新增 I-22）。
 > v0.4：回應 PR #3 審查 R3（`rolePreset` 改為版本化的 capability 上限並新增 `rolePresetVersion`；敏感資料存取只依 grant，membership 不含 `leave.sensitive.*`；I-19、I-21 修訂）。
 > 相關文件：[授權](S2B1-AUTHORIZATION.md)｜[存取矩陣](S2B1-ACCESS-MATRIX.md)｜[契約對照](S2B1-CONTRACT-TRACEABILITY.md)
@@ -104,8 +105,8 @@ workspaces/{wid}/auditSummaries/{summaryId}                       管理稽核�
 | `grantId`、`principalId`、`classId` | 只授予一個 principal 在一個班級 |
 | `membershipId`、`membershipVersion` | grant 綁定的 class membership 及建立當下的 `version`；該 membership 撤銷、過期、暫停或有任何更新時，grant 永久失效（授權文件 §7.4、I-22） |
 | `capability` | `leave.sensitive.read` 或 `leave.sensitive.revise`，一筆 grant 只授予一種 |
-| `grantedBy`、`grantedAt`、`reasonCode` | `grantedBy` 不可等於 `principalId`；`reasonCode` 格式 `^[A-Z][A-Z0-9_]{2,63}$`，允許清單由 D-06 決定 |
-| `expiresAt` | **必填**，不得無期限；固定格式 `YYYY-MM-DDTHH:MM:SSZ`（UTC），格式錯誤的 grant 無效；最長期限由 D-06 決定 |
+| `grantedBy`、`grantedAt`、`reasonCode` | `grantedBy` 不可等於 `principalId`；`grantedAt` 必須通過授權文件 §7.6 的嚴格時間驗證；`reasonCode` 整個字串符合 `^[A-Z][A-Z0-9_]{2,63}$`（§7.6），允許清單由 D-06 決定 |
+| `expiresAt` | **必填**，不得無期限；必須通過授權文件 §7.6 的嚴格時間驗證（整個字串是 ASCII `YYYY-MM-DDTHH:MM:SSZ`，且是真實存在的 UTC 時間）；不合法的 grant 無效、不授權；最長期限由 D-06 決定 |
 | `status` | `active` → `revoked`（單向）；過期由時間判斷，不需改狀態 |
 | `revokedBy`、`revokedAt`、`revokeReasonCode` | 撤銷時寫入 |
 

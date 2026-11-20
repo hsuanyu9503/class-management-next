@@ -1,4 +1,4 @@
-# S2-B1｜與 Stage 1 契約的對照 v0.5（草案）
+# S2-B1｜與 Stage 1 契約的對照 v0.6（草案）
 
 > **狀態：設計對照，未驗證。** 下表說明 S2-B1 的資料模型與授權設計，打算如何支援 Stage 1 的 36 項契約。它**不是**測試結果：36 項在 Firebase 與 PostgreSQL 都維持 `NOT_RUN`，沒有任何一項標為 PASS。
 > 契約來源（鎖定、不修改）：`poc/stage1/contracts/poc-test-matrix-v1.0.csv`（SHA-256 `4e42d9bb…ddad3`）；P0 預期另由 `poc/stage1/src/contract-guard.mjs` 的 `P0_PINNED` 固定。
@@ -6,6 +6,7 @@
 > v0.3：回應 R2；所有 SEC 類案例另外受 Auth Binding 檢查約束（授權 §6.1 步驟 2、I-19）；POC-004、POC-005 的稽核改為寫入 `auditLog`（不開放讀取）與 `auditSummaries`（不含班級資料事件）。
 > v0.4：回應 R3；fixture membership 記錄 `homeroom_teacher@s2b1-v1` 作為 preset 上限，capability 與 Stage 1 相同（POC-001、POC-003 等不受影響）；敏感存取只依 grant（POC-003、POC-029）。
 > v0.5：回應 R4；敏感備註走獨立的 C-sens 路徑，grant 綁定特定 membership，且需 preset 資格（D-15）。POC-003、POC-029 只測拒絕，不受影響。
+> v0.6：回應 R5；grant 的時間與原因碼改依授權 §7.6 嚴格驗證。本對照表的契約對應不變。
 > 相關文件：[資料模型](S2B1-DATA-MODEL.md)｜[授權](S2B1-AUTHORIZATION.md)｜[存取矩陣](S2B1-ACCESS-MATRIX.md)
 
 ## 1. 適用階段的定義
