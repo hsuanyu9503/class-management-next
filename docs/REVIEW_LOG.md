@@ -103,3 +103,12 @@
 - 範圍：只修改 `docs/`；不修改 `src/`、`scripts/`、`tests/`、`.github/workflows/` 或任何受保護的基準契約。外部錨定 digest 必須維持 `e33380c2…34e9`。
 - Base：`fdcb5b9a0788584f7a35ff507e1daff3dd7d29ec`；Head 與審查結論：見該 PR。
 - ChatGPT 結論：`未審查`
+
+## S2-B1｜Firebase 資料模型與權限規格 v0.1（文件 PR）
+
+- Base SHA：`4a842e7399d8fb64f3a0bc6650581920cd38890f`（PR #2 Merge Commit）
+- Reviewed Head SHA：`[尚未審查]`
+- 風險等級：負責人初評 **L1**（只新增文件，無可執行程式）。Claude 註記：`docs/RISK_POLICY.md` 的強制升級條款提到「存取權限、跨使用者資料可見性」；本 PR 是權限設計規格，雖然沒有行為變更，建議以較高深度審查語意。最終等級由負責人決定。
+- 範圍：`docs/stage2/` 4 份新文件；`docs/HANDOFF.md`、`docs/REVIEW_LOG.md` 狀態更新。不修改 `poc/stage1/`、受保護檔案、`src/`、`scripts/`、`tests/`、`.github/`。
+- ChatGPT 結論：`未審查`
+- 使用者決策：`未核准`

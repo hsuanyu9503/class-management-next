@@ -6,10 +6,11 @@
 
 - 專案：Classroom Manager Next 技術驗證 PoC
 - 階段：**PoC Stage 1 已合併**（Merged Baseline）。合併後驗收狀態依下方實際 CI 證據記錄。
-- 目前任務：Stage 1 合併後收尾（L1 文件 PR，只更新文件）
+- 目前任務：**S2-B1** Firebase 資料模型與權限規格 v0.1（文件 PR，`docs/stage2/`，未實作）。Stage 1 收尾已由 PR #2 合併（`4a842e7399d8fb64f3a0bc6650581920cd38890f`）。
 - 基準分支：`main`
 - 正式基準 Commit（Merge Commit）：`fdcb5b9a0788584f7a35ff507e1daff3dd7d29ec`
-- 下一階段：PoC Stage 2｜Firebase Adapter 技術驗證，**尚未開始**（準備清單見 `docs/STAGE2_PREP.md`）
+- 下一階段：PoC Stage 2｜Firebase Adapter 技術驗證，**尚未開始實作**（準備清單見 `docs/STAGE2_PREP.md`；S2-B1 只有設計文件）
+- S2-B1 架構決策（負責人已確認）：A 班級精確授權、B 敏感請假資訊分離、C 正式修改只經受控 API。待決事項 D-01～D-09 見 `docs/stage2/S2B1-AUTHORIZATION.md` §9。
 - 下一位負責人：ChatGPT（收尾 PR 的 L1 差異審查）→ 你（是否合併收尾 PR、是否啟動 Stage 2）
 - 最近更新：2026-11-19（臺灣）
 
@@ -91,5 +92,7 @@
 | 2026-11-19 | ChatGPT → 你 | 複驗 `635587b46859`：CONDITIONALLY APPROVED | 你設定錨定值、核准合併 |
 | 2026-11-19 | 你 | 合併 PR #1 → `fdcb5b9a0788` | Stage 1 收尾 |
 | 2026-11-19 | Claude → ChatGPT | Stage 1 收尾 L1 文件 PR | L1 差異審查 |
+| 2026-11-19 | 你 | 合併 PR #2 → `4a842e7399d8` | 啟動 S2-B1 文件 |
+| 2026-11-20 | Claude → ChatGPT | S2-B1 文件 PR（Base `4a842e7399d8`） | 獨立差異審查 |
 
 > 規格的正式變更請同步修改 SPEC／TECH，不要只在這裡留下新決策。
