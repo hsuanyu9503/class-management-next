@@ -18,12 +18,14 @@
 ```bash
 cd poc/stage2
 npm ci
-npm run s2:guard-test
-npm run s2:smoke
+npm run s2:test          # guard + 非破壞性測試（不需 Emulator）
+npm run s2:smoke         # 冒煙與全部負向控制
+npm run s2:occupied-real # 真實 Emulator 已占用時，確認總控不碰既有資料
 ```
 
 - 只安裝在 `poc/stage2/node_modules`（專案本地），不需要全域安裝 firebase-tools。版本以 `package-lock.json` 鎖定（`firebase-tools` 精確版本 `15.35.0`）。
-- `s2:smoke` 會依序執行：guard 單元測試 → 4 個「未啟動 Emulator 或設定錯誤」的負向控制 → `firebase emulators:exec` 正向冒煙 → 「規則放寬」負向控制 → 確認 Emulator 已停止 → 「斷線」負向控制。全部符合預期才回傳 0。
+- `s2:smoke` 會依序執行：guard 單元測試 → 4 個「未啟動 Emulator 或設定錯誤」的負向控制（**唯讀探測**，只送 GET）→ `firebase emulators:exec` 正向冒煙 → 「規則放寬」負向控制 → 「斷線」負向控制（唯讀探測）。全部符合預期才回傳 0。
+- 每次啟動 Emulator 前後都確認連接埠 8080、9099、4400、4500、9150 關閉。**任何前置條件失敗都會立刻停止**（exit 2，`PRECONDITION FAILED`），不執行後續任何步驟，也不清除任何資料。
 - 執行紀錄寫到 `evidence/runs/infra-smoke-latest.json`（已列入 `.gitignore`，不提交）。
 
 ## 只連本機的保證
@@ -48,6 +50,14 @@ npm run s2:smoke
 
 另外有一個負向控制：把規則換成 `test/negative-controls/permissive.rules`（只用於負向控制，預設設定不會引用）時，冒煙**必須失敗**，以證明那些 403 確實來自規則。
 
+## 只清除自己擁有的資料
+
+`src/ownership.mjs`：
+
+1. 寫入前證明 Emulator 是空的：Firestore 沒有任何根集合、Auth 沒有帳號。否則拒絕，不送任何寫入或刪除。
+2. 寫入本次執行的 nonce 標記 `_smokeOwnership/{RUN_NONCE}`（總控每次產生 32 位十六進位亂數）。
+3. 清除前確認標記集合裡只有自己的那一份。否則拒絕清除。
+
 冒煙用 Emulator 專用的 `Authorization: Bearer owner` 繞過規則來載入與檢查虛構資料。這個 owner token **只在 Emulator 有效**，不是正式憑證。
 
 ## 檔案
@@ -60,6 +70,10 @@ npm run s2:smoke
 | `src/emu-client.mjs` | Emulator REST 用戶端（不用 Firebase SDK、不用憑證） |
 | `src/seed.mjs` | 從**唯讀**的 Stage 1 fixtures 產生 A17 虛構資料，路徑依 S2-B1 資料模型 |
 | `test/guard.test.mjs` | guard 單元測試（不需 Emulator） |
+| `src/ownership.mjs` | 擁有權檢查（空環境證明、nonce 標記） |
 | `test/smoke.mjs` | 在 `emulators:exec` 內執行的冒煙 |
+| `test/probe.mjs` | 唯讀探測（只送 GET），用於「未啟動」「斷線」與 guard 負向控制 |
+| `test/nondestructive.test.mjs` | 以假 HTTP 伺服器記錄請求：連接埠被占用、外來 Emulator 有資料時，不送任何破壞性請求 |
+| `test/real-occupied.mjs`、`scripts/run-occupied-real.mjs` | 在真實 Emulator 已占用且有外來資料時執行總控，確認資料不變 |
 | `test/negative-controls/` | 規則放寬負向控制（不用於正常執行） |
 | `scripts/run-smoke.mjs` | 冒煙與全部負向控制的總控 |

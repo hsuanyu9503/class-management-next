@@ -420,7 +420,7 @@
 ## S2-B2 第 1 批｜本機 Emulator 基礎設施與後端證據認證設計
 
 - Base SHA：`b0f35af9388a2e75b0a141d692d59ecbf5ece446`
-- Reviewed Head SHA：`[尚未審查]`
+- Reviewed Head SHA（R1）：`d6181bb1ca242a63d2ffeb8d2abe2a1f376d4d2c`
 - 風險等級（初評）：**L2**，但信任邊界相關內容（本機 guard、認證設計）建議採 **L3 深度**審查。
   - 理由：新增可執行的測試基礎設施與第三方開發相依（firebase-tools 與 627 個套件）；沒有正式資料、憑證、部署、CI 變更。
   - 最終等級由負責人決定。
@@ -429,5 +429,16 @@
   - `docs/stage2/S2B2-B1-PLAN.md`、`S2B2-ATTESTATION.md`、`S2B2-ADAPTER-PLAN.md`；
   - `docs/HANDOFF.md`、`docs/REVIEW_LOG.md`。
 - 不修改：Stage 1 鎖定檔、fixtures、`P0_PINNED`、安全斷言、外部錨定、`.github/workflows/`、根目錄 `package.json`、`tests/`。
-- ChatGPT 結論：`未審查`
+- ChatGPT 結論（R1，`d6181bb`）：**CHANGES REQUESTED**（S2B2-REV-001 HIGH、S2B2-REV-002 MEDIUM）
 - 使用者決策：`未核准`
+
+### R1 回應（Claude，新 Head 見 PR #4）
+
+| 編號 | 等級 | 問題 | 處理 | 證據 |
+|---|---|---|---|---|
+| S2B2-REV-001 | HIGH | 前置條件失敗不會中止；「未啟動」負向控制重用會 `DELETE` 的冒煙；固定專案／連接埠可能清除他人 Emulator | **已修正**：前置條件改為硬性停止（exit 2）；「未啟動」「斷線」與 guard 負向控制改用唯讀探測；冒煙寫入前證明環境為空、寫入 nonce 標記、清除前再確認，否則拒絕；每次 Emulator 啟動前後檢查 5 個連接埠；CLI 改以 `node firebase.js` 啟動並回報 `spawnError` | `poc/stage2/src/ownership.mjs`、`test/probe.mjs`、`scripts/run-smoke.mjs`；`test/nondestructive.test.mjs`（假伺服器記錄請求：占用時 0 請求、外來資料時無 `DELETE`／`PATCH`）；`npm run s2:occupied-real`（真實 Emulator 內的外來文件與帳號不變）；修正前同情境對占用者送出 104 個請求含兩個 `DELETE` |
+| S2B2-REV-002 | MEDIUM | 認證設計缺少 Adapter 與證據收集／驗證／簽章之間的隔離 | **已補設計**（未實作）：`S2B2-ATTESTATION.md` v0.2 §9 隔離要求（受信任元件固定版本並與 Adapter SHA 分別綁定、不從 PR checkout 載入；Adapter 程序／網路／檔案／憑證隔離；nonce 由 Runner 在 Adapter 啟動後寫入；獨立驗證與簽章環境；狀態變化必須能由 trace 解釋；每次執行的隔離自我檢查）與 §10 攻擊驗收情境；隔離無法查證時只能 `UNATTESTED`／`BLOCKED`。D-17 未決定 | `docs/stage2/S2B2-ATTESTATION.md` §5、§8～§10；`S2B2-ADAPTER-PLAN.md` §1、§4 |
+| （附帶） | — | Windows 上 `spawnSync` 執行 `.bin/firebase` 的相容性 | 改以 `process.execPath` 執行 `firebase.js`；回報 `spawnError`／`signal`。**未在 Windows 實測** | `S2B2-B1-PLAN.md` §5.3 |
+
+- 範圍未擴大：未修改 Stage 1 鎖定檔、CI、外部錨定、防護斷言或待決權限；72 筆後端計畫維持 `NOT_RUN`。
+

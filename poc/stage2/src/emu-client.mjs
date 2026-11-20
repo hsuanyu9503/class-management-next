@@ -42,6 +42,8 @@ export function firestoreClient(cfg) {
       } while (pageToken);
       return { status: 200, docs: out };
     },
+    // Read-only: names of root collections (used to prove the emulator is a fresh, empty instance).
+    listRootCollections: (token) => call(`${base}:listCollectionIds`, { method: 'POST', body: { pageSize: 100 }, token }),
     clearAll: () => call(`${cfg.firestore.origin}/emulator/v1/projects/${cfg.projectId}/databases/(default)/documents`, { method: 'DELETE' }),
   };
 }

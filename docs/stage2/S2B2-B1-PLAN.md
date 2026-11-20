@@ -58,44 +58,78 @@
 ```bash
 cd poc/stage2
 npm ci
-npm run s2:guard-test
+npm run s2:test          # guard + 非破壞性測試（不需 Emulator）
 npm run s2:smoke
+npm run s2:occupied-real # 真實 Emulator 已占用時的非破壞性回歸
 ```
 
 ## 5. 執行結果（Claude 在本執行環境實際執行）
 
-`npm run s2:smoke`（`scripts/run-smoke.mjs`）全部符合預期，exit 0：
+### 5.1 S2B2-REV-001 修正後的安全規則
+
+- **前置條件是硬性停止**：任何前置條件失敗（例如 Emulator 連接埠已被占用），總控立刻以 exit 2 結束，不再執行任何負向控制、冒煙或清除。
+- **「未啟動」與「斷線」等負向控制只用唯讀探測**（`test/probe.mjs`，只送 GET），不再重用會寫入與清除的冒煙。
+- **只清除自己擁有的環境**：冒煙在任何寫入前先證明 Emulator 是空的（Firestore 沒有任何根集合、Auth 沒有帳號）；再寫入本次執行的 nonce 標記 `_smokeOwnership/{RUN_NONCE}`；清除前再確認標記仍然只有自己那一份。任一不符 → 拒絕且不送任何寫入或刪除（`src/ownership.mjs`）。
+- **排他性**：每次啟動 Emulator 前與結束後都確認 5 個連接埠（8080、9099、4400、4500、9150）關閉；Emulator 綁定這些固定埠；同時間的另一個執行會在前置檢查停止（firebase-tools 本身的埠衝突行為未另外測試）。
+- 冒煙沒有 `RUN_NONCE` 時在任何請求前拒絕。
+
+修正前後的對照（以假 HTTP 伺服器記錄實際請求）：
+
+| 情境 | 修正前（`d6181bb`） | 修正後 |
+|---|---|---|
+| 8080／9099 已被另一個程序占用 | exit 1，對占用者送出 104 個請求，**包含** `DELETE` documents 與 `DELETE` accounts | exit 2，`PRECONDITION FAILED`，對占用者 **0** 個請求 |
+| 冒煙連到已有資料的外來 Emulator | 先 `DELETE` 清空，再 `PATCH` 寫入 | 拒絕，沒有 `DELETE`／`PATCH`／寫入用 `POST` |
+
+### 5.2 測試結果
+
+| 命令 | 內容 | 結果 |
+|---|---|---|
+| `npm run s2:test` | guard 8 項＋非破壞性 6 項（不需 Emulator） | 14／14 通過 |
+| `npm run s2:smoke` | 總控：guard → 唯讀負向 ×4 → 正向冒煙 → 規則放寬負向 → 斷線唯讀負向，每次 Emulator 啟動前後檢查連接埠 | exit 0，12 項檢查全部符合 |
+| `npm run s2:occupied-real` | 在**真實** Emulator 內先放入外來文件與帳號，再執行總控 | 總控 exit 2、停在前置條件、沒有執行冒煙或探測；外來文件與帳號**不變** |
+
+`s2:smoke` 的檢查：
 
 | 檢查 | 預期 | 結果 |
 |---|---|---|
-| guard 單元測試 | 8／8 通過 | 通過 |
-| 前置：Emulator 連接埠在啟動前關閉 | 關閉 | 符合 |
-| 負向：Emulator 未啟動 | 冒煙失敗（連線被拒） | 符合 |
+| guard 單元測試 | 8／8 通過 | 符合 |
+| 前置：負向控制前連接埠關閉 | 關閉 | 符合 |
+| 負向：Emulator 未啟動 | 唯讀探測失敗（連線被拒） | 符合 |
 | 負向：`FIRESTORE_EMULATOR_HOST=firestore.googleapis.com:443` | 在任何請求前被 guard 拒絕 | 符合 |
 | 負向：環境中有 `GOOGLE_APPLICATION_CREDENTIALS` | 被 guard 拒絕 | 符合 |
 | 負向：沒有 Emulator 設定 | 被 guard 拒絕，不退回雲端 | 符合 |
-| **正向：`firebase emulators:exec` 冒煙** | 12 步全部通過 | 通過 |
+| 前置：正向冒煙前連接埠關閉 | 關閉 | 符合 |
+| **正向：`firebase emulators:exec` 冒煙** | 14 步全部通過 | 符合 |
+| 前置：規則放寬負向前連接埠關閉 | 關閉 | 符合 |
 | 負向：規則換成 allow-all | 冒煙在 `deny-anonymous-read` 失敗 | 符合 |
-| Emulator 在 exec 結束後停止 | 連接埠關閉 | 符合 |
-| 負向：Emulator 停止後（斷線） | 冒煙失敗 | 符合 |
+| 前置：全部執行後連接埠關閉 | 關閉 | 符合 |
+| 負向：Emulator 停止後（斷線） | 唯讀探測失敗 | 符合 |
 
-正向冒煙的 12 步：
+正向冒煙的 14 步：
 
 1. local guard；
 2. Firestore 可連線；
 3. Auth 可連線；
-4. 執行前清空；
-5. 載入 47 份虛構文件；
-6. **從 Emulator 狀態讀回** 15 筆，P9／R1／N1／U4，`workspaceId`／`classId` 與路徑一致；
-7. 匿名讀取被拒（403）；
-8. 在 Auth Emulator 建立虛構帳號；
-9. token 查詢；
-10. 已登入讀取被拒（403）；
-11. 已登入寫入被拒（403）；
-12. 清除後剩 0 份文件、0 個帳號。
+4. 證明 Emulator 是空的（擁有權）；
+5. 寫入本次 nonce 標記；
+6. 載入 47 份虛構文件；
+7. **從 Emulator 狀態讀回** 15 筆，P9／R1／N1／U4，`workspaceId`／`classId` 與路徑一致；
+8. 匿名讀取被拒（403）；
+9. 在 Auth Emulator 建立虛構帳號；
+10. token 查詢；
+11. 已登入讀取被拒（403）；
+12. 已登入寫入被拒（403）；
+13. 清除前確認標記仍只有自己的；
+14. 清除後剩 0 份文件、0 個帳號。
 
 - 紀錄中的 fixture 檔案 SHA-256 為 `a2af65e8…8381f`，與 Stage 1 `source-lock` 相同。
 - 這些都是**基礎設施冒煙**（`kind: INFRA_SMOKE`、`notAContractResult: true`），**不是**任何 POC 案例的結果。Stage 1 的 72 筆計畫維持 `NOT_RUN`。
+
+### 5.3 Windows 相容性
+
+- 總控改以 `node node_modules/firebase-tools/lib/bin/firebase.js` 啟動 CLI，不再依賴 `node_modules/.bin/firebase`（Windows 上是 `.cmd` 檔，`spawnSync` 無法直接執行）。
+- 子程序無法啟動時，紀錄 `spawnError` 與 `signal`，不再只顯示 `exit: null`。
+- **未在 Windows 上實際執行。**
 
 ## 6. 為何本批不加入 CI
 
@@ -114,7 +148,8 @@ npm run s2:smoke
 
 ## 8. 未驗證與限制
 
-- 沒有在 Windows 或使用者自己的電腦上執行。
+- 沒有在 Windows 或使用者自己的電腦上執行（§5.3 的相容性修改未經 Windows 實測）。
+- 排他性只靠固定連接埠：同一台機器上若有程序在冒煙執行期間才綁定其他埠並改寫資料，不在本批的防護範圍內。
 - 沒有以官方文件核對需求（見 §4）。
 - 冒煙不包含任何授權邏輯、受控 API、交易或並行測試。
 - Emulator 與正式 Firestore 的行為差異未評估。

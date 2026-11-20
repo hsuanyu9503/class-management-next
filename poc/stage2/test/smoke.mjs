@@ -8,6 +8,7 @@ import { fileURLToPath } from 'node:url';
 import { assertLocalConfig } from '../src/local-guard.mjs';
 import { firestoreClient, authClient, EMULATOR_OWNER } from '../src/emu-client.mjs';
 import { loadFixtures, buildA17Seed } from '../src/seed.mjs';
+import { MARKER_COLLECTION, assertNonce, assertFreshEmulator, assertStillOwned } from '../src/ownership.mjs';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const steps = [];
@@ -15,14 +16,20 @@ const step = (name, ok, detail = {}) => { steps.push({ name, ok: !!ok, ...detail
 
 async function main() {
   const cfg = assertLocalConfig(process.env, { firebaseJsonPath: path.join(HERE, '..', 'firebase.json') });
+  const nonce = assertNonce(process.env.RUN_NONCE);
   step('local-guard', true, { projectId: cfg.projectId, firestore: cfg.firestore.origin, auth: cfg.auth.origin });
   const fs = firestoreClient(cfg), au = authClient(cfg);
 
   const ping = await fs.ping(); step('firestore-reachable', ping.status === 200, { status: ping.status });
   const ac = await au.config(); step('auth-reachable', ac.status === 200, { status: ac.status });
 
-  const c0 = await fs.clearAll(); const a0 = await au.clearAll();
-  step('reset-before', c0.status === 200 && a0.status === 200, { firestore: c0.status, auth: a0.status });
+  // S2B2-REV-001: never clear an emulator this run does not own. Prove it is a fresh, empty instance
+  // (read-only checks) BEFORE any write; otherwise stop without sending any PATCH/DELETE.
+  const rc = await fs.listRootCollections(EMULATOR_OWNER); const ac0 = await au.countAccounts();
+  assertFreshEmulator({ rootCollections: rc.status === 200 ? (rc.json?.collectionIds || []) : null, authAccounts: ac0.status === 200 ? Number(ac0.json?.recordsCount ?? 0) : null });
+  step('ownership-fresh-emulator', true, { rootCollections: 0, authAccounts: 0 });
+  const mk = await fs.set(`${MARKER_COLLECTION}/${nonce}`, { nonce, createdAt: new Date().toISOString() }, EMULATOR_OWNER);
+  step('ownership-marker-written', mk.status === 200, { status: mk.status });
 
   const { fixtures, fileSha256 } = loadFixtures();
   const seed = buildA17Seed(fixtures);
@@ -50,6 +57,9 @@ async function main() {
   const wr = await fs.set(`${entriesPath}/AE-SMOKE-CLIENT-WRITE`, { status: 'P' }, su.json.idToken);
   step('deny-authenticated-write', wr.status === 403, { status: wr.status });
 
+  const markers = await fs.list(MARKER_COLLECTION, EMULATOR_OWNER);
+  assertStillOwned(markers.status === 200 ? markers.docs.map((d) => d.name.split('/').pop()) : null, nonce);
+  step('ownership-verified-before-clear', true, { markers: 1 });
   const c1 = await fs.clearAll(); const a1 = await au.clearAll();
   const after = await fs.list(entriesPath, EMULATOR_OWNER); const acc = await au.countAccounts();
   step('cleanup', c1.status === 200 && a1.status === 200 && after.docs?.length === 0 && acc.status === 200 && Number(acc.json?.recordsCount ?? 0) === 0,

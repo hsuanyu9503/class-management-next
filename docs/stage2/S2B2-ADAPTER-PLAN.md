@@ -17,6 +17,7 @@ executeCase(caseSpec, adapter, fixtures) → { status: 'PENDING_ATTESTATION' | '
   - 依 `S2B2-ATTESTATION.md` 由 Observer 從 Emulator 實際狀態另外算出 canonical；
   - 由 Verifier 決定是否 `PASS`。
 - Adapter 回傳的 `canonical` 只作為「Adapter 宣稱」記錄；Adapter 回傳的 `evidence` 必須能對應到 Runner 的 trace。
+- S2-B2 #2 的 Observer 雛形與 trace 代理在本機執行，**沒有** `S2B2-ATTESTATION.md` §9 的隔離，所以結果最多 `UNATTESTED`。
 
 ## 2. Firebase Adapter 的組成（後續批次實作）
 
@@ -57,7 +58,7 @@ D-01 決定前，讀取一律經受控 API（授權 §9），所以即使是唯�
 |---|---|---|---|
 | S2-B2 #1（本批） | Emulator 基礎設施冒煙、本機 guard、認證設計、對接計畫 | L2（新增可執行測試基礎設施；信任邊界設計採 L3 深度審查） | — |
 | S2-B2 #2 | 本機受控**讀取** API（授權 §6.1–6.4，分支 C）、trace 記錄代理、狀態匯出、Observer 雛形；POC-001、002、008、009 在 Emulator 執行，結果最多 `UNATTESTED` | L3 | 本批審查通過 |
-| S2-B2 #3 | 受控執行器 workflow 與信任根（D-17）、Verifier；第一次產生可認證的結果 | L3 | D-17 決定；CI 變更的錨定重新核准 |
+| S2-B2 #3 | 受控執行器 workflow 與信任根（D-17）、Verifier；`S2B2-ATTESTATION.md` §9 的隔離（固定受信任元件版本、Adapter 網路／檔案／程序隔離、獨立的驗證與簽章環境）；§10 攻擊驗收情境全部通過後，才可能第一次產生可認證的結果 | L3 | D-17 決定；CI 變更的錨定重新核准 |
 | S2-B2 #4 | 受控**寫入** API（§6.5、§8：`operationId`、`requestHash`、`expectedVersion`、交易）；POC-016～021 | L3 | #2 審查通過 |
 | S2-B2 #5 | C-sens 拒絕路徑（POC-003、029）與其餘 SEC／DOMAIN 案例 | L3 | #2、#4 |
 | 之後 | SYNC、OFFLINE（伺服器端）、DR 的 S2 部分 | 依內容 | 逐批 |
