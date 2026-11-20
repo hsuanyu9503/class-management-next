@@ -1,13 +1,14 @@
-# S2-B1｜存取授權矩陣 v0.3（草案）
+# S2-B1｜存取授權矩陣 v0.4（草案）
 
 > **狀態：設計文件，未實作，未驗證。** 矩陣描述預期的授權結果，不是任何後端的測試結果。
 > v0.2：回應 PR #3 審查 R1（分支 C／W、fixture 能力清單不擴權、敏感 grant、D-05 與所有待決事項的預設拒絕）。
 > v0.3：回應 PR #3 審查 R2（稽核分層、科任 `attendance.write` 不可手動加入、Auth Binding）。
+> v0.4：回應 PR #3 審查 R3（preset 是 capability 上限、自我讀取條件、敏感存取只依 grant、fixture 的 preset 對應）。
 > 相關文件：[資料模型](S2B1-DATA-MODEL.md)｜[授權](S2B1-AUTHORIZATION.md)｜[契約對照](S2B1-CONTRACT-TRACEABILITY.md)
 
 ## 1. 如何閱讀
 
-- 「所需 capability」是判斷依據；角色欄位是套用 Role Preset 後的**預設**結果（授權文件 §5）。實際判斷只看 membership 上的 capability，不看角色名稱。
+- 「所需 capability」是判斷依據。角色欄位是「membership 保存了該 preset 全部預設值」時的結果（授權文件 §5）。實際的有效 capability = membership 上的 capability ∩ preset 上限；**preset 只限制、不授予**，角色名稱本身也不授予權限。
 - 標為「未啟用」的 capability（授權文件 §4）在 D-09 核准前一律視為未授予。下表以 **`(D-09)`** 標示這種「preset 中有、但目前不生效」的格。
 - 班級資料的權限只適用於「該 principal 有有效 class membership 的那一個 `classId`」。對其他班級一律是 `—`。
 
@@ -37,8 +38,8 @@
 | `leaveRecords`（修改） | `leave.revise` | W | — | — | — | — |
 | `leaveRecords/*/revisions` | `leave.revise` | R | — | — | — | — |
 | 請假適用提示（`leave-applicability` View） | `leave.applicability.read` | R | R | — | — | — |
-| `leaveSensitiveNotes`＋其 revisions（讀） | `leave.sensitive.read`＋read grant | R*（預設無；D-06 前停用） | R*（同左） | — | — | — |
-| `leaveSensitiveNotes`（修改） | `leave.sensitive.revise`＋revise grant | W*（預設無；D-06 前停用） | — | — | — | — |
+| `leaveSensitiveNotes`＋其 revisions（讀） | 該班任一有效 class membership＋有效 read grant（`leave.sensitive.read` 只由 grant 授予） | R*（預設無；D-06 前停用） | R*（同左） | — | — | — |
+| `leaveSensitiveNotes`（修改） | 該班任一有效 class membership＋有效 revise grant（`leave.sensitive.revise` 只由 grant 授予） | W*（預設無；D-06 前停用） | — | — | — | — |
 | `trackingIssues` | `issue.read` | R | — | — | — | — |
 | `views`（`roster-display`） | `roster.read` | R (D-09) | R (D-09) | — | — | — |
 | `views`（`attendance-summary`） | `attendance.read` | R | R | — | — | — |
@@ -58,9 +59,9 @@
 | `classes`、`terms`（管理） | `class.manage` | — | — | W (D-09) | — | — |
 | `calendars`（讀） | 同工作空間任一有效 class membership；或 `calendar.manage` | R | R | R (D-09) | — | — |
 | `calendars`（管理） | `calendar.manage` | — | — | W (D-09) | — | — |
-| `memberships`（自己的，讀） | 無 | R | R | R | R | — |
+| `memberships`（自己的，讀） | 無 capability；但 binding、principal 有效，且在該工作空間至少有一筆有效 membership（授權 §6.4、D-14） | R | R | R | R | — |
 | `memberships`（他人的，讀／管理） | `membership.manage`；capability 只能是 preset 預設值的子集，`rolePreset` 不可修改（I-21） | — | — | R、W (D-09)；**不含自己** | — | — |
-| `sensitiveGrants`（自己的，讀） | 無 | R | R | R | R | — |
+| `sensitiveGrants`（自己的，讀） | 同上 | R | R | R | R | — |
 | `sensitiveGrants`（建立／撤銷他人的） | `sensitive.grant.manage` | — | — | 停用（D-06；且不在 preset 中） | — | — |
 | `auditSummaries`（管理稽核摘要，白名單動作與欄位） | `audit.read`，只限同一工作空間 | — | — | R (D-09) | — | — |
 | `auditLog`（完整安全稽核） | 無（沒有任何 API 可讀；D-11） | — | — | — | — | — |
@@ -81,12 +82,17 @@
 
 ## 5. Stage 1 fixtures principals 的對應（REV-003）
 
-**規則：Stage 2 載入 fixtures 時，每個 principal 的 capability 與 Stage 1 `fixtures/canonical-fixtures-v1.0.json` 完全相同，不增不減，也不套用任何 Role Preset。** Fixtures 檔案本身不修改。
+**規則（REV-011）**：Stage 2 載入 fixtures 時：
 
-| Fixture principal | Stage 1 capabilities（原樣使用） | S2 membership | 說明 |
+- 每個 principal 的 `capabilities` 與 Stage 1 `fixtures/canonical-fixtures-v1.0.json` 完全相同，不增不減，**不展開**成 preset 的全部預設值。
+- `rolePreset`／`rolePresetVersion` 依下表填寫，只作為上限。兩位教師的 Stage 1 capability 都是 `homeroom_teacher@s2b1-v1` 預設值的子集，所以有效 capability 與 Stage 1 完全相同。
+- **沒有任何 fixture 專用的授權繞過**：fixture principal 走與一般 membership 完全相同的授權流程。
+- Fixtures 檔案本身不修改。
+
+| Fixture principal | Stage 1 capabilities（原樣使用） | S2 membership（preset 上限） | 說明 |
 |---|---|---|---|
-| `ACTOR-TEACHER`（WS-A17） | `attendance.read`、`attendance.write`、`leave.applicability.read` | `CLASS-606-A17`，`scopeType = class` | POC-001 的 15 筆以 `attendance.read` 讀取 `AS-A17-20261117-DAILY` 的 `rosterSnapshot`／`entries` 取得，**不需要** `roster.read` |
-| `ACTOR-SC01-TEACHER`（WS-SC01） | `attendance.read`、`attendance.revise`、`leave.read`、`leave.revise`、`issue.read` | `CLASS-606-SC01`，`scopeType = class` | 沒有 `leave.sensitive.*`、沒有 grant（POC-003） |
+| `ACTOR-TEACHER`（WS-A17） | `attendance.read`、`attendance.write`、`leave.applicability.read` | `CLASS-606-A17`，`scopeType = class`，`homeroom_teacher@s2b1-v1` | POC-001 的 15 筆以 `attendance.read` 讀取 `AS-A17-20261117-DAILY` 的 `rosterSnapshot`／`entries` 取得，**不需要** `roster.read` |
+| `ACTOR-SC01-TEACHER`（WS-SC01） | `attendance.read`、`attendance.revise`、`leave.read`、`leave.revise`、`issue.read` | `CLASS-606-SC01`，`scopeType = class`，`homeroom_teacher@s2b1-v1` | 沒有 grant（POC-003）。正向回歸：N-43、N-44；超額 capability 被忽略：N-45 |
 | `ACTOR-OTHER`（WS-FOREIGN） | 無 | 不建立 | 所有請求 → `FORBIDDEN`（POC-002） |
 
 - Membership 期間：`validFrom` 為資料集日期，`validToExclusive` 為 `null`。授權檢查以「現在」判斷有效期間（授權文件 §6.2 步驟 5），測試在資料集日期之後執行，所以不能把終點設在資料集次日。這是隔離測試環境的載入設定，不是業務規則；驗證過期行為的案例（例如 N-07、N-08）應另外建立有終點的 membership 或 grant。

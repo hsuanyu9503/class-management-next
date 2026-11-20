@@ -10,7 +10,7 @@
 - 基準分支：`main`
 - 正式基準 Commit（Merge Commit）：`fdcb5b9a0788584f7a35ff507e1daff3dd7d29ec`
 - 下一階段：PoC Stage 2｜Firebase Adapter 技術驗證，**尚未開始實作**（準備清單見 `docs/STAGE2_PREP.md`；S2-B1 只有設計文件）
-- S2-B1 架構決策（負責人已確認）：A 班級精確授權、B 敏感請假資訊分離、C 正式修改只經受控 API。待決事項 D-01～D-13（含決定前的預設拒絕值與解除阻擋條件）見 `docs/stage2/S2B1-AUTHORIZATION.md` §12。
+- S2-B1 架構決策（負責人已確認）：A 班級精確授權、B 敏感請假資訊分離、C 正式修改只經受控 API。待決事項 D-01～D-14（含決定前的預設拒絕值與解除阻擋條件）見 `docs/stage2/S2B1-AUTHORIZATION.md` §12。
 - 下一位負責人：ChatGPT（收尾 PR 的 L1 差異審查）→ 你（是否合併收尾 PR、是否啟動 Stage 2）
 - 最近更新：2026-11-19（臺灣）
 
@@ -97,6 +97,8 @@
 | 2026-11-20 | ChatGPT → Claude | 審查 `af1ffc28707b`：CHANGES REQUESTED（REV-001～006） | R1 修正 |
 | 2026-11-20 | Claude → ChatGPT | S2-B1 R1（v0.2，Head `c19910316e1c`） | 複驗 |
 | 2026-11-20 | ChatGPT → Claude | 複驗 `c19910316e1c`：CHANGES REQUESTED（REV-007、REV-008 HIGH；REV-009 MEDIUM；案例前置條件） | R2 修正 |
-| 2026-11-20 | Claude → ChatGPT | S2-B1 R2（v0.3，新 Head 見 PR #3） | 複驗 |
+| 2026-11-20 | Claude → ChatGPT | S2-B1 R2（v0.3，Head `89b975a9b50c`） | 複驗 |
+| 2026-11-20 | ChatGPT → Claude | 複驗 `89b975a9b50c`：CHANGES REQUESTED（REV-010 HIGH；REV-011、REV-012 MEDIUM；REV-008 證據補強） | R3 修正 |
+| 2026-11-20 | Claude → ChatGPT | S2-B1 R3（v0.4，新 Head 見 PR #3）；權限規格建議採 L3 深度審查 | 複驗 |
 
 > 規格的正式變更請同步修改 SPEC／TECH，不要只在這裡留下新決策。

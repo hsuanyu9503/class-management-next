@@ -194,3 +194,58 @@
 | 文件交叉檢查 v0.1 | 11／11（新增「稽核動作名稱不得與 capability 名稱重複」） |
 | R1 交叉檢查 | 31／31 |
 | R2 授權案例評估 | 31／31；8 種變異全部被偵測 |
+
+### 第 3 輪審查（Reviewed Head `89b975a9b50cc03d424eacb160cad2bc4f9a8544`）
+
+- ChatGPT 結論：`CHANGES REQUESTED`，暫緩合併。新增 REV-010（HIGH）、REV-011、REV-012（MEDIUM），並要求補強 REV-008 的證據。
+- 審查深度：權限規格依要求採 **L3 深度**審查；最終風險等級由負責人決定。
+
+### Claude 逐項回覆（R3）
+
+- 審查版本 Head SHA：`89b975a9b50cc03d424eacb160cad2bc4f9a8544`（開始修正前確認：分支上沒有新提交）
+- 修正後 Head SHA：`見 PR #3 最新 commit 與交接訊息`
+
+| ID | 處理結果 | 修改位置 | 證據 | 未解決／殘餘風險 |
+|---|---|---|---|---|
+| REV-010 | 已修 | AUTHORIZATION §6.4 自我讀取：§6.1 步驟 1–2a 全部通過，**且**在該工作空間至少有一筆有效 membership；沒有有效 membership 時一律 `FORBIDDEN`。較寬鬆的作法列為 D-14，決定前拒絕。DATA-MODEL I-19、ACCESS-MATRIX §3 同步 | N-38～N-42、N-55b；變異「自我讀取跳過 principal 檢查」被 N-38 偵測；「自我讀取不需 membership」被 N-39、N-40 偵測 | D-14 |
+| REV-011 | 已修 | AUTHORIZATION 名詞與 §5：capability 決定操作，preset 是**版本化的上限**（`s2b1-v1`），有效 capability = membership 上的 capability ∩ 建立時記錄版本的 preset 預設值；preset 不授予。DATA-MODEL 新增 `rolePresetVersion`，I-21 改寫（包含 `sensitive.grant.manage` 依 D-06 指派的例外）。ACCESS-MATRIX §1、§5：fixture 對應 `homeroom_teacher@s2b1-v1`，capability 與 Stage 1 相同，不展開、不繞過 | 正向回歸 N-43、N-44；超額 capability N-45；preset 不授予 N-46；未知版本 N-47。變異「preset 直接授予」被 N-46、N-48 偵測；「忽略 preset 版本」被 N-47 偵測 | 修改 preset 時的遷移程序未定義（只規定必須建立新版本） |
+| REV-012 | 已修 | AUTHORIZATION §6.2／§6.3 步驟 5：membership 必須 `principalId`、`workspaceId` 相符、必要欄位齊全，workspace membership 的 `classId` 必須為 null；§7 grant 必要欄位；§13 縮限證據範圍，列出評估程式**不涵蓋**的規則與 6 項上游輸入假設；評估程式改用明確的 principal／binding／membership／grant 關聯模型 | 審查者的兩個反例已收為 N-48、N-49，且都被拒絕。另有錯誤 principal（N-50、N-51）、錯誤工作空間（N-52）、缺少欄位（N-53、N-54、N-54b）、class membership 的 `classId` 為 null（N-55、N-55b）。每項規則都有一個專屬變異會被偵測到 | 評估程式只是模型測試，不代表規格完整或任何後端正確 |
+| REV-008 證據 | 已補 | AUTHORIZATION §6.6：`summaryId` 為隨機 UUID、不得由 `auditLog` 推導；`reasonCode` 白名單，其他原因碼一律寫成 `OTHER`；欄位裁剪。**設計調整**：敏感存取改為只依 grant，建立／撤銷 grant 不修改 membership，因此不會產生間接的 `membership.update`，`membership.manage` 讀取他人 membership 時也看不到誰有敏感存取權。推知限制改寫為「不宣稱完全無法推知」 | N-57 欄位裁剪、N-58 原因碼、N-59 成對輸入（只差敏感事件，摘要逐欄相同）、N-60 grant 不修改 membership。變異「多帶欄位」「原因碼直通」「`summaryId` 取自 `auditLog`」「grant 更新 membership」「敏感事件進入摘要」都被偵測到 | 管理者仍可能從系統以外的資訊推測（例如人事異動的時間）；本規格只保證系統產生的摘要不揭露敏感事件 |
+
+**對「設計調整」的說明**：R1 曾規定敏感存取需要「membership 上有 `leave.sensitive.*`」加上「grant」兩者。R3 檢查 REV-008 時發現，grant 流程必須同時修改 membership，這會讓 `membership.manage` 的持有者從 membership 內容推知誰有敏感存取權。因此改為只依 grant：membership 不含、也不得含 `leave.sensitive.*`；條件改為「有效 class membership（任何 preset）＋有效 grant」。這一點請審查者特別確認是否接受。
+
+**測試要求的對應**
+
+- 原 31 個案例全部保留（換成明確關聯的模型 `s2b1-authz-cases-v2`），新增 25 個，共 56 個。
+- 43 個負向案例中，38 個附對照組：只改被測條件就會變成 `ALLOW`。
+- 其餘 5 個沒有對照組，因為在目前的核准狀態下，沒有任何單一條件能讓它們變成允許：
+  - N-02a：正向對應是 N-02b（D-09 核准後）；
+  - N-05：正向對應是 N-29s（D-06＋D-09 核准後有 grant）；
+  - N-10：正向對應是 N-09b；
+  - N-21：未啟用的 capability，由「未核准 capability 視為已啟用」變異覆蓋；
+  - N-30：`auditLog` 沒有任何允許的路徑，由「開放 `auditLog`」變異覆蓋。
+- D-06＋D-09 的 12 個案例，都分別評估「兩者皆無、只有 D-06、只有 D-09、兩者皆有」四種狀態（輸出中的組合矩陣）；正向結果只代表假設核准的模型情境，不代表實際核准。
+- 原 8 種變異測試全部保留，另新增 16 種，共 24 種，全部被特定案例偵測到。
+
+**開發中評估程式自己抓到的問題（已修正）**
+
+- 原因碼白名單的解析規則不接受底線，只讀到 `OK`，導致 N-58 是因為錯誤原因而通過。已修正，並在白名單讀取失敗時直接中止。
+- N-29 原本要求 D-06＋D-09，但讀摘要本身只需要 D-09；依真子集規則修正。
+- 兩個變異第一次沒有被偵測：
+  - 「class membership 的 `classId` 可為 null」在班級資料路徑上已被班級比對擋下，只在自我讀取路徑才有影響，所以新增 N-55b；
+  - 「接受缺少必要欄位」被其他檢查遮住，所以新增只有必要欄位規則能擋下的 N-54b。
+- R1 交叉檢查發現 §7 改寫後少寫了 `leave.sensitive.revise`，已補回。
+
+**已執行的測試（本機 Linux、Node 22；完整輸出見審查包）**
+
+| 命令／操作 | 結果 |
+|---|---|
+| npm run check | 成功 |
+| npm test | 成功 15／15 |
+| npm run stage1:all | 成功：Stage0 21、契約 14、防護 4、執行器 37、72 筆 NOT_RUN |
+| verify-anchor（負責人核准值） | ANCHOR_OK（29 份受保護檔案未變） |
+| 文件交叉檢查 v0.1 | 11／11 |
+| R1 交叉檢查 | 31／31 |
+| 授權案例評估 v2 | 56／56；24 種變異全部被偵測 |
+
+> 以上全部是文件與模型層級的檢查。Firebase／PostgreSQL 36×2 項後端案例仍為 `NOT_RUN`；文件評估、mock、自我測試與 CI 成功都不能當成後端安全驗證通過。

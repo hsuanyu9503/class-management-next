@@ -1,9 +1,10 @@
-# S2-B1｜Firebase 資料模型規格 v0.3（草案）
+# S2-B1｜Firebase 資料模型規格 v0.4（草案）
 
 > **狀態：設計文件，未實作。** 本文件沒有對應的 Firestore 資料、Security Rules、SDK 或可執行程式；所有 Stage 2 後端案例維持 `NOT_RUN`。
 > 依據：架構決策 A（班級精確授權）、B（敏感請假資訊分離）、C（正式修改只經受控 API）；Stage 1 正式基準 `fdcb5b9a0788584f7a35ff507e1daff3dd7d29ec`（契約與 fixtures 不修改）。
 > v0.2：回應 PR #3 審查 R1（REV-002、REV-004、REV-005、REV-006 與 `hasSensitiveNote` 最小揭露）。
 > v0.3：回應 PR #3 審查 R2（REV-007 Auth Binding 狀態欄位、REV-008 稽核分為 `auditLog` 與 `auditSummaries`）。
+> v0.4：回應 PR #3 審查 R3（`rolePreset` 改為版本化的 capability 上限並新增 `rolePresetVersion`；敏感資料存取只依 grant，membership 不含 `leave.sensitive.*`；I-19、I-21 修訂）。
 > 相關文件：[授權](S2B1-AUTHORIZATION.md)｜[存取矩陣](S2B1-ACCESS-MATRIX.md)｜[契約對照](S2B1-CONTRACT-TRACEABILITY.md)
 
 ## 1. 設計原則
@@ -86,8 +87,9 @@ workspaces/{wid}/auditSummaries/{summaryId}                       管理稽核�
 | `principalId` | string | |
 | `scopeType` | `class`／`workspace` | 決定這筆 membership 只能用在哪一種授權分支（授權文件 §6） |
 | `classId` | string／null | `scopeType = class` 時**必填**且只能是一個班級；`workspace` 時**必須為 null** |
-| `rolePreset` | string | 建立時套用的範本名稱，**只作紀錄，不作授權判斷** |
-| `capabilities` | string[] | 實際授權的 capability。只能包含與 `scopeType` 相符的 capability（授權文件 §4）；不符的 capability 一律視為無效 |
+| `rolePreset` | string | 建立時套用的 preset 名稱。**作為有效 capability 的上限**（授權文件 §5）：有效 capability = `capabilities` ∩ 該 preset 版本的預設值。preset 不授予任何 membership 上沒有的 capability；角色名稱本身也不授予權限。建立後不可修改 |
+| `rolePresetVersion` | string | 建立時的 preset 版本（目前為 `s2b1-v1`）。授權一律使用此版本；修改 preset 定義必須建立新版本，不回溯影響既有 membership。不存在的版本 → membership 無效 |
+| `capabilities` | string[] | membership 上記錄的 capability。只有與 `scopeType` 相符、已啟用、且在 preset 上限內的才有效（授權文件 §4、§5）。**不得**包含 `leave.sensitive.*`（只由 grant 授予）或 `sensitive.grant.manage`（依 D-06）；即使出現也一律忽略 |
 | `validFrom` | date | 半開區間起點（含） |
 | `validToExclusive` | date／null | 半開區間終點（不含）；null 表示未設定終點 |
 | `status` | `active`／`suspended`／`revoked` | |
@@ -227,9 +229,9 @@ grant 只能新增或從 `active` 改為 `revoked`，其他欄位建立後不可
 | I-16 | 不同資料集（例如 `A17-20261117` 與 `SC01-20261116`）不合併身分；以 `workspaceId` 隔離 | fixtures `mustNotMergeDatasets` |
 | I-17 | membership 的 capability 必須與 `scopeType` 相符；`scopeType = workspace` 的 membership 不授予任何班級資料存取 | 決策 A |
 | I-18 | 不得自我授權：membership、sensitive grant、Auth Binding 的建立者、修改者不可是被授權者本人 | 決策 A、B |
-| I-19 | 授權必須同時滿足：Auth Binding `active` 且 token 簽發時間不早於 `activatedAt`、Principal `active`、Membership 有效；三者各自檢查 | REV-007 |
+| I-19 | 授權必須同時滿足：Auth Binding `active` 且 token 簽發時間不早於 `activatedAt`、Principal `active`、Membership 有效（含 `principalId`、`workspaceId`、必要欄位）；三者各自檢查。**自我讀取**（讀自己的 membership、grant、收據）也適用，沒有例外（D-14） | REV-007、REV-010 |
 | I-20 | `auditSummaries` 不含任何班級資料存取事件；只具 `audit.read` 的管理者無法從中推知任何班級或學生的資料是否存在或被存取 | REV-008、決策 B |
-| I-21 | membership 的 `capabilities` 必須是其 `rolePreset` 預設值的子集（`leave.sensitive.*` 只能經 grant 流程加入）；`rolePreset` 建立後不可修改 | REV-009、D-12 |
+| I-21 | membership 的有效 capability = `capabilities` ∩ `rolePreset@rolePresetVersion` 的預設值；經 API 寫入時 `capabilities` 必須是該預設值的子集；`rolePreset` 與 `rolePresetVersion` 建立後不可修改。`leave.sensitive.*` 不在 membership 上，只由有效 grant 授予（§7）；`sensitive.grant.manage` 不在任何 preset，只能依 D-06 定義的程序指派，D-06 前沒有人持有 | REV-009、REV-011、D-06、D-12 |
 
 ## 6. 與 Stage 1 fixtures 的對應
 

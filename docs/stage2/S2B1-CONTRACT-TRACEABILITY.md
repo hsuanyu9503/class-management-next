@@ -1,9 +1,10 @@
-# S2-B1｜與 Stage 1 契約的對照 v0.3（草案）
+# S2-B1｜與 Stage 1 契約的對照 v0.4（草案）
 
 > **狀態：設計對照，未驗證。** 下表說明 S2-B1 的資料模型與授權設計，打算如何支援 Stage 1 的 36 項契約。它**不是**測試結果：36 項在 Firebase 與 PostgreSQL 都維持 `NOT_RUN`，沒有任何一項標為 PASS。
 > 契約來源（鎖定、不修改）：`poc/stage1/contracts/poc-test-matrix-v1.0.csv`（SHA-256 `4e42d9bb…ddad3`）；P0 預期另由 `poc/stage1/src/contract-guard.mjs` 的 `P0_PINNED` 固定。
 > v0.2：回應 PR #3 審查 R1；更新 POC-001、003、016、018、019、021、029、036 列，新增 D-10。
 > v0.3：回應 R2；所有 SEC 類案例另外受 Auth Binding 檢查約束（授權 §6.1 步驟 2、I-19）；POC-004、POC-005 的稽核改為寫入 `auditLog`（不開放讀取）與 `auditSummaries`（不含班級資料事件）。
+> v0.4：回應 R3；fixture membership 記錄 `homeroom_teacher@s2b1-v1` 作為 preset 上限，capability 與 Stage 1 相同（POC-001、POC-003 等不受影響）；敏感存取只依 grant（POC-003、POC-029）。
 > 相關文件：[資料模型](S2B1-DATA-MODEL.md)｜[授權](S2B1-AUTHORIZATION.md)｜[存取矩陣](S2B1-ACCESS-MATRIX.md)
 
 ## 1. 適用階段的定義
@@ -75,7 +76,7 @@
 
 ## 4. Stage 2 開始前必須解決的事項
 
-1. 授權文件 §12 的 D-01～D-13。決定之前一律採用該表的預設值（拒絕或停用），實作不得自行放寬；§11 中有前置條件的案例，在前置條件核准前只能驗證預設拒絕。
+1. 授權文件 §12 的 D-01～D-14。決定之前一律採用該表的預設值（拒絕或停用），實作不得自行放寬；§11 中有前置條件的案例，在前置條件核准前只能驗證預設拒絕。
 2. 證據認證機制（attestation）：Stage 1 只能把真實後端結果記為 `PENDING_ATTESTATION`，Stage 2 需要先設計受控的驗收層（見 `docs/STAGE2_PREP.md` 第 2 節）。
 3. 失敗注入（POC-020）與「回應遺失」（POC-021）在 Emulator 的模擬方式。
 4. Stage 1 的 `requiredEvidenceKeys` 中屬於 PostgreSQL 的項目（例如 POC-035 的 `sqlPolicy`），在 Firebase 要用哪一種證據對應。這需要審查後另行決定，**不修改鎖定的 CSV**。
