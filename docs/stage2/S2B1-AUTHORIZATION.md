@@ -1,6 +1,7 @@
-# S2-B1｜授權規格 v0.1（草案）
+# S2-B1｜授權規格 v0.2（草案）
 
 > **狀態：設計文件，未實作。** 本文件不含 Security Rules 或程式；授權行為尚未在任何後端驗證，相關案例維持 `NOT_RUN`。
+> v0.2：回應 PR #3 審查 R1（REV-001 授權分支、REV-002 收據與 requestHash、REV-003 fixture 能力清單、REV-006 敏感 grant；D-05 與所有待決事項的預設拒絕）。
 > 相關文件：[資料模型](S2B1-DATA-MODEL.md)｜[存取矩陣](S2B1-ACCESS-MATRIX.md)｜[契約對照](S2B1-CONTRACT-TRACEABILITY.md)
 
 ## 1. 名詞
@@ -9,107 +10,244 @@
 |---|---|
 | **Authentication UID**（`authUid`） | Firebase Authentication 驗證後的使用者 ID。只證明「是誰登入」，**本身不帶任何資料權限**。 |
 | **Principal**（`principalId`） | 系統內的人員主體。`authUid` 必須經 `authBindings` 綁定到一個 `status = active` 的 principal。 |
-| **Membership** | Principal 在某工作空間、某班級（或工作空間管理範圍）的授權紀錄，含 capability 清單與有效期間。 |
-| **Capability** | 最小授權單位，例如 `attendance.read`。**所有授權判斷只看 capability。** |
-| **Role Preset** | 建立 membership 時用來帶入預設 capability 的範本（導師、科任、管理者、投影）。**角色名稱不參與授權判斷。** |
-| **Scope** | 授權的作用範圍：`workspaceId`＋`classId`＋有效期間＋學期狀態。 |
+| **Membership** | Principal 在某工作空間的授權紀錄。`scopeType = class` 對應一個班級；`scopeType = workspace` 只用於工作空間管理。 |
+| **Capability** | 最小授權單位。每個 capability 固定屬於一種 scopeType（§4）。**所有授權判斷只看 capability。** |
+| **Role Preset** | 建立 membership 時帶入預設 capability 的範本。**角色名稱不參與授權判斷。** |
+| **Scope** | 授權的作用範圍：`workspaceId`（＋`classId`）＋有效期間＋學期狀態。 |
 
 ## 2. 決策 A｜班級精確授權
 
 1. 一個工作空間可以管理多個班級。
-2. 資料存取的 membership 必須是 `scopeType = class`，並且**只對應一個 `classId`**。要存取兩個班級，就需要兩筆 membership。
-3. 同一工作空間的身分（包括工作空間管理者）**不代表可以讀取全部班級**。`scopeType = workspace` 的 membership 只授予工作空間管理能力（例如管理成員、班級、日曆、讀取稽核），**不授予任何學生、點名或請假資料的讀取權**。
+2. 班級資料只能經 `scopeType = class` 的 membership 授權，且**一筆只對應一個 `classId`**；要存取兩個班級就需要兩筆。
+3. 同一工作空間的身分不代表可以讀取全部班級。`scopeType = workspace` 的 membership 只授予工作空間管理能力，**不授予任何學生、在籍、點名、請假、核對事項、View、統計或匯出的讀取權**（I-17）。
 4. 沒有萬用字元班級（例如 `classId = "*"`）。
 
 ## 3. 決策 B｜敏感請假資訊
 
-1. 請假摘要（`leaveRecords`）和敏感備註（`leaveSensitiveNotes`）分開保存（見資料模型 §3.6）。
-2. 讀取敏感備註需要 capability `leave.sensitive.read`。**任何 Role Preset 都不包含這個 capability**；導師、科任、管理者都不能只憑角色取得。
-3. 授予 `leave.sensitive.read` 必須另外建立 `sensitiveGrants` 紀錄（授權者、原因代碼、到期時間），並在 membership 的 `sensitiveGrantIds` 參照。沒有有效 grant 時，即使 membership 寫了這個 capability 也視為無效。
-4. 敏感文字不得流入一般展示 View、投影、統計、事件、收據、稽核或未授權的匯出。匯出時由伺服器在資料來源端裁剪（POC-029），不是先送出再由前端隱藏。
+1. 請假摘要與敏感備註分開保存；摘要不含「是否有敏感備註」的旗標（資料模型 §3.6）。
+2. 讀取與修改敏感備註分別需要 `leave.sensitive.read`、`leave.sensitive.revise`，**而且都必須有對應的有效 `sensitiveGrants`**（§7）。
+3. **任何 Role Preset 都不包含 `leave.sensitive.*`**；導師、科任、管理者都不能只憑角色取得。
+4. 敏感文字不得流入一般展示 View、投影、統計、事件、收據、稽核或匯出。匯出時由伺服器在資料來源端裁剪（POC-029）。
 
 ## 4. Capability 清單
 
-「來源」欄：**Stage 1** 表示 fixtures 已使用這個名稱；**提案** 表示 S2-B1 新增，待審查。
+- **啟用狀態**：`啟用` 表示 Stage 1 fixtures 已使用的名稱；`未啟用` 表示 S2-B1 提案，**在 D-09 核准前一律視為未授予**（預設拒絕）。
+- **scopeType**：capability 只在相同 scopeType 的 membership 上有效；放在另一種 membership 上一律無效（I-17）。
 
-| Capability | 允許的操作 | 授權範圍 | 來源 |
+| Capability | 允許的操作 | scopeType | 啟用狀態 |
 |---|---|---|---|
-| `roster.read` | 經 API 取得班級在某日的有效名單（studentId、enrollmentId、seatNo、displayName）；讀取 `roster-display` View | class | 提案 |
-| `attendance.read` | 讀取該班點名場次與正式點名 | class | Stage 1 |
-| `attendance.write` | 經 API 建立當日點名、登記狀態 | class | Stage 1 |
-| `attendance.revise` | 經 API 更正已提交的正式點名；讀取點名修訂紀錄 | class | Stage 1 |
-| `leave.applicability.read` | 讀取請假「適用提示」（是否涵蓋、待核對節次），不含假別細節與理由 | class | Stage 1 |
-| `leave.read` | 讀取請假摘要（含假別與涵蓋區段），**不含**敏感備註 | class | Stage 1 |
-| `leave.revise` | 經 API 修改請假摘要；讀取請假摘要修訂紀錄 | class | Stage 1 |
-| `leave.sensitive.read` | 讀取敏感備註；**必須搭配有效的 `sensitiveGrants`** | class | 提案 |
-| `leave.sensitive.revise` | 經 API 修改敏感備註；同樣需要 `sensitiveGrants` | class | 提案 |
-| `issue.read` | 讀取核對事項 | class | Stage 1 |
-| `stats.read` | 讀取該班統計快照 | class | 提案 |
-| `projection.read` | 只讀取去識別的投影 View（有 `attendance.read` 者也可讀投影 View） | class | 提案 |
-| `export.basic` | 經 API 匯出去敏欄位 | class | 提案 |
-| `archive.revise` | 經 API 修改已封存學期的正式資料（例外權限） | class | 提案 |
-| `membership.manage` | 經 API 管理成員與 capability（不含授予 `leave.sensitive.*`，見 D-06） | workspace | 提案 |
-| `class.manage`、`calendar.manage` | 經 API 管理班級、學期、日曆 | workspace | 提案 |
-| `audit.read` | 讀取稽核紀錄（不含敏感文字） | workspace | 提案 |
+| `attendance.read` | 讀取該班點名場次（含 `rosterSnapshot`）、正式點名、`attendance-summary` 與 `projection` View | class | 啟用 |
+| `attendance.write` | 經 API 建立當日點名、登記狀態 | class | 啟用 |
+| `attendance.revise` | 經 API 更正已提交的點名；讀取點名修訂紀錄 | class | 啟用 |
+| `leave.applicability.read` | 讀取請假適用提示（`leave-applicability` View），不含假別與理由 | class | 啟用 |
+| `leave.read` | 讀取請假摘要（含假別與涵蓋區段），不含敏感備註 | class | 啟用 |
+| `leave.revise` | 經 API 修改請假摘要；讀取請假摘要修訂紀錄 | class | 啟用 |
+| `issue.read` | 讀取核對事項 | class | 啟用 |
+| `roster.read` | 經 API 取得班級在某日的有效名單（含 `displayName`）；讀取 `roster-display` View | class | 未啟用 |
+| `leave.sensitive.read` | 讀取敏感備註；另需有效 grant（§7） | class | 未啟用（另受 D-06 阻擋） |
+| `leave.sensitive.revise` | 經 API 修改敏感備註；另需有效 grant（§7） | class | 未啟用（另受 D-06 阻擋） |
+| `stats.read` | 讀取該班統計快照 | class | 未啟用 |
+| `projection.read` | 只讀取去識別的 `projection` View | class | 未啟用 |
+| `export.basic` | 經 API 匯出白名單欄位 | class | 未啟用（另受 D-08 阻擋） |
+| `archive.revise` | 修改已封存學期的正式資料（須同時具備對應的 `*.revise`） | class | 未啟用 |
+| `membership.manage` | 經 API 管理**他人**的 membership（§6.3） | workspace | 未啟用 |
+| `class.manage` | 經 API 管理班級與學期 | workspace | 未啟用 |
+| `calendar.manage` | 經 API 管理日曆 | workspace | 未啟用 |
+| `audit.read` | 讀取稽核紀錄；班級資料的資源只顯示 `classId` 與文件 ID 雜湊（資料模型 §3.7），不含敏感文字、姓名或 `studentId` | workspace | 未啟用 |
+| `sensitive.grant.manage` | 經 API 建立與撤銷**他人**的 sensitive grant（§7） | workspace | 未啟用（另受 D-06 阻擋） |
 
-## 5. Role Preset（預設範本，僅供建立 membership）
+## 5. Role Preset（預設範本，只在建立 membership 時使用）
 
-| Preset | 預設 capability | 不包含 |
-|---|---|---|
-| 導師 `homeroom_teacher`（class） | `roster.read`、`attendance.read`、`attendance.write`、`attendance.revise`、`leave.read`、`leave.revise`、`leave.applicability.read`、`issue.read`、`stats.read`、`export.basic` | `leave.sensitive.*`、`archive.revise` |
-| 科任 `subject_teacher`（class） | `roster.read`、`attendance.read`、`attendance.write`（節次，見 D-05）、`leave.applicability.read` | `leave.read`、`leave.sensitive.*`、`attendance.revise` |
-| 管理者 `workspace_admin`（workspace） | `membership.manage`、`class.manage`、`calendar.manage`、`audit.read` | **任何班級資料讀取**；如需讀取，另建 class membership |
-| 投影 `projection_display`（class） | `projection.read` | 其他全部 |
+| Preset | scopeType | 預設 capability | 明確不包含 |
+|---|---|---|---|
+| 導師 `homeroom_teacher` | class | `attendance.read`、`attendance.write`、`attendance.revise`、`leave.read`、`leave.revise`、`leave.applicability.read`、`issue.read`、`roster.read`、`stats.read` | `leave.sensitive.*`、`archive.revise`、`export.basic`（D-08） |
+| 科任 `subject_teacher` | class | `attendance.read`、`leave.applicability.read`、`roster.read` | **`attendance.write`（D-05 預設拒絕）**、`leave.read`、`leave.sensitive.*` |
+| 管理者 `workspace_admin` | workspace | `membership.manage`、`class.manage`、`calendar.manage`、`audit.read` | 任何班級資料存取；`sensitive.grant.manage` |
+| 投影 `projection_display` | class | `projection.read` | 其他全部 |
 
-套用 preset 後，capability 會展開保存在 membership；之後修改 preset 定義**不會**回溯改變既有 membership。
+- Preset 中標為「未啟用」的 capability，在 D-09 核准前不生效。
+- 套用 preset 後，capability 會展開保存在 membership；之後修改 preset **不會**回溯改變既有 membership。
+- **D-05（科任節次權限）預設拒絕**：在「節次層級的 scope」設計並經審查前，科任 preset 不含 `attendance.write`。如有需要，可由他人以 `membership.manage` 對個別 membership 明確加入，但只能是整個班級的寫入權，並記錄在稽核中。
 
 ## 6. 授權流程
 
-所有正式寫入都經受控 API；讀取路徑見 §7。受控 API 以 Admin 權限存取 Firestore（會繞過 Security Rules），因此**API 必須自行完整執行下列步驟**，不得因為「呼叫來自伺服器」而跳過（POC-005、POC-035）。
+受控 API 以 Admin 權限存取 Firestore（會繞過 Security Rules），因此**API 必須自行完整執行下列步驟**，不得因為「呼叫來自伺服器」而跳過（POC-005、POC-035）。
 
-1. **驗證身分**：驗證 Firebase ID token，取得 `authUid`。驗證失敗 → `FORBIDDEN`。
+### 6.1 共同前置
+
+1. **驗證身分**：驗證 Firebase ID token，取得 `authUid`。失敗 → `FORBIDDEN`。
 2. **解析 Principal**：查 `authBindings/{authUid}` → `principalId`，且 principal `status = active`。否則 → `FORBIDDEN`。
-3. **決定 Scope**：請求帶 `workspaceId`、`classId`、目標 ID。伺服器讀取目標文件，**以文件內的 `workspaceId`／`classId` 為準**；與請求不一致 → `FORBIDDEN`（防止偽造 scope）。
-4. **找有效 Membership**：`workspaceId` 相同、`principalId` 相同、`scopeType = class` 且 `classId` 相同、`status = active`、`validFrom ≤ 現在 < validToExclusive`。可以有多筆；有效 capability 為多筆的聯集。沒有 → `FORBIDDEN`。
-5. **檢查 Capability**：操作所需的 capability 必須在有效集合中。
-   - 敏感資料另外檢查：membership 的 `sensitiveGrantIds` 對應的 `sensitiveGrants` 有效且未過期。
-   - 已封存學期的寫入另外需要 `archive.revise`。
-6. **寫入檢查**（只有寫入命令）：
-   - 必填 `operationId`、`expectedVersion`。
-   - 計算 `requestHash`；如果 `operationReceipts/{operationId}` 已存在：hash 相同 → 回傳原收據，不再執行；hash 不同 → `OPERATION_REUSE_MISMATCH`，不回傳原收據內容。
-   - 在同一交易內讀 current：`version ≠ expectedVersion` → `VERSION_CONFLICT`，不寫入。
-   - 同一交易內寫入 current（version +1）、Revision、Receipt、Event；任一失敗則整筆回滾。
-7. **回應**：拒絕時一律回 `FORBIDDEN`，**不回傳可識別欄位**，也**不區分「資料不存在」和「沒有權限」**，避免讓人推知其他班級資料是否存在（POC-002）。
-8. **稽核**：允許與拒絕都寫入 `auditLog`（含 `policyVersion`、`traceId`、`reasonCode`；不含敏感文字）。
+3. **解析目標與 Scope**：由請求的目標 ID，伺服器讀取目標文件（或寫入目標的上層文件），**依資料模型 §4 由路徑與權威欄位決定 `workspaceId`／`classId`**。請求中宣稱的 scope 與此不符 → `FORBIDDEN`（防止偽造 scope）；文件欄位與路徑不符 → `FORBIDDEN`，稽核 `SCOPE_INTEGRITY_ERROR`。
+4. **選擇授權分支**：依操作類型（§6.4 表格）決定走 §6.2（班級資料）或 §6.3（工作空間管理）。**兩個分支互不替代**：班級資料操作不能用 workspace membership 通過，管理操作也不能用 class membership 通過。
 
-錯誤代碼沿用 `poc/stage1/docs/證據格式與安全記錄契約.md`：`FORBIDDEN`、`VERSION_CONFLICT`、`OPERATION_REUSE_MISMATCH`、`LOCAL_SAVE_FAILED`、`DERIVED_PENDING`、`UNAVAILABLE`。
+### 6.2 分支 C｜班級資料操作
 
-## 7. 讀取路徑（D-01 待決）
+5. **有效 membership**：`workspaceId` 相同、`principalId` 相同、`scopeType = class`、`classId` 等於步驟 3 的 classId、`status = active`、`validFrom ≤ 現在 < validToExclusive`。可以有多筆，有效 capability 為多筆的聯集（只計 class 型且已啟用的 capability）。沒有 → `FORBIDDEN`。
+6. **Capability**：操作所需的 capability 在有效集合中。敏感資料另外檢查 §7；已封存學期的寫入另外需要 `archive.revise`。
 
-決策 C 只規定寫入。讀取有兩種候選，S2-B1 **要求兩者執行與 §6 步驟 1–5、7 相同的判斷**：
+### 6.3 分支 W｜工作空間管理操作（REV-001）
 
-- **(a) 全部經受控 API 讀取**：授權邏輯只有一份，最容易驗證；代價是延遲與 API 成本。
-- **(b) 部分集合允許 client 直接讀 Firestore，由 Security Rules 判斷**：Rules 需要以 `request.auth.uid` 查授權。建議查 `accessIndex/{authUid}__{cid}`（伺服器衍生）而不是 custom claims，以避免 token 大小上限與撤銷延遲（D-02）。
+5. **有效 membership**：`workspaceId` 相同、`principalId` 相同、`scopeType = workspace`、`classId = null`、`status = active`、在有效期間內。沒有 → `FORBIDDEN`。
+6. **Capability**：操作所需的 workspace capability 在有效集合中（只計 workspace 型且已啟用的 capability）。
+7. **目標限制**：分支 W 只能作用於 `memberships`、`classes`、`terms`、`calendars`、`auditLog`、`sensitiveGrants`（§7）。**不能讀取任何班級資料集合**；需要讀取班級資料時，必須另有該班的 class membership，走分支 C。
+8. **禁止自我授權**（I-18）：不得建立、修改、恢復**自己**的 membership；不得授予自己 sensitive grant。
+9. **擴權限制**：`membership.manage` 不能在 membership 中加入 `leave.sensitive.*` 而沒有對應的 grant（grant 只能經 §7 建立）；也不能授予自己沒有的 workspace capability。
 
-不論選哪一種：`students`、`enrollments`、`authBindings`、`memberships`、`sensitiveGrants`、`operationReceipts`、`events`、`auditLog` **都不開放 client 直接讀取**；名單、收據、稽核一律經 API。
+分支 W 讓管理者能管理成員、班級、學期、日曆與稽核，**但不會因此得到任何班級資料的閱讀權**。管理者可以替**他人**建立 class membership（這是管理職責），但不能替自己建立。
 
-## 8. 其他規則
+### 6.4 操作與分支對照
 
-- **撤銷**：membership 被撤銷或過期後，下一次請求即失效；衍生的 `accessIndex` 必須在同一個 API 交易內更新或刪除。
-- **收據隔離**：收據只回給原 principal；其他 principal 用同一 `operationId` 查詢 → `FORBIDDEN`（POC-019）。
+| 操作 | 分支 | 所需 capability |
+|---|---|---|
+| 讀點名、名單快照 | C | `attendance.read` |
+| 建立點名／登記 | C | `attendance.write` |
+| 更正點名 | C | `attendance.revise`（封存學期另需 `archive.revise`） |
+| 讀請假適用提示 | C | `leave.applicability.read` |
+| 讀／改請假摘要 | C | `leave.read`／`leave.revise` |
+| 讀／改敏感備註 | C | `leave.sensitive.read`／`leave.sensitive.revise`＋有效 grant |
+| 讀核對事項、統計、名單、投影 | C | `issue.read`、`stats.read`、`roster.read`、`projection.read` |
+| 匯出 | C | `export.basic`（D-08 前停用） |
+| 讀自己的 membership、grant | 只需 §6.1 步驟 1–2；只限 `principalId` 等於自己 | 無 |
+| 讀自己的收據 | C | 無；但 `receipt.principalId` 必須等於自己，且對 `receipt.classId` 仍有有效 class membership（§8） |
+| 管理他人 membership | W | `membership.manage` |
+| 管理班級、學期 | W | `class.manage` |
+| 管理日曆 | W | `calendar.manage` |
+| 讀稽核 | W | `audit.read` |
+| 建立／撤銷他人 sensitive grant | W | `sensitive.grant.manage`（D-06 前停用） |
+
+### 6.5 寫入檢查（兩個分支共用）
+
+所有寫入（含 membership 與 grant 的變更）都是正式修改，必須帶 `operationId` 與 `expectedVersion`，並依 §8 處理。順序：**先完成 §6.1–6.3 的授權，再碰任何收據**，讓未授權的呼叫者無法得知任何 `operationId` 是否存在。
+
+### 6.6 回應與稽核
+
+- 拒絕時一律回 `FORBIDDEN`，**不回傳可識別欄位**，也**不區分「資料不存在」和「沒有權限」**（POC-002）。
+- 允許與拒絕都寫入 `auditLog`（含 `policyVersion`、`traceId`、`reasonCode`；不含敏感文字）。每一次敏感備註讀取都要記錄。
+- 錯誤代碼沿用 `poc/stage1/docs/證據格式與安全記錄契約.md`：`FORBIDDEN`、`VERSION_CONFLICT`、`OPERATION_REUSE_MISMATCH`、`LOCAL_SAVE_FAILED`、`DERIVED_PENDING`、`UNAVAILABLE`。
+
+## 7. 敏感資料 grant（REV-006）
+
+**存取條件**：讀取（或修改）一筆敏感備註時，以下**全部**成立才允許：
+
+1. 分支 C 的有效 class membership（同 `classId`），且 capabilities 含 `leave.sensitive.read`（或 `leave.sensitive.revise`）。
+2. 存在 `sensitiveGrants`：`principalId` 相同、`classId` 相同、`capability` 完全相同、`status = active`、`現在 < expiresAt`。
+3. 該 capability 已啟用（D-09），且 grant 機制已開放（D-06）。
+
+讀取權與修改權**分開授予**：有 `leave.sensitive.read` 的 grant 不代表可以修改。
+
+**建立 grant**：只能經分支 W，需要 `sensitive.grant.manage`；`grantedBy` 不可等於被授權者；必須填 `reasonCode` 與 `expiresAt`（不得無期限）。**在 D-06 決定前，建立 grant 的 API 停用**：系統中不會有任何有效 grant，所以所有敏感備註讀取都會被拒絕。
+
+**撤銷與失效**：
+
+- 撤銷：經分支 W，把 `status` 從 `active` 改為 `revoked`，寫入 `revokedBy`、`revokedAt`、`revokeReasonCode`。單向，不能恢復；需要時建立新 grant。
+- 過期：`現在 ≥ expiresAt` 時自動失效，每次請求都重新判斷。
+- 連帶失效：對應的 class membership 被撤銷、暫停、過期，或移除了 `leave.sensitive.*`，grant 即使仍為 `active` 也不再生效。
+- 生效時機：撤銷或失效後的下一次請求立即拒絕；如果建立了 `accessIndex`，必須在同一個 API 交易內更新。
+
+## 8. operationId、requestHash 與收據（REV-002）
+
+**收據範圍**：`operationReceipts/{operationId}` 位於工作空間之下，`operationId` 在**同一工作空間內**唯一。不同工作空間各自獨立。`operationId` 應由 client 以 UUID v4 產生，不可使用可預測的序號。
+
+**Canonical requestHash（`sha256-stablejson-v1`）**
+
+1. 由伺服器組出下列物件，欄位缺一不可：
+
+   | 欄位 | 來源 |
+   |---|---|
+   | `v` | 固定字串 `sha256-stablejson-v1` |
+   | `workspaceId`、`classId` | §6.1 步驟 3 由伺服器解析（工作空間管理操作的 `classId` 為 `null`） |
+   | `principalId` | §6.1 步驟 2 由伺服器解析，**不接受 client 提供** |
+   | `commandType`、`targetType`、`targetId`、`expectedVersion`、`intent` | client 命令（格式同 fixtures `canonicalCommand`） |
+
+2. **不包含**：`operationId`（它是鍵）、`clientCreatedAt`（重送時可能不同）、token、`authUid`、`traceId`。
+3. 序列化：使用 Stage 1 `poc/stage1/src/common.mjs` 的 `stableJson`。物件鍵依字串排序、陣列保持順序、純值用 `JSON.stringify`、沒有空白；以 UTF-8 編碼。伺服器**不做**任何字串正規化。
+4. 雜湊：對上述 UTF-8 位元組取 SHA-256，輸出小寫十六進位。
+
+**測試向量**（以 fixtures `canonicalCommand`、`classId = CLASS-606-SC01`、`principalId = ACTOR-SC01-TEACHER` 計算）：
+
+```text
+{"classId":"CLASS-606-SC01","commandType":"LeaveRecord.Revise","expectedVersion":5,"intent":{"coverageChange":"AM_TO_FULL_DAY","reasonCode":"SOURCE_CORRECTION"},"principalId":"ACTOR-SC01-TEACHER","targetId":"LV-007","targetType":"LeaveRecord","v":"sha256-stablejson-v1","workspaceId":"WS-SC01"}
+requestHash = ff212f322297ac317fd3869dceffb81c094b1457de01c111762c6335b177c8cf
+```
+
+只要 principal、payload（`intent`）或 target 任一不同，雜湊就不同，例如：principal 改為另一個 ID → `2e0195cf…`；`intent.coverageChange` 改為 `AM_TO_PM` → `9f0a1d08…`；`targetId` 改為 `LV-008` → `37793557…`。
+
+**提交命令的處理順序**
+
+1. §6.1–6.3 授權。失敗 → `FORBIDDEN`，**不讀取收據**。
+2. 計算 `requestHash`。
+3. 同一交易內讀 `operationReceipts/{operationId}`：
+   - 不存在 → 繼續第 4 步。
+   - 存在且 `requestHash` 相同 → 回傳原收據（因為雜湊包含 `principalId`，所以必定是同一 principal），不再寫入。
+   - 存在且 `requestHash` 不同 → `OPERATION_REUSE_MISMATCH`。回應只含 `{code, operationId}`，**不含原收據的任何欄位**（版本、principal、時間、目標都不回），不寫入（POC-019：`revisionDelta = 0`、`receiptLeaked = false`）。
+4. 讀 current：`version ≠ expectedVersion` → `VERSION_CONFLICT`，不寫入。
+5. 同一交易寫入：current（version +1）、1 筆 Revision、1 筆 Receipt、1 筆 Event、`derivedProgress`（`pending`）。任一失敗則整筆回滾。
+
+**跨 principal 重用 `operationId`**
+
+| 情況 | 結果 |
+|---|---|
+| principal B **沒有**目標的授權，重用 A 的 `operationId` | `FORBIDDEN`（第 1 步就拒絕；B 無法得知該 `operationId` 是否存在） |
+| principal B **有**目標的授權，重用 A 的 `operationId` | `OPERATION_REUSE_MISMATCH`，只回 `{code, operationId}`；不寫入，不洩漏 A 的收據 |
+
+後者會讓 B 得知「這個 `operationId` 已被使用」，這是 POC-019 契約要求的回應；由於 `operationId` 是 UUID v4，無法猜測他人的 ID，風險可接受。
+
+**查詢收據（POC-021 恢復）**：只有 `receipt.principalId` 等於呼叫者，且呼叫者對 `receipt.classId` 仍有有效 class membership，才回傳收據；否則一律 `FORBIDDEN`，與「收據不存在」相同。回傳的 `derivedStatus` 讀自 `derivedProgress`，收據本身不變（資料模型 §3.7）。
+
+## 9. 讀取路徑（D-01）
+
+**預設：全部經受控 API 讀取**，client 不直接讀 Firestore。
+
+在 D-01、D-02 決定，且 Security Rules 完成並通過審查與測試之前，**不得開放任何 client 直接讀取**。即使日後開放，`students`、`enrollments`、`authBindings`、`memberships`、`sensitiveGrants`、`operationReceipts`、`derivedProgress`、`events`、`auditLog`、`leaveSensitiveNotes` 仍不開放 client 直接讀取。
+
+## 10. 其他規則
+
+- **撤銷 membership**：撤銷或過期後的下一次請求即失效；如果有 `accessIndex`，必須在同一交易內更新或刪除。
 - **共用裝置切換帳號**：登出或切換 principal 時，裝置必須清除上一位 principal 的本機快取與 outbox，或明確提示有未同步資料（POC-027；裝置端規格屬於 Stage 4）。
 - **高權限憑證**：Admin／service account 憑證只存在伺服器端，不放進 client、Git 或證據檔案。
 
-## 9. 待決事項
+## 11. 負向案例（文件層級，供 Stage 2 轉成測試）
 
-| ID | 問題 | S2-B1 暫定 |
+這些案例描述**預期**結果，尚未在任何後端執行。
+
+| ID | 情境 | 預期 |
 |---|---|---|
-| D-01 | 讀取路徑：全部經 API，或部分由 Security Rules 直接讀 | 未決；兩者都必須符合 §6 |
-| D-02 | Rules 的授權來源：`accessIndex` 或 custom claims | 建議 `accessIndex` |
-| D-03 | 是否需要伺服器端草稿集合 | 不定義；草稿只在裝置本機 |
-| D-04 | 管理者是否需要不經 class membership 的唯讀總覽 | 不允許；需另建 class membership |
-| D-05 | 科任的點名範圍是否要限制到節次（period）而不只是班級 | 未決；目前只限到班級 |
-| D-06 | 誰可以授予 `leave.sensitive.*`（是否需要兩人核准） | 未決；`membership.manage` 不自動包含 |
-| D-07 | 收據與稽核的保存期限 | 未決 |
-| D-08 | `export.basic` 的欄位白名單 | 未決；一定不含敏感文字；是否包含 `hasSensitiveNote` 這個布林值也待決 |
-| D-09 | 新增 capability 名稱（標「提案」者）是否採用 | 待審查 |
+| N-01 | 只有 workspace membership（含 `membership.manage`）的管理者讀取某班點名 | `FORBIDDEN`（分支 C 找不到 class membership） |
+| N-02 | 同上管理者替**他人**建立 class membership | 允許（分支 W），寫入收據與稽核 |
+| N-03 | 同上管理者替**自己**建立 class membership | `FORBIDDEN`（I-18） |
+| N-04 | class membership 上被加入 `membership.manage` | 無效，不能做任何管理操作（I-17） |
+| N-05 | 導師（有 `leave.read`，無 grant）讀取敏感備註 | `FORBIDDEN`，回應與「沒有備註」相同 |
+| N-06 | 有 `leave.sensitive.read`＋有效 read grant，嘗試修改敏感備註 | `FORBIDDEN`（修改需 `leave.sensitive.revise` 與另一筆 grant） |
+| N-07 | grant 已撤銷或已過期 | `FORBIDDEN` |
+| N-08 | grant 仍有效，但 class membership 已撤銷 | `FORBIDDEN`（連帶失效） |
+| N-09 | 以 `sensitive.grant.manage` 授予自己 grant | `FORBIDDEN`（I-18） |
+| N-10 | D-06 決定前呼叫建立 grant 的 API | 停用，拒絕 |
+| N-11 | 相同 principal、相同 `operationId`、相同命令重送 100 次 | 回傳同一收據；只有 1 次 version 變更（POC-018） |
+| N-12 | 相同 `operationId`、改 `intent` | `OPERATION_REUSE_MISMATCH`，只回 `{code, operationId}`（POC-019） |
+| N-13 | 有授權的 principal B 重用 A 的 `operationId` | `OPERATION_REUSE_MISMATCH`，不回 A 的收據欄位（POC-019） |
+| N-14 | 沒有授權的 principal 重用 A 的 `operationId` | `FORBIDDEN`，不讀收據 |
+| N-15 | principal B 以 A 的 `operationId` 查詢收據 | `FORBIDDEN`，與不存在相同 |
+| N-16 | 衍生工作把 `derivedStatus` 改成 `done` | 只更新 `derivedProgress`；收據不變（I-10） |
+| N-17 | 一次正式提交 | 恰好 1 筆 Revision、1 筆 Receipt、1 筆 Event（I-07，POC-016） |
+| N-18 | 請求宣稱 `classId = A`，目標文件實際在班級 B | `FORBIDDEN`（§6.1 步驟 3） |
+| N-19 | 文件 `classId` 欄位與路徑不一致 | `FORBIDDEN`，稽核 `SCOPE_INTEGRITY_ERROR`（I-02） |
+| N-20 | 科任 preset 的 membership 嘗試登記點名 | `FORBIDDEN`（D-05 預設不含 `attendance.write`） |
+| N-21 | 任何 membership 使用「未啟用」的 capability（D-09 前） | 視為未授予，`FORBIDDEN` |
+| N-22 | 只有 `leave.read` 的 principal 讀請假摘要 | 回傳摘要；回應中沒有任何欄位能推知是否有敏感備註 |
+
+## 12. 待決事項：預設值與實作阻擋條件
+
+**原則：在決定之前，一律採用下表的預設值（全部是拒絕或停用）；實作不得自行選擇較寬鬆的值。**
+
+| ID | 問題 | 決定前的預設（拒絕） | 解除阻擋的條件 |
+|---|---|---|---|
+| D-01 | 讀取路徑：全部經 API，或部分由 Security Rules 直接讀 | 全部經 API；client 直接讀取一律拒絕 | 負責人決定＋Rules 設計與 Rules 測試經審查 |
+| D-02 | Rules 的授權來源：`accessIndex` 或 custom claims | 不建立 `accessIndex`、不發 custom claims | D-01 決定開放直接讀取之後 |
+| D-03 | 是否需要伺服器端草稿集合 | 不建立；草稿只在裝置本機 | 負責人決定＋資料模型修訂審查 |
+| D-04 | 管理者是否需要不經 class membership 的唯讀總覽 | 不允許 | 負責人決定＋存取矩陣修訂審查 |
+| D-05 | 科任的點名權限是否限制到節次 | 科任 preset 不含 `attendance.write` | 節次層級 scope 的設計（資料模型＋授權）經審查 |
+| D-06 | 誰可以授予 `leave.sensitive.*`、是否需要兩人核准、最長期限 | 建立 grant 的 API 停用；系統中沒有有效 grant | 負責人決定核准流程與期限上限＋審查 |
+| D-07 | 收據、稽核、衍生進度的保存期限 | 不提供刪除 API；全部保留 | 負責人決定保存政策＋審查 |
+| D-08 | `export.basic` 的欄位白名單 | 匯出 API 停用 | 白名單經審查；白名單一定不含敏感文字或任何推知敏感備註存在的欄位 |
+| D-09 | 新增 capability 名稱（§4 標「未啟用」者）是否採用 | 視為未授予 | 負責人核准名稱與定義 |
+| D-10 | POC-019 的「改 actor」變體：fixtures 沒有第二個對 SC01 有授權的 principal | 使用 `ACTOR-OTHER` 時預期為 `FORBIDDEN`（N-14），不是 `OPERATION_REUSE_MISMATCH` | 決定是否以審查過的方式新增第二個測試 principal（**不修改** Stage 1 鎖定的 fixtures） |

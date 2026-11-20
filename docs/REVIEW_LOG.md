@@ -112,3 +112,43 @@
 - 範圍：`docs/stage2/` 4 份新文件；`docs/HANDOFF.md`、`docs/REVIEW_LOG.md` 狀態更新。不修改 `poc/stage1/`、受保護檔案、`src/`、`scripts/`、`tests/`、`.github/`。
 - ChatGPT 結論：`未審查`
 - 使用者決策：`未核准`
+
+### 第 1 輪審查（Reviewed Head `af1ffc28707bfea0cedc77d3dc9431d82ddc06f5`）
+
+- ChatGPT 結論：`CHANGES REQUESTED`（REV-001、REV-002 HIGH；REV-003～REV-006 MEDIUM；另要求確認 D-05 與 `hasSensitiveNote`）
+
+### Claude 逐項回覆（R1；格式依 `templates/CLAUDE_REVIEW_RESPONSE.md`）
+
+- 審查版本 Head SHA：`af1ffc28707bfea0cedc77d3dc9431d82ddc06f5`
+- 修正後 Head SHA：`見 PR #3 最新 commit 與交接訊息`
+
+| ID | 處理結果 | 修改位置 | 驗證證據 | 待使用者決策 |
+|---|---|---|---|---|
+| REV-001 | 已修 | AUTHORIZATION §4（每個 capability 固定 scopeType）、§6.1–6.4（分支 C／W 與操作對照）、§6.3 步驟 7–9（分支 W 只能管理、不能讀班級資料、禁止自我授權）；DATA-MODEL I-17、I-18；ACCESS-MATRIX §2–§3 | 負向案例 N-01～N-04；交叉檢查 REV-001 共 6 項 | D-09（workspace capability 名稱核准前不生效） |
+| REV-002 | 已修 | AUTHORIZATION §8：收據範圍＝工作空間；canonical `requestHash`（欄位、排除項、`stableJson`、SHA-256、測試向量）；處理順序（先授權再讀收據）；跨 principal 重用表；查詢收據規則；DATA-MODEL §3.7、I-09 | N-11～N-15；交叉檢查以 Stage 1 `stableJson` 重算測試向量 | D-10（POC-019 actor 變體缺少第二個有授權的 fixture principal） |
+| REV-003 | 已修 | ACCESS-MATRIX §5：fixture principal 的 capability 與 Stage 1 完全相同；POC-001 改由 `attendance.read`＋`rosterSnapshot` 取得；`roster.read` 等提案標為未啟用（AUTHORIZATION §4）；TRACEABILITY POC-001 | 交叉檢查 REV-003 共 4 項 | D-09 |
+| REV-004 | 已修 | DATA-MODEL §3.7：收據完全不可變，`derivedStatusAtCommit` 固定為 `pending`；目前進度移到新集合 `derivedProgress`；I-07 改為 Revision／Receipt／Event 各恰好 1 筆；I-10 | N-16、N-17；交叉檢查 REV-004 共 5 項 | 無 |
+| REV-005 | 已修 | DATA-MODEL §4：路徑為權威、欄位必須一致、不一致以 `SCOPE_INTEGRITY_ERROR` 拒絕；每個集合的 Scope 來源表；I-01、I-02；AUTHORIZATION §6.1 步驟 3 | N-18、N-19；交叉檢查 REV-005 共 2 項 | 無 |
+| REV-006 | 已修 | AUTHORIZATION §7：read／revise 分開授予、存取條件、建立（`sensitive.grant.manage`、不可自我授予、`expiresAt` 必填）、撤銷（單向）、過期、連帶失效；D-06 前建立 grant 的 API 停用；DATA-MODEL §3.3 | N-05～N-10；交叉檢查 REV-006 共 4 項 | D-06 |
+| D-05 | 已定預設 | 科任 preset 不含 `attendance.write`，直到節次層級 scope 經審查 | N-20 | D-05 |
+| `hasSensitiveNote` | 已修 | 從請假摘要刪除；是否有敏感備註只能由具 read grant 者查詢 `leaveSensitiveNotes` 得知，其他人「沒有」與「沒有權限」回應相同（DATA-MODEL §3.6、I-11） | N-22 | 無 |
+| 其他待決 | 已定預設 | AUTHORIZATION §12：D-01～D-10 全部列出決定前的拒絕／停用預設值與解除阻擋條件 | 交叉檢查「每個待決事項都有預設與解除條件」 | D-01～D-10 |
+
+**額外修正（審查未列出，Claude 自查發現）**
+
+- 稽核的 `resourceRef` 對班級資料只記 `classId`＋文件 ID 雜湊，避免只有 `audit.read` 的管理者藉稽核推知班級資料（與 REV-001「不得擴大班級資料閱讀權」一致）。
+- fixture membership 的 `validToExclusive` 改為 `null`：原寫「資料集次日」會讓在之後執行的測試全部 `FORBIDDEN`。
+- 契約對照中因章節重編而失效的 `§` 參照已更新。
+
+**已執行的測試（本機 Linux、Node 22）**
+
+| 命令／操作 | 結果 |
+|---|---|
+| npm run check | 成功 |
+| npm test | 成功 15／15 |
+| npm run stage1:all | 成功：Stage0 21、契約 14、防護 4、執行器 37、72 筆 NOT_RUN |
+| verify-anchor（負責人核准值） | ANCHOR_OK（29 份受保護檔案未變） |
+| 文件交叉檢查 v0.1（10 項） | 10／10 |
+| R1 交叉檢查（31 項，針對 REV-001～006） | 新 Head 31／31；以同一腳本檢查舊 Head `af1ffc2`：26 項失敗，證明檢查能偵測原本的矛盾 |
+
+> 交叉檢查腳本不提交到 Repository（本 PR 維持純文件範圍），隨審查包附上。
