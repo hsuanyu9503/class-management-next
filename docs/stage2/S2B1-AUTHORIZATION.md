@@ -1,8 +1,9 @@
-# S2-B1｜授權規格 v0.6（草案）
+# S2-B1｜授權規格 v0.7（草案）
 
 > **狀態：設計文件，未實作。** 本文件不含 Security Rules 或程式；授權行為尚未在任何後端驗證，相關案例維持 `NOT_RUN`。
 > v0.2：回應 PR #3 審查 R1（REV-001 授權分支、REV-002 收據與 requestHash、REV-003 fixture 能力清單、REV-006 敏感 grant；D-05 與所有待決事項的預設拒絕）。
 > v0.3：回應 PR #3 審查 R2（REV-007 Auth Binding 狀態、REV-008 稽核分層、REV-009 科任點名例外；案例前置條件與 §13 機器可讀案例）。
+> v0.7：回應 PR #3 收尾審查（REV-016 既有 grant 的原因碼驗證；REV-017 §13 時間驗證的證據範圍）。
 > v0.6：回應 PR #3 審查 R5（REV-015 時間與原因碼的嚴格驗證 §7.6；§6.6 區分授權失敗與輸入格式錯誤；N-29 前置條件文字）。
 > v0.5：回應 PR #3 審查 R4（REV-013 敏感資料兩條路徑與 preset 資格、REV-014 grant 建立驗證、grant 與 membership 的生命週期；§6.3 步驟 9 同時涵蓋建立與修改）。
 > v0.4：回應 PR #3 審查 R3（REV-010 自我讀取前置、REV-011 preset 語意與 fixture 對應、REV-012 評估範圍與輸入假設、REV-008 摘要證據）。敏感資料存取改為**只依 grant**，membership 不再含 `leave.sensitive.*`（§3、§7）。
@@ -220,7 +221,7 @@
    - `G.workspaceId`、`G.classId` 等於目標的 scope；
    - `G.capability` 與操作完全相同；
    - `G.status = active`；
-   - `G.expiresAt` 與 `G.grantedAt` 都通過 §7.6 的嚴格時間驗證；不合法 → 這筆 grant 無效（`FORBIDDEN`，不是 `INVALID_INPUT`）；
+   - `G.expiresAt` 與 `G.grantedAt` 都通過 §7.6 的嚴格時間驗證，`G.reasonCode` 通過 §7.6 的原因碼驗證；任一不合法 → 這筆 grant 無效，不得作為授權依據（若沒有其他有效 grant，結果為 `FORBIDDEN`；不是 `INVALID_INPUT`）；
    - `現在 < G.expiresAt`（到期即拒絕；等於現在也拒絕）；
    - 必要欄位全部存在：`grantId`、`principalId`、`workspaceId`、`classId`、`membershipId`、`membershipVersion`、`capability`、`status`、`grantedAt`、`expiresAt`、`grantedBy`、`reasonCode`。
 3. `G.membershipId` 指向的 membership `M` 存在，而且：
@@ -309,6 +310,11 @@ grant 綁定**一筆特定的 membership**（`membershipId`），並記錄建立
 - 只能是 ASCII 大寫字母開頭，後面接 2–63 個 ASCII 大寫字母、數字或底線；總長度 3–64 個字元。
 - 不得有前後空白、尾端換行、全形字元或其他字元。
 - 允許的代碼清單仍由 D-06 決定，本規格只限制格式。
+
+| 使用位置 | 原因碼不合法、不是字串或缺少時 |
+|---|---|
+| 建立 grant 的 `reasonCode`（§7.5 第 7 項） | `INVALID_INPUT` |
+| 既有 grant 的 `reasonCode`（§7.2） | 該 grant 無效，不得作為授權依據；沒有其他有效 grant 時為 `FORBIDDEN` |
 
 **`sensitive.grant.manage` 的指派**：不在任何 preset 中，也**不能**用 `membership.manage` 加入；由誰、以什麼程序指派，屬於 D-06 的決定範圍。D-06 核准前沒有任何人持有它。
 
@@ -566,6 +572,17 @@ requestHash = ff212f322297ac317fd3869dceffb81c094b1457de01c111762c6335b177c8cf
 | T-A-exp-past1s | D-06＋D-09＋D-15 已核准 | 敏感讀取：既有 grant 的 `expiresAt` = `2026-11-20T11:59:59Z`，比現在早 1 秒 | `FORBIDDEN`（已到期） |
 | T-A-granted-feb30 | D-06＋D-09＋D-15 已核准 | 敏感讀取：既有 grant 的 `grantedAt` = `2026-02-30T00:00:00Z`，不存在的日期 | `FORBIDDEN`（grant 無效） |
 | T-A-granted-nl | D-06＋D-09＋D-15 已核准 | 敏感讀取：既有 grant 的 `grantedAt` = `2026-11-19T00:00:00Z\n`（JSON 跳脫表示），尾端換行 | `FORBIDDEN`（grant 無效） |
+| R-A-rc-nl | D-06＋D-09＋D-15 已核准 | 敏感讀取：既有 grant 的 `reasonCode` = `ABC\n`（JSON 跳脫表示），尾端換行（審查者重現） | `FORBIDDEN`（grant 無效） |
+| R-A-rc-trailsp | D-06＋D-09＋D-15 已核准 | 敏感讀取：既有 grant 的 `reasonCode` = `"ABC "`，尾端空白 | `FORBIDDEN`（grant 無效） |
+| R-A-rc-leadsp | D-06＋D-09＋D-15 已核准 | 敏感讀取：既有 grant 的 `reasonCode` = `" ABC"`，開頭空白 | `FORBIDDEN`（grant 無效） |
+| R-A-rc-illegal | D-06＋D-09＋D-15 已核准 | 敏感讀取：既有 grant 的 `reasonCode` = `ABC-1`，含非法字元 `-` | `FORBIDDEN`（grant 無效） |
+| R-A-rc-nonstring | D-06＋D-09＋D-15 已核准 | 敏感讀取：既有 grant 的 `reasonCode` = `123`（數字），不是字串（數字） | `FORBIDDEN`（grant 無效） |
+| R-A-rc-short | D-06＋D-09＋D-15 已核准 | 敏感讀取：既有 grant 的 `reasonCode` = `AB`，長度 2（太短） | `FORBIDDEN`（grant 無效） |
+| R-A-rc-long | D-06＋D-09＋D-15 已核准 | 敏感讀取：既有 grant 的 `reasonCode` = `A`＋64 個 `B`，長度 65（太長） | `FORBIDDEN`（grant 無效） |
+| R-A-rc-missing | D-06＋D-09＋D-15 已核准 | 敏感讀取：既有 grant 缺少 `reasonCode` | `FORBIDDEN`（grant 無效） |
+| R-A-rc-min | D-06＋D-09＋D-15 已核准 | 敏感讀取：既有 grant 的 `reasonCode` 為長度 3（下限，正向對照） | 允許 |
+| R-A-rc-max | D-06＋D-09＋D-15 已核准 | 敏感讀取：既有 grant 的 `reasonCode` 為長度 64（上限，正向對照） | 允許 |
+| R-A-rc-othervalid | D-06＋D-09＋D-15 已核准 | 敏感讀取：一筆 grant 的 `reasonCode` 不合法，另有一筆完全有效的 grant | 允許（無效的 grant 被忽略，以有效的那筆授權） |
 
 ## 12. 待決事項：預設值與實作阻擋條件
 
@@ -592,7 +609,7 @@ requestHash = ff212f322297ac317fd3869dceffb81c094b1457de01c111762c6335b177c8cf
 
 ## 13. 機器可讀的授權案例
 
-下列 JSON 把 §11 中與授權判斷有關的案例寫成資料（`s2b1-authz-cases-v4`），方便審查時用獨立的評估程式驗證。這是**資料，不是程式**；本 PR 沒有任何對應的實作。
+下列 JSON 把 §11 中與授權判斷有關的案例寫成資料（`s2b1-authz-cases-v5`），方便審查時用獨立的評估程式驗證。這是**資料，不是程式**；本 PR 沒有任何對應的實作。
 
 **證據範圍（REV-012）**：審查附件中的評估程式**只是模型測試**，只能說明「這些案例與本文件的表格、規則文字彼此一致」。
 
@@ -617,7 +634,23 @@ requestHash = ff212f322297ac317fd3869dceffb81c094b1457de01c111762c6335b177c8cf
 2. `op.workspaceId`／`op.classId` 是伺服器依資料模型 §4 從目標文件解析出的 scope，不是 client 宣稱的值。
 3. `world` 中的紀錄確實來自 Firestore 的權威集合；評估程式只檢查紀錄**內容**，例如 `principalId`、`workspaceId`、必要欄位、狀態與期間。
 4. `d06Assignments` 代表 D-06 程序產生的 `sensitive.grant.manage` 指派紀錄。D-06 尚未定義這個程序，此欄位只是模型的佔位。
-5. （v0.6 起**不再是**上游假設）所有時間都由評估程式依 §7.6 嚴格驗證並解析後才比較，包括建立請求與既有 grant。
+5. **時間驗證的範圍**（REV-017）：
+
+   評估程式**有**依 §7.6 嚴格驗證並解析後才比較的時間，只有下列 4 項：
+   - 建立 grant 請求的 `expiresAt`；
+   - 既有 grant 的 `expiresAt`；
+   - 既有 grant 的 `grantedAt`；
+   - 用於期限比較的模型現在時間（案例檔的 `now`）。
+
+   評估程式**沒有**驗證格式與真實日期合法性、而是直接用字串比較的時間：
+   - Auth Binding 的 `activatedAt`，以及 token 的 `tokenIat`（§6.1 步驟 2）；
+   - membership 的 `validFrom`、`validToExclusive`（日期，§6.2 步驟 5）。
+
+   這些輸入目前**假設**是格式正確、真實存在的 UTC 時間或日期：
+   - `activatedAt`、`tokenIat` 為 `YYYY-MM-DDTHH:MM:SSZ`；
+   - membership 日期為 `YYYY-MM-DD`。
+
+   在這個假設下，字串比較才等於時間先後的比較。這只是**模型的限制，不代表實作可以省略驗證**。實作階段必須對這些欄位做與 §7.6 同等的整字串比對與實際日期解析；不合法時，binding 或 membership 視為無效（`FORBIDDEN`），並補對應的負向測試。
 6. 摘要的 `summaryId` 在模型中以 `S-1`、`S-2`… 表示「只依摘要本身的順序編號」，用來檢查它不受 `auditLog` 序號影響。實際規格是隨機 UUID v4（§6.6）。**模型不驗證 UUID 的隨機性或唯一性**，這必須在實作階段另外測試。
 
 **建立 grant 的模型結果**：評估程式對建立 grant 的成功結果**不回傳 `ALLOW`**，而是回傳 `MODEL_CHECKS_PASSED`，表示「§7.5 第 1–8 項檢查在模型中通過」。以下檢查**刻意不納入模型**，所以這個結果**不代表**完整的建立 grant 操作會成功：
@@ -637,7 +670,7 @@ requestHash = ff212f322297ac317fd3869dceffb81c094b1457de01c111762c6335b177c8cf
 
 ```json
 {
- "schemaVersion": "s2b1-authz-cases-v4",
+ "schemaVersion": "s2b1-authz-cases-v5",
  "now": "2026-11-20T12:00:00Z",
  "presetVersion": "s2b1-v1",
  "cases": [
@@ -15401,6 +15434,947 @@ requestHash = ff212f322297ac317fd3869dceffb81c094b1457de01c111762c6335b177c8cf
      "2026-11-19T00:00:00Z"
     ]
    ]
+  },
+  {
+   "id": "R-A-rc-nl",
+   "approvals": [
+    "D-06",
+    "D-09",
+    "D-15"
+   ],
+   "request": {
+    "authUid": "UID-A",
+    "tokenIat": "2026-11-20T08:00:00Z"
+   },
+   "world": {
+    "bindings": {
+     "UID-A": {
+      "principalId": "P-A",
+      "status": "active",
+      "activatedAt": "2026-11-01T00:00:00Z"
+     }
+    },
+    "principals": {
+     "P-A": {
+      "status": "active"
+     },
+     "P-B": {
+      "status": "active"
+     }
+    },
+    "memberships": [
+     {
+      "membershipId": "M-P-A-1",
+      "version": 1,
+      "principalId": "P-A",
+      "workspaceId": "WS-SC01",
+      "scopeType": "class",
+      "classId": "CLASS-606-SC01",
+      "rolePreset": "homeroom_teacher",
+      "rolePresetVersion": "s2b1-v1",
+      "capabilities": [
+       "attendance.read",
+       "attendance.write",
+       "attendance.revise",
+       "leave.read",
+       "leave.revise",
+       "leave.applicability.read",
+       "issue.read"
+      ],
+      "status": "active",
+      "validFrom": "2026-09-01",
+      "validToExclusive": null
+     }
+    ],
+    "grants": [
+     {
+      "grantId": "G-1",
+      "principalId": "P-A",
+      "workspaceId": "WS-SC01",
+      "classId": "CLASS-606-SC01",
+      "membershipId": "M-P-A-1",
+      "membershipVersion": 1,
+      "capability": "leave.sensitive.read",
+      "status": "active",
+      "grantedAt": "2026-11-19T00:00:00Z",
+      "expiresAt": "2026-12-31T00:00:00Z",
+      "grantedBy": "P-GRANTER",
+      "reasonCode": "ABC\n"
+     }
+    ],
+    "d06Assignments": [],
+    "auditEvents": []
+   },
+   "op": {
+    "type": "sensitive",
+    "workspaceId": "WS-SC01",
+    "classId": "CLASS-606-SC01",
+    "mode": "read"
+   },
+   "expect": {
+    "result": "FORBIDDEN"
+   },
+   "control": [
+    [
+     "world.grants.0.reasonCode",
+     "TEST_REASON"
+    ]
+   ]
+  },
+  {
+   "id": "R-A-rc-trailsp",
+   "approvals": [
+    "D-06",
+    "D-09",
+    "D-15"
+   ],
+   "request": {
+    "authUid": "UID-A",
+    "tokenIat": "2026-11-20T08:00:00Z"
+   },
+   "world": {
+    "bindings": {
+     "UID-A": {
+      "principalId": "P-A",
+      "status": "active",
+      "activatedAt": "2026-11-01T00:00:00Z"
+     }
+    },
+    "principals": {
+     "P-A": {
+      "status": "active"
+     },
+     "P-B": {
+      "status": "active"
+     }
+    },
+    "memberships": [
+     {
+      "membershipId": "M-P-A-1",
+      "version": 1,
+      "principalId": "P-A",
+      "workspaceId": "WS-SC01",
+      "scopeType": "class",
+      "classId": "CLASS-606-SC01",
+      "rolePreset": "homeroom_teacher",
+      "rolePresetVersion": "s2b1-v1",
+      "capabilities": [
+       "attendance.read",
+       "attendance.write",
+       "attendance.revise",
+       "leave.read",
+       "leave.revise",
+       "leave.applicability.read",
+       "issue.read"
+      ],
+      "status": "active",
+      "validFrom": "2026-09-01",
+      "validToExclusive": null
+     }
+    ],
+    "grants": [
+     {
+      "grantId": "G-1",
+      "principalId": "P-A",
+      "workspaceId": "WS-SC01",
+      "classId": "CLASS-606-SC01",
+      "membershipId": "M-P-A-1",
+      "membershipVersion": 1,
+      "capability": "leave.sensitive.read",
+      "status": "active",
+      "grantedAt": "2026-11-19T00:00:00Z",
+      "expiresAt": "2026-12-31T00:00:00Z",
+      "grantedBy": "P-GRANTER",
+      "reasonCode": "ABC "
+     }
+    ],
+    "d06Assignments": [],
+    "auditEvents": []
+   },
+   "op": {
+    "type": "sensitive",
+    "workspaceId": "WS-SC01",
+    "classId": "CLASS-606-SC01",
+    "mode": "read"
+   },
+   "expect": {
+    "result": "FORBIDDEN"
+   },
+   "control": [
+    [
+     "world.grants.0.reasonCode",
+     "TEST_REASON"
+    ]
+   ]
+  },
+  {
+   "id": "R-A-rc-leadsp",
+   "approvals": [
+    "D-06",
+    "D-09",
+    "D-15"
+   ],
+   "request": {
+    "authUid": "UID-A",
+    "tokenIat": "2026-11-20T08:00:00Z"
+   },
+   "world": {
+    "bindings": {
+     "UID-A": {
+      "principalId": "P-A",
+      "status": "active",
+      "activatedAt": "2026-11-01T00:00:00Z"
+     }
+    },
+    "principals": {
+     "P-A": {
+      "status": "active"
+     },
+     "P-B": {
+      "status": "active"
+     }
+    },
+    "memberships": [
+     {
+      "membershipId": "M-P-A-1",
+      "version": 1,
+      "principalId": "P-A",
+      "workspaceId": "WS-SC01",
+      "scopeType": "class",
+      "classId": "CLASS-606-SC01",
+      "rolePreset": "homeroom_teacher",
+      "rolePresetVersion": "s2b1-v1",
+      "capabilities": [
+       "attendance.read",
+       "attendance.write",
+       "attendance.revise",
+       "leave.read",
+       "leave.revise",
+       "leave.applicability.read",
+       "issue.read"
+      ],
+      "status": "active",
+      "validFrom": "2026-09-01",
+      "validToExclusive": null
+     }
+    ],
+    "grants": [
+     {
+      "grantId": "G-1",
+      "principalId": "P-A",
+      "workspaceId": "WS-SC01",
+      "classId": "CLASS-606-SC01",
+      "membershipId": "M-P-A-1",
+      "membershipVersion": 1,
+      "capability": "leave.sensitive.read",
+      "status": "active",
+      "grantedAt": "2026-11-19T00:00:00Z",
+      "expiresAt": "2026-12-31T00:00:00Z",
+      "grantedBy": "P-GRANTER",
+      "reasonCode": " ABC"
+     }
+    ],
+    "d06Assignments": [],
+    "auditEvents": []
+   },
+   "op": {
+    "type": "sensitive",
+    "workspaceId": "WS-SC01",
+    "classId": "CLASS-606-SC01",
+    "mode": "read"
+   },
+   "expect": {
+    "result": "FORBIDDEN"
+   },
+   "control": [
+    [
+     "world.grants.0.reasonCode",
+     "TEST_REASON"
+    ]
+   ]
+  },
+  {
+   "id": "R-A-rc-illegal",
+   "approvals": [
+    "D-06",
+    "D-09",
+    "D-15"
+   ],
+   "request": {
+    "authUid": "UID-A",
+    "tokenIat": "2026-11-20T08:00:00Z"
+   },
+   "world": {
+    "bindings": {
+     "UID-A": {
+      "principalId": "P-A",
+      "status": "active",
+      "activatedAt": "2026-11-01T00:00:00Z"
+     }
+    },
+    "principals": {
+     "P-A": {
+      "status": "active"
+     },
+     "P-B": {
+      "status": "active"
+     }
+    },
+    "memberships": [
+     {
+      "membershipId": "M-P-A-1",
+      "version": 1,
+      "principalId": "P-A",
+      "workspaceId": "WS-SC01",
+      "scopeType": "class",
+      "classId": "CLASS-606-SC01",
+      "rolePreset": "homeroom_teacher",
+      "rolePresetVersion": "s2b1-v1",
+      "capabilities": [
+       "attendance.read",
+       "attendance.write",
+       "attendance.revise",
+       "leave.read",
+       "leave.revise",
+       "leave.applicability.read",
+       "issue.read"
+      ],
+      "status": "active",
+      "validFrom": "2026-09-01",
+      "validToExclusive": null
+     }
+    ],
+    "grants": [
+     {
+      "grantId": "G-1",
+      "principalId": "P-A",
+      "workspaceId": "WS-SC01",
+      "classId": "CLASS-606-SC01",
+      "membershipId": "M-P-A-1",
+      "membershipVersion": 1,
+      "capability": "leave.sensitive.read",
+      "status": "active",
+      "grantedAt": "2026-11-19T00:00:00Z",
+      "expiresAt": "2026-12-31T00:00:00Z",
+      "grantedBy": "P-GRANTER",
+      "reasonCode": "ABC-1"
+     }
+    ],
+    "d06Assignments": [],
+    "auditEvents": []
+   },
+   "op": {
+    "type": "sensitive",
+    "workspaceId": "WS-SC01",
+    "classId": "CLASS-606-SC01",
+    "mode": "read"
+   },
+   "expect": {
+    "result": "FORBIDDEN"
+   },
+   "control": [
+    [
+     "world.grants.0.reasonCode",
+     "TEST_REASON"
+    ]
+   ]
+  },
+  {
+   "id": "R-A-rc-nonstring",
+   "approvals": [
+    "D-06",
+    "D-09",
+    "D-15"
+   ],
+   "request": {
+    "authUid": "UID-A",
+    "tokenIat": "2026-11-20T08:00:00Z"
+   },
+   "world": {
+    "bindings": {
+     "UID-A": {
+      "principalId": "P-A",
+      "status": "active",
+      "activatedAt": "2026-11-01T00:00:00Z"
+     }
+    },
+    "principals": {
+     "P-A": {
+      "status": "active"
+     },
+     "P-B": {
+      "status": "active"
+     }
+    },
+    "memberships": [
+     {
+      "membershipId": "M-P-A-1",
+      "version": 1,
+      "principalId": "P-A",
+      "workspaceId": "WS-SC01",
+      "scopeType": "class",
+      "classId": "CLASS-606-SC01",
+      "rolePreset": "homeroom_teacher",
+      "rolePresetVersion": "s2b1-v1",
+      "capabilities": [
+       "attendance.read",
+       "attendance.write",
+       "attendance.revise",
+       "leave.read",
+       "leave.revise",
+       "leave.applicability.read",
+       "issue.read"
+      ],
+      "status": "active",
+      "validFrom": "2026-09-01",
+      "validToExclusive": null
+     }
+    ],
+    "grants": [
+     {
+      "grantId": "G-1",
+      "principalId": "P-A",
+      "workspaceId": "WS-SC01",
+      "classId": "CLASS-606-SC01",
+      "membershipId": "M-P-A-1",
+      "membershipVersion": 1,
+      "capability": "leave.sensitive.read",
+      "status": "active",
+      "grantedAt": "2026-11-19T00:00:00Z",
+      "expiresAt": "2026-12-31T00:00:00Z",
+      "grantedBy": "P-GRANTER",
+      "reasonCode": 123
+     }
+    ],
+    "d06Assignments": [],
+    "auditEvents": []
+   },
+   "op": {
+    "type": "sensitive",
+    "workspaceId": "WS-SC01",
+    "classId": "CLASS-606-SC01",
+    "mode": "read"
+   },
+   "expect": {
+    "result": "FORBIDDEN"
+   },
+   "control": [
+    [
+     "world.grants.0.reasonCode",
+     "TEST_REASON"
+    ]
+   ]
+  },
+  {
+   "id": "R-A-rc-short",
+   "approvals": [
+    "D-06",
+    "D-09",
+    "D-15"
+   ],
+   "request": {
+    "authUid": "UID-A",
+    "tokenIat": "2026-11-20T08:00:00Z"
+   },
+   "world": {
+    "bindings": {
+     "UID-A": {
+      "principalId": "P-A",
+      "status": "active",
+      "activatedAt": "2026-11-01T00:00:00Z"
+     }
+    },
+    "principals": {
+     "P-A": {
+      "status": "active"
+     },
+     "P-B": {
+      "status": "active"
+     }
+    },
+    "memberships": [
+     {
+      "membershipId": "M-P-A-1",
+      "version": 1,
+      "principalId": "P-A",
+      "workspaceId": "WS-SC01",
+      "scopeType": "class",
+      "classId": "CLASS-606-SC01",
+      "rolePreset": "homeroom_teacher",
+      "rolePresetVersion": "s2b1-v1",
+      "capabilities": [
+       "attendance.read",
+       "attendance.write",
+       "attendance.revise",
+       "leave.read",
+       "leave.revise",
+       "leave.applicability.read",
+       "issue.read"
+      ],
+      "status": "active",
+      "validFrom": "2026-09-01",
+      "validToExclusive": null
+     }
+    ],
+    "grants": [
+     {
+      "grantId": "G-1",
+      "principalId": "P-A",
+      "workspaceId": "WS-SC01",
+      "classId": "CLASS-606-SC01",
+      "membershipId": "M-P-A-1",
+      "membershipVersion": 1,
+      "capability": "leave.sensitive.read",
+      "status": "active",
+      "grantedAt": "2026-11-19T00:00:00Z",
+      "expiresAt": "2026-12-31T00:00:00Z",
+      "grantedBy": "P-GRANTER",
+      "reasonCode": "AB"
+     }
+    ],
+    "d06Assignments": [],
+    "auditEvents": []
+   },
+   "op": {
+    "type": "sensitive",
+    "workspaceId": "WS-SC01",
+    "classId": "CLASS-606-SC01",
+    "mode": "read"
+   },
+   "expect": {
+    "result": "FORBIDDEN"
+   },
+   "control": [
+    [
+     "world.grants.0.reasonCode",
+     "TEST_REASON"
+    ]
+   ]
+  },
+  {
+   "id": "R-A-rc-long",
+   "approvals": [
+    "D-06",
+    "D-09",
+    "D-15"
+   ],
+   "request": {
+    "authUid": "UID-A",
+    "tokenIat": "2026-11-20T08:00:00Z"
+   },
+   "world": {
+    "bindings": {
+     "UID-A": {
+      "principalId": "P-A",
+      "status": "active",
+      "activatedAt": "2026-11-01T00:00:00Z"
+     }
+    },
+    "principals": {
+     "P-A": {
+      "status": "active"
+     },
+     "P-B": {
+      "status": "active"
+     }
+    },
+    "memberships": [
+     {
+      "membershipId": "M-P-A-1",
+      "version": 1,
+      "principalId": "P-A",
+      "workspaceId": "WS-SC01",
+      "scopeType": "class",
+      "classId": "CLASS-606-SC01",
+      "rolePreset": "homeroom_teacher",
+      "rolePresetVersion": "s2b1-v1",
+      "capabilities": [
+       "attendance.read",
+       "attendance.write",
+       "attendance.revise",
+       "leave.read",
+       "leave.revise",
+       "leave.applicability.read",
+       "issue.read"
+      ],
+      "status": "active",
+      "validFrom": "2026-09-01",
+      "validToExclusive": null
+     }
+    ],
+    "grants": [
+     {
+      "grantId": "G-1",
+      "principalId": "P-A",
+      "workspaceId": "WS-SC01",
+      "classId": "CLASS-606-SC01",
+      "membershipId": "M-P-A-1",
+      "membershipVersion": 1,
+      "capability": "leave.sensitive.read",
+      "status": "active",
+      "grantedAt": "2026-11-19T00:00:00Z",
+      "expiresAt": "2026-12-31T00:00:00Z",
+      "grantedBy": "P-GRANTER",
+      "reasonCode": "ABBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB"
+     }
+    ],
+    "d06Assignments": [],
+    "auditEvents": []
+   },
+   "op": {
+    "type": "sensitive",
+    "workspaceId": "WS-SC01",
+    "classId": "CLASS-606-SC01",
+    "mode": "read"
+   },
+   "expect": {
+    "result": "FORBIDDEN"
+   },
+   "control": [
+    [
+     "world.grants.0.reasonCode",
+     "TEST_REASON"
+    ]
+   ]
+  },
+  {
+   "id": "R-A-rc-missing",
+   "approvals": [
+    "D-06",
+    "D-09",
+    "D-15"
+   ],
+   "request": {
+    "authUid": "UID-A",
+    "tokenIat": "2026-11-20T08:00:00Z"
+   },
+   "world": {
+    "bindings": {
+     "UID-A": {
+      "principalId": "P-A",
+      "status": "active",
+      "activatedAt": "2026-11-01T00:00:00Z"
+     }
+    },
+    "principals": {
+     "P-A": {
+      "status": "active"
+     },
+     "P-B": {
+      "status": "active"
+     }
+    },
+    "memberships": [
+     {
+      "membershipId": "M-P-A-1",
+      "version": 1,
+      "principalId": "P-A",
+      "workspaceId": "WS-SC01",
+      "scopeType": "class",
+      "classId": "CLASS-606-SC01",
+      "rolePreset": "homeroom_teacher",
+      "rolePresetVersion": "s2b1-v1",
+      "capabilities": [
+       "attendance.read",
+       "attendance.write",
+       "attendance.revise",
+       "leave.read",
+       "leave.revise",
+       "leave.applicability.read",
+       "issue.read"
+      ],
+      "status": "active",
+      "validFrom": "2026-09-01",
+      "validToExclusive": null
+     }
+    ],
+    "grants": [
+     {
+      "grantId": "G-1",
+      "principalId": "P-A",
+      "workspaceId": "WS-SC01",
+      "classId": "CLASS-606-SC01",
+      "membershipId": "M-P-A-1",
+      "membershipVersion": 1,
+      "capability": "leave.sensitive.read",
+      "status": "active",
+      "grantedAt": "2026-11-19T00:00:00Z",
+      "expiresAt": "2026-12-31T00:00:00Z",
+      "grantedBy": "P-GRANTER"
+     }
+    ],
+    "d06Assignments": [],
+    "auditEvents": []
+   },
+   "op": {
+    "type": "sensitive",
+    "workspaceId": "WS-SC01",
+    "classId": "CLASS-606-SC01",
+    "mode": "read"
+   },
+   "expect": {
+    "result": "FORBIDDEN"
+   },
+   "control": [
+    [
+     "world.grants.0.reasonCode",
+     "TEST_REASON"
+    ]
+   ]
+  },
+  {
+   "id": "R-A-rc-min",
+   "approvals": [
+    "D-06",
+    "D-09",
+    "D-15"
+   ],
+   "request": {
+    "authUid": "UID-A",
+    "tokenIat": "2026-11-20T08:00:00Z"
+   },
+   "world": {
+    "bindings": {
+     "UID-A": {
+      "principalId": "P-A",
+      "status": "active",
+      "activatedAt": "2026-11-01T00:00:00Z"
+     }
+    },
+    "principals": {
+     "P-A": {
+      "status": "active"
+     },
+     "P-B": {
+      "status": "active"
+     }
+    },
+    "memberships": [
+     {
+      "membershipId": "M-P-A-1",
+      "version": 1,
+      "principalId": "P-A",
+      "workspaceId": "WS-SC01",
+      "scopeType": "class",
+      "classId": "CLASS-606-SC01",
+      "rolePreset": "homeroom_teacher",
+      "rolePresetVersion": "s2b1-v1",
+      "capabilities": [
+       "attendance.read",
+       "attendance.write",
+       "attendance.revise",
+       "leave.read",
+       "leave.revise",
+       "leave.applicability.read",
+       "issue.read"
+      ],
+      "status": "active",
+      "validFrom": "2026-09-01",
+      "validToExclusive": null
+     }
+    ],
+    "grants": [
+     {
+      "grantId": "G-1",
+      "principalId": "P-A",
+      "workspaceId": "WS-SC01",
+      "classId": "CLASS-606-SC01",
+      "membershipId": "M-P-A-1",
+      "membershipVersion": 1,
+      "capability": "leave.sensitive.read",
+      "status": "active",
+      "grantedAt": "2026-11-19T00:00:00Z",
+      "expiresAt": "2026-12-31T00:00:00Z",
+      "grantedBy": "P-GRANTER",
+      "reasonCode": "ABC"
+     }
+    ],
+    "d06Assignments": [],
+    "auditEvents": []
+   },
+   "op": {
+    "type": "sensitive",
+    "workspaceId": "WS-SC01",
+    "classId": "CLASS-606-SC01",
+    "mode": "read"
+   },
+   "expect": {
+    "result": "ALLOW"
+   }
+  },
+  {
+   "id": "R-A-rc-max",
+   "approvals": [
+    "D-06",
+    "D-09",
+    "D-15"
+   ],
+   "request": {
+    "authUid": "UID-A",
+    "tokenIat": "2026-11-20T08:00:00Z"
+   },
+   "world": {
+    "bindings": {
+     "UID-A": {
+      "principalId": "P-A",
+      "status": "active",
+      "activatedAt": "2026-11-01T00:00:00Z"
+     }
+    },
+    "principals": {
+     "P-A": {
+      "status": "active"
+     },
+     "P-B": {
+      "status": "active"
+     }
+    },
+    "memberships": [
+     {
+      "membershipId": "M-P-A-1",
+      "version": 1,
+      "principalId": "P-A",
+      "workspaceId": "WS-SC01",
+      "scopeType": "class",
+      "classId": "CLASS-606-SC01",
+      "rolePreset": "homeroom_teacher",
+      "rolePresetVersion": "s2b1-v1",
+      "capabilities": [
+       "attendance.read",
+       "attendance.write",
+       "attendance.revise",
+       "leave.read",
+       "leave.revise",
+       "leave.applicability.read",
+       "issue.read"
+      ],
+      "status": "active",
+      "validFrom": "2026-09-01",
+      "validToExclusive": null
+     }
+    ],
+    "grants": [
+     {
+      "grantId": "G-1",
+      "principalId": "P-A",
+      "workspaceId": "WS-SC01",
+      "classId": "CLASS-606-SC01",
+      "membershipId": "M-P-A-1",
+      "membershipVersion": 1,
+      "capability": "leave.sensitive.read",
+      "status": "active",
+      "grantedAt": "2026-11-19T00:00:00Z",
+      "expiresAt": "2026-12-31T00:00:00Z",
+      "grantedBy": "P-GRANTER",
+      "reasonCode": "ABBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB"
+     }
+    ],
+    "d06Assignments": [],
+    "auditEvents": []
+   },
+   "op": {
+    "type": "sensitive",
+    "workspaceId": "WS-SC01",
+    "classId": "CLASS-606-SC01",
+    "mode": "read"
+   },
+   "expect": {
+    "result": "ALLOW"
+   }
+  },
+  {
+   "id": "R-A-rc-othervalid",
+   "approvals": [
+    "D-06",
+    "D-09",
+    "D-15"
+   ],
+   "request": {
+    "authUid": "UID-A",
+    "tokenIat": "2026-11-20T08:00:00Z"
+   },
+   "world": {
+    "bindings": {
+     "UID-A": {
+      "principalId": "P-A",
+      "status": "active",
+      "activatedAt": "2026-11-01T00:00:00Z"
+     }
+    },
+    "principals": {
+     "P-A": {
+      "status": "active"
+     },
+     "P-B": {
+      "status": "active"
+     }
+    },
+    "memberships": [
+     {
+      "membershipId": "M-P-A-1",
+      "version": 1,
+      "principalId": "P-A",
+      "workspaceId": "WS-SC01",
+      "scopeType": "class",
+      "classId": "CLASS-606-SC01",
+      "rolePreset": "homeroom_teacher",
+      "rolePresetVersion": "s2b1-v1",
+      "capabilities": [
+       "attendance.read",
+       "attendance.write",
+       "attendance.revise",
+       "leave.read",
+       "leave.revise",
+       "leave.applicability.read",
+       "issue.read"
+      ],
+      "status": "active",
+      "validFrom": "2026-09-01",
+      "validToExclusive": null
+     }
+    ],
+    "grants": [
+     {
+      "grantId": "G-BAD",
+      "principalId": "P-A",
+      "workspaceId": "WS-SC01",
+      "classId": "CLASS-606-SC01",
+      "membershipId": "M-P-A-1",
+      "membershipVersion": 1,
+      "capability": "leave.sensitive.read",
+      "status": "active",
+      "grantedAt": "2026-11-19T00:00:00Z",
+      "expiresAt": "2026-12-31T00:00:00Z",
+      "grantedBy": "P-GRANTER",
+      "reasonCode": "ABC\n"
+     },
+     {
+      "grantId": "G-OK",
+      "principalId": "P-A",
+      "workspaceId": "WS-SC01",
+      "classId": "CLASS-606-SC01",
+      "membershipId": "M-P-A-1",
+      "membershipVersion": 1,
+      "capability": "leave.sensitive.read",
+      "status": "active",
+      "grantedAt": "2026-11-19T00:00:00Z",
+      "expiresAt": "2026-12-31T00:00:00Z",
+      "grantedBy": "P-GRANTER",
+      "reasonCode": "TEST_REASON"
+     }
+    ],
+    "d06Assignments": [],
+    "auditEvents": []
+   },
+   "op": {
+    "type": "sensitive",
+    "workspaceId": "WS-SC01",
+    "classId": "CLASS-606-SC01",
+    "mode": "read"
+   },
+   "expect": {
+    "result": "ALLOW"
+   }
   }
  ]
 }

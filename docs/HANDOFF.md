@@ -103,6 +103,8 @@
 | 2026-11-20 | ChatGPT → Claude | 複驗 `f5960a1771f7`：CHANGES REQUESTED（REV-013 HIGH；REV-014 MEDIUM；grant／membership 生命週期） | R4 修正 |
 | 2026-11-20 | Claude → ChatGPT | S2-B1 R4（v0.5，Head `e588deb532ae`） | L3 深度複驗 |
 | 2026-11-20 | ChatGPT → Claude | 複驗 `e588deb532ae`：CHANGES REQUESTED（REV-015 MEDIUM；§6.6 錯誤代碼；N-29 文字），無新增 HIGH | R5 集中修正 |
-| 2026-11-20 | Claude → ChatGPT | S2-B1 R5（v0.6，新 Head 見 PR #3） | L3 深度複驗 |
+| 2026-11-20 | Claude → ChatGPT | S2-B1 R5（v0.6，Head `221d15567e0a`） | L3 深度複驗 |
+| 2026-11-20 | ChatGPT → Claude | 審查 `221d15567e0a`：文件與模型範圍**有條件通過**，可進入使用者驗收；剩 REV-016、REV-017（LOW） | 收尾修正 |
+| 2026-11-20 | Claude → ChatGPT | S2-B1 收尾（v0.7，新 Head 見 PR #3） | 收尾複驗；之後由你驗收（有條件通過不是合併授權） |
 
 > 規格的正式變更請同步修改 SPEC／TECH，不要只在這裡留下新決策。
