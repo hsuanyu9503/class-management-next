@@ -862,3 +862,27 @@
 - 只修 PR1-R1-REV001；PR1-REV001 的逐欄對帳與 create-only 驗證保留不變。
 - 使用者決策：`未核准`
 
+### PR-1 R2 增量複驗（ChatGPT）
+
+- Reviewed Head：`8ab69e1d057f3d5ad3207d177cf81ba0c742592e`（增量 Base `18c6e7c`；GitHub 增量 5 個檔案：3 份文件、`trace-proxy.mjs`、`b3-unit.test.mjs`）
+- 結論：**R2 增量程式審查通過，沒有新的阻擋項目；可交使用者驗收與合併決策。** 這不代表審查者獨立完成了全部端到端測試，也不是合併授權。
+  - PR1-R1-REV001（query 參數名稱未遮罩）：**關閉**；
+  - PR1-REV001（稽核 PATCH 內容未對帳）：維持關閉。
+- 審查者獨立結果：
+  - 附件 12 個 SHA-256 一致；manifest 91／91 一致；Verifier 重播 15／15 一致；
+  - 前輪 PATCH 反例仍為 `BLOCKED`（`audit write body missingField:auditId`）；
+  - CI run 44908505531 success，對應同一 Head；
+  - b3-unit：32 項中 31 pass、**1 fail**。失敗的是需要本機網路的 JSONL 端到端測試：審查環境的本機連線回報 `EACCES 127.0.0.1`，讀到 0 筆紀錄。審查者不據此認定程式有缺陷，**也不把這項記為獨立通過**。
+- 只有作者證據（審查者未重跑）：乾淨 checkout 的 s2:test 97／0／0、s2:b3 31／31、mutation 31／31、還原後 b3-unit 32 pass、schema 24 個拒絕案例與 15 份 statement；Linux 隔離與 Emulator。
+- 殘餘風險（不列為阻擋項目）：
+  - query 的 `fieldPaths` 允許識別字形式的值，`pageSize` 允許有限長度的數字，之後再經過 masker。無法辨識所有「看起來像正常識別字、但沒有前綴」的不透明秘密，**不得宣稱任意內容都不會被記錄**；沿用既有的保留事項；
+  - 本輪沒有重新認證所有 body／response 的資料來源；
+  - manifest 一致與重播只證明內部一致，不證明可信的執行來源。
+- 其他保留：
+  - `PASS_ENABLED=false`；POC-001／002／008 最多 `UNATTESTED`，POC-009 `BLOCKED`；
+  - N7 `pathMapDigest` 只是自洽檢查；
+  - N5 的輸入上限不代表峰值記憶體已驗收；
+  - NOTE-c 仍是「原文缺失，待確認」；
+  - 缺少的 NOTE ①～⑦ 與 X1～X10 沒有執行。
+- 使用者決策：`待決`（PR #9 驗收與合併）
+
