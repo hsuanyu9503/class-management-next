@@ -6,7 +6,8 @@
 
 - 專案：Classroom Manager Next 技術驗證 PoC
 - 階段：**PoC Stage 1 已合併**（Merged Baseline）。合併後驗收狀態依下方實際 CI 證據記錄。
-- 目前任務：**S2-B2 第 1 批**：本機 Emulator 基礎設施與後端證據認證設計（新 PR，`poc/stage2/`、`docs/stage2/S2B2-*`）。計畫與驗收清單見 `docs/stage2/S2B2-B1-PLAN.md`。
+- 目前任務：**S2-B2 第 2 批**：本機受控讀取 API、trace 代理、狀態匯出、Observer 雛形；POC-001、002、008、009 在真實 Emulator 執行（結果最多 `UNATTESTED`）。計畫、案例對照、規格缺口與結果見 `docs/stage2/S2B2-B2-PLAN.md`。
+- **PR #4 合併事實**（2026-11-21）：使用者合併 PR #4，Merge SHA `e98c46b05fe2a127f0356e66777c4484ec768ceb`（最終 Reviewed Head `ee756da8920080d4874e1f71915b97f27431576a`，兩者無檔案差異）；合併後 CI [run 44854491499](https://github.com/hsuanyu9503/class-management-next/actions/runs/44854491499) 成功。S2B2-REV-001／003 已修正；REV-002 只有認證隔離**設計**結案，隔離未實作。合併**不等於** D-01～D-17、Q1～Q3 已核准。
 - **S2-B1 後續事實**（2026-11-20）：
   - PR #3 已由使用者合併，Merge SHA `b0f35af9388a2e75b0a141d692d59ecbf5ece446`（PR 最終 Head `d4b32ae4f6df00e50c753eb84a72e8b877b0358d`，R6 Reviewed Head `b8d2b39cfccc40151704ecd3c87fafa6a09e597a`）。
   - ChatGPT 已檢查 Reviewed Head 到合併版本的增量：只有 HANDOFF 與 REVIEW_LOG。
@@ -14,11 +15,13 @@
   - 使用者指示「合併完成，我們往下一階段繼續」。**合併不等於** D-01～D-16 已核准，也不等於正式雲端專案、付費服務或部署已獲授權。
 - 基準分支：`main`
 - 正式基準 Commit（Merge Commit）：`fdcb5b9a0788584f7a35ff507e1daff3dd7d29ec`
-- 下一階段：PoC Stage 2｜Firebase Adapter 技術驗證，**尚未開始實作**（準備清單見 `docs/STAGE2_PREP.md`；S2-B1 只有設計文件）
+- 目前階段：PoC Stage 2｜Firebase Adapter 技術驗證**進行中**（S2-B1 設計已合併；S2-B2 第 1 批基礎設施已合併；第 2 批為本機受控讀取與 UNATTESTED 案例執行）。準備清單見 `docs/STAGE2_PREP.md`。Stage 2 尚未有任何 PASS。
 - S2-B1 架構決策（負責人已確認）：A 班級精確授權、B 敏感請假資訊分離、C 正式修改只經受控 API。待決事項 D-01～D-16（含決定前的預設拒絕值與解除阻擋條件）見 `docs/stage2/S2B1-AUTHORIZATION.md` §12。
 - S2-B2 第 1 批審查：R1（Head `d6181bb1ca24`）CHANGES REQUESTED（S2B2-REV-001 HIGH、S2B2-REV-002 MEDIUM）；R2（Head `9aac89570424`）CHANGES REQUESTED（S2B2-REV-003 MEDIUM；REV-001 原情境已修正、REV-002 設計結案）；R3（Reviewed Head `d195789ac42bac841cf463ccf1ed5310807ca520`）**複驗通過**，REV-001／002／003 結案（REV-002 僅設計層面；隔離未實作）。詳見 `docs/REVIEW_LOG.md`。
-- 狀態：**本批 R2 複驗通過，待使用者驗收與合併決策**。CI 不含 Emulator 冒煙；真實 Emulator 結果是 Claude 本機證據，ChatGPT 獨立通過的是 36 項不需本機連線的測試。
-- 下一位負責人：你（驗收與合併決策；`S2B2-B1-PLAN.md` §7 的 Q1～Q3；D-01～D-17 仍待決）。S2-B2 第 2 批**尚未開始**。
+- S2-B2 第 1 批狀態：已合併（PR #4）。
+- S2-B2 第 2 批狀態：PR #5。R1（Head `37546804c61c`）CHANGES REQUESTED；R1 複驗（Head `2fa78f74cd2b`）需修正（REV001／002 結案、REV003 部分結案；R1-N1～N4）；R2 修正共兩個 commit（`d17e537` 修正、`d2dafe1` 只改測試假值的寫法）；**R2 複驗（Reviewed Head `d2dafe16ba488df60e6a2340ad9cd075c691ed2a`）通過**，可交使用者驗收與合併決策。R1-N5～N7、無前綴不透明憑證、分頁拒絕仍是待辦（`docs/REVIEW_LOG.md`）。新增規格缺口 G-1～G-4 需要負責人決策（`S2B2-B2-PLAN.md` §3）。
+- 狀態：**第 2 批 R2 複驗通過，待使用者驗收與合併決策**。POC-001／002／008 最多 `UNATTESTED`，POC-009 `BLOCKED`；Stage 1 的 72 筆 `NOT_RUN` 不變；Emulator 結果是 Claude 本機證據，CI 不含 Emulator。
+- 下一位負責人：你（驗收與合併決策；G-1～G-4、Q1～Q3、D-01～D-17 仍待決）。下一批（例如 Verifier）未取得明確指示前不開始。
 - 最近更新：2026-11-21（臺灣）
 
 ## PR #1 正式合併紀錄
@@ -121,5 +124,12 @@
 | 2026-11-20 | ChatGPT → Claude | 複驗 `9aac89570424`：CHANGES REQUESTED（S2B2-REV-003 MEDIUM） | R2 修正 |
 | 2026-11-20 | Claude → ChatGPT | S2-B2 第 1 批 R2 修正（Head `d195789ac42b`） | 複驗 |
 | 2026-11-21 | ChatGPT → 你 | 複驗 `d195789ac42b`：通過，REV-001～003 結案，可進入使用者驗收 | 使用者驗收與合併決策（待決） |
+| 2026-11-21 | 你 | 合併 PR #4 → `e98c46b05fe2`；指示繼續下一步 | S2-B2 第 2 批 |
+| 2026-11-21 | Claude → ChatGPT | S2-B2 第 2 批 PR #5（Base `e98c46b05fe2`，Head `37546804c61c`） | L3 獨立審查 |
+| 2026-11-21 | ChatGPT → Claude | 審查 `37546804c61c`：CHANGES REQUESTED（S2B2-B2-REV001 HIGH；REV002、REV003 MEDIUM） | R1 修正 |
+| 2026-11-21 | Claude → ChatGPT | S2-B2 第 2 批 R1 修正（Head `2fa78f74cd2b`） | 複驗 |
+| 2026-11-21 | ChatGPT → Claude | 複驗 `2fa78f74cd2b`：需修正（R1-N1 MEDIUM；R1-N2～N4 LOW） | R2 修正 |
+| 2026-11-21 | Claude → ChatGPT | S2-B2 第 2 批 R2 修正（Head `d2dafe16ba48`，兩個 commit） | R2 增量複驗 |
+| 2026-11-21 | ChatGPT → 你 | 複驗 `d2dafe16ba48`：通過，可交使用者驗收與合併決策 | 使用者驗收與合併決策（待決） |
 
 > 規格的正式變更請同步修改 SPEC／TECH，不要只在這裡留下新決策。

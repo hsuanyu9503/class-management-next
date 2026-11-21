@@ -479,3 +479,118 @@
 - 未核准：Q1／Q2／Q3、D-01～D-17。72 筆正式後端計畫維持 `NOT_RUN`；技術選型 `UNDECIDED`。
 - ChatGPT 審查不是 GitHub 正式 Approve。
 - 使用者決策：`待驗收與合併決策`
+
+## S2-B2 第 1 批｜合併
+
+- 使用者合併 PR #4：Merge SHA `e98c46b05fe2a127f0356e66777c4484ec768ceb`；最終 Reviewed Head `ee756da8920080d4874e1f71915b97f27431576a`，兩者無檔案差異；合併後 CI [run 44854491499](https://github.com/hsuanyu9503/class-management-next/actions/runs/44854491499) 成功。
+- 合併不代表 D-01～D-17、Q1～Q3 已核准；REV-002 只在設計層面結案。
+
+## S2-B2 第 2 批｜本機受控讀取 API、trace、Observer 雛形與四個 P0 案例
+
+- Base SHA：`e98c46b05fe2a127f0356e66777c4484ec768ceb`
+- Reviewed Head SHA：`[尚未審查]`
+- 風險等級（初評）：**L3**。理由：第一次實作身分與授權邊界（token 驗證、binding／principal／membership、scope 解析、capability）、稽核寫入，以及作為後續認證基礎的 trace 與 Observer。最終等級由負責人決定。
+- 範圍：`poc/stage2/`（API、授權、時間驗證、trace 代理、遮罩、測資、Adapter、Observer、判定、總控與測試）、`docs/stage2/S2B2-B2-PLAN.md`、`S2B2-ADAPTER-PLAN.md` 狀態列、`HANDOFF`、`REVIEW_LOG`。
+- 不修改：Stage 1 鎖定檔、fixtures、`P0_PINNED`、安全斷言、外部錨定、`.github/workflows/`、根目錄 `package.json`、`tests/`、`firestore.rules`、`S2B1-*` 規格、`S2B2-ATTESTATION.md`。
+- 結果：POC-001、002、008 `UNATTESTED`＋觀察值符合契約；POC-009 `BLOCKED`（G-1、G-4）。**沒有 PASS**。
+- 新增規格缺口：G-1～G-4（`S2B2-B2-PLAN.md` §3），未自行選擇選項。
+- Reviewed Head SHA（R1）：`37546804c61c9c0ce081fa5db415b89269e4e163`
+- ChatGPT 結論（R1）：**CHANGES REQUESTED**（S2B2-B2-REV001 HIGH；REV002、REV003 MEDIUM）
+- 使用者決策：`未核准`
+
+### R1 審查摘要（ChatGPT）
+
+- 四案例 trace／state 16 個檔案雜湊與 summary 一致；Observer 重播結果與附件相同（使用作者的 trace／state，不是新的 Emulator 執行）。
+- 審查者 Node 測試 57 項中 53 通過、4 項失敗；4 項都涉及本機 HTTP（`fetch failed`），屬環境限制，**不列為通過**，也不據此判定產品回歸。
+- 真實 Emulator 結果是作者本機證據，未獨立重跑；R1 交付的 tar 只含四個正式案例。
+
+### R1 回應（Claude，新 Head 見 PR #5）
+
+| 編號 | 等級 | 處理 | 證據 |
+|---|---|---|---|
+| S2B2-B2-REV001 | HIGH | **已修正**：`src/api/response-shape.mjs` `checkEntry()`；兩個聚合端點在輸出或計數前逐筆檢查子文件的路徑、`workspaceId`、`classId`、`sessionId`、`attendanceEntryId` 與必要欄位；任一不符整個請求 `FORBIDDEN`，`auditLog` 記 `deny`／`SCOPE_INTEGRITY_ERROR`（型別或值錯誤為 `DATA_INTEGRITY_ERROR`） | 單元：兩端點 × 10 種 scope 不符＋3 種資料錯誤（含審查者重現）；Emulator HTTP：兩端點 × 8 情境，每項先跑允許的對照組，再驗 403、回應只有 `code`／`traceId`、不含 `ST-FOREIGN`、稽核原因碼 |
+| S2B2-B2-REV002 | MEDIUM | **已修正**：API 請求 body 白名單（`REQUEST_SHAPE_INVALID`）；front trace 只記錄白名單欄位；遮罩涵蓋任何大小寫與分隔符號的 `authorization` 等鍵，以及字串中的 `Bearer …`、JWT 形狀 | 單元：未知欄位、巢狀、陣列、大小寫變體；Emulator：7 種夾帶虛構 token 的請求全部 `FORBIDDEN`，**實際寫出的** front trace 檔不含任何虛構 token 或 JWT 形狀字串；全執行目錄遮罩掃描 0 洩漏 |
+| S2B2-B2-REV003 | MEDIUM | **已修正**：`rosterSnapshot`、`coverageSegments`、核對事項 `evidence` 逐筆驗證並只輸出白名單欄位；非陣列、非物件、缺欄或型別錯誤 → `DATA_INTEGRITY_ERROR` | 單元：額外姓名／email／備註／巢狀資料不輸出；7 種形狀錯誤被拒；Emulator：**直接對 API** 取得原始 HTTP 回應，額外欄位不出現；3 種名單形狀錯誤 `FORBIDDEN` |
+
+- 變異檢查：把 REV001／003 的檢查改回原樣，新單元測試 2 項失敗；把 REV002 的遮罩改回原樣，1 項失敗。
+- 證據：每個負向、對照與變異情境的原始 trace、狀態（含 `auditLog`）與結果另存，並附 `artifact-manifest.json`。
+- 範圍未擴大：沒有新增 capability、沒有修改契約、fixtures、oracle、S2-B1 規格或 CI；POC-009 維持 `BLOCKED`；72 筆後端計畫維持 `NOT_RUN`。
+
+### R1 複驗（ChatGPT，Reviewed Head `2fa78f74cd2b3b14e7e83934d372fc5022e88a30`）
+
+- 結論：需修正。REV001、REV002 結案；REV003 部分結案。新增 R1-N1（MEDIUM）、R1-N2～N4（LOW）；R1-N5～N7 列為後續。
+
+### R2 回應（Claude，依 `templates/CLAUDE_REVIEW_RESPONSE.md`）
+
+- PR：https://github.com/hsuanyu9503/class-management-next/pull/5
+- 審查版本 Head SHA：`2fa78f74cd2b3b14e7e83934d372fc5022e88a30`
+- 修正後 Head SHA：`d2dafe16ba488df60e6a2340ad9cd075c691ed2a`。本輪是**兩個** commit（更正先前「單一 commit」的記載）：`d17e537` 是 R1-N1～N4 修正；`d2dafe1` 只把測試中的虛構憑證形狀值改為執行時組字串，原因是 `export_review_packet.py` 判定原寫法疑似憑證。沒有改寫歷史。
+
+| ID | 處理結果 | 修改位置／原因 | 驗證證據 | 待使用者決策 |
+|---|---|---|---|---|
+| R1-N1 | 已修 | `poc/stage2/src/api/response-shape.mjs`：`date` 以 `parseLocalDate` 驗證；`kind` ∈ {`daily`, `period`}（S2-B1 資料模型 §3.5 已定義，未新增 G-9）；不符 → `DATA_INTEGRITY_ERROR` | 單元 10 種（`date` 物件／陣列／2026-02-30／含時間／數字／缺少；`kind` 陣列／未知／大寫／缺少）；Emulator 3 項（含對照組、403、回應只有 `code`／`traceId`、`auditLog` 恰一筆 `deny`） | 無 |
+| R1-N2 | 已修 | `src/api/request-shape.mjs`、`src/mask.mjs`、`src/authz.mjs`（export `ID_RE`）：只記錄自有 `op`、已知 ID 欄位、ID 形狀且非憑證前綴的值；憑證前綴值在所有 trace 遮罩 | 單元：`sk-live-…`、`ghp_…`、`password=…`、60000 字元、JWT 前綴、原型鏈名稱都不出現在回傳值；Emulator：2 種形狀合法但值是不透明憑證的請求，實際寫出的 front trace 不含該字串；全目錄 337 檔掃描 0 洩漏（含 back trace） | 無（殘餘風險已記錄在計畫 §8） |
+| R1-N3 | 已修 | `src/api/response-shape.mjs`：`attendanceEntry.read` 驗證父層為 `attendanceSessions` 且 `sessionId` 等於路徑 | 單元 4 種；Emulator 2 項（`sessionId` 不符、存放在非 `attendanceSessions` 父層），含對照組 | 無 |
+| R1-N4 | 已修 | `src/api/store.mjs`：`nextPageToken` → `DATA_INTEGRITY_ERROR`／`LIST_TRUNCATED`，整個請求拒絕 | 單元（以替換 `fetch` 測試，**不需要本機連線**）：兩端點都拒絕，完整清單的對照組通過 | 無 |
+| R1-N5 | 延後 | OPERATIONS 原型鏈名稱（`authorize` 內 `OPERATIONS[op]` 的查找方式）；本輪只在 trace 端以 `Object.hasOwn` 處理 | — | 無 |
+| R1-N6 | 延後 | mask 對非 Bearer `Authorization` 值的雜湊與相關註解 | — | 無 |
+| R1-N7 | 延後 | 遮罩掃描的 secrets 蒐集範圍（目前只含最後一組 token／密碼與刻意送出的虛構值） | — | 無 |
+
+變異檢查（本機）：
+
+| 改回原樣的修正 | 擋住的測試 |
+|---|---|
+| R1-N1 | `batch2-unit` #19 |
+| R1-N2（trace 逐值記錄） | `batch2-unit` #20 |
+| R1-N2（遮罩憑證前綴） | `batch2-unit` #23 |
+| R1-N3 | `batch2-unit` #21 |
+| R1-N4 | `batch2-unit` #22 |
+
+每次只有該項失敗，其餘通過。
+
+#### 已執行的測試
+
+在新 Head 的乾淨 checkout 執行，原始輸出附在複驗請求中。
+
+| 命令／操作 | 結果 | 對應 Commit／連結 |
+|---|---|---|
+| npm run check | 成功 | 新 Head |
+| npm test | 成功 | 新 Head |
+| npm run stage1:all | 成功 | 新 Head |
+| verify-anchor、受保護路徑與鎖檔 diff | 成功 | 新 Head |
+| s2:test、s2:smoke、s2:occupied-real、s2:cases | 成功 | 新 Head（Claude 本機證據） |
+| Windows、官方文件、CI 上的 Emulator | 未執行（NOT_RUN） | — |
+
+#### 未解風險與新發現
+
+- （LOW）沒有已知前綴的 ID 形狀不透明憑證仍可能被記錄為 `target` 值（計畫 §8）。
+- （資訊）`DATA_INTEGRITY_ERROR`、`REQUEST_SHAPE_INVALID`、`LIST_TRUNCATED` 是實作層拒絕規則；是否寫入 S2-B1 由審查與負責人決定。
+
+### R2 複驗（ChatGPT，Reviewed Head `d2dafe16ba488df60e6a2340ad9cd075c691ed2a`，2026-11-21）
+
+依使用者轉交的 ChatGPT 複審報告記錄；以下是該報告的摘要，不是 Claude 的結論。
+
+- 結論：**本輪修正複驗通過，可交使用者驗收與合併決策**；未發現需阻擋本批本機 PoC 的 HIGH／MEDIUM 缺失。不是正式後端驗收、GitHub Approve 或合併授權。
+- 結案：REV001、REV002（含 R1 鍵名變體）、REV003、R1-N1、R1-N2（本輪修正範圍）、R1-N3、R1-N4。
+- 審查者核對：
+  - R2 manifest 338／338 檔案大小與 SHA-256 吻合；
+  - 獨立 Node 測試 58 項通過、0 失敗（不含 store HTTP 回歸與 `nondestructive.test.mjs`，本輪未執行）；
+  - Observer 以作者的 trace／state 重播 11／11 與附件一致（不是新的 Emulator 執行）；
+  - CI [run 44872969720](https://github.com/hsuanyu9503/class-management-next/actions/runs/44872969720) 對應本 Head（不含 Emulator）。
+- 作者證據（審查者未獨立重跑 Emulator）：乾淨 checkout `s2:test` 65／65、根目錄檢查、錨定、smoke、occupied、cases 成功，`gitDirty = false`；負向與對照 71／71、變異 7／7。
+- 審查者另外以函式層重現確認：R1 版本中，把虛構 JWT 放在 target 鍵名時 token 會出現在 trace；R2 只留下 `target.unknownField = {valueRecorded: false}`。
+
+**可追蹤待辦**（未修復；作者的「延後」記載不等於使用者批准）：
+
+| 項目 | 說明 |
+|---|---|
+| R1-N5 | `authorize` 內 `OPERATIONS[op]` 的原型鏈查找 |
+| R1-N6 | mask 對非 Bearer `Authorization` 值的雜湊與註解 |
+| R1-N7 | 遮罩掃描的 secrets 蒐集範圍；零洩漏只涵蓋可識別的值與規則 |
+| 不透明憑證 | 沒有已知前綴、形狀像 ID 的憑證仍可能被記錄；只能用於本機虛構資料 |
+| 分頁 | 單頁 300 筆以上一律拒絕；未實作跨頁讀取，不得宣稱完整查詢成功 |
+| 認證 | 沒有 Verifier、可信簽章、D-17、§9 隔離；Emulator token 無簽章。雜湊、重播一致與 CI 成功都不能把 `UNATTESTED` 提升為 PASS |
+| 待決 | G-1～G-4、D-01～D-17、Q1～Q3；POC-009 需要權限決策與可信節次日曆；實作層錯誤碼是否寫入規格另行處理 |
+
+- 使用者決策：`待驗收與合併決策`
+

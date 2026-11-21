@@ -1,4 +1,6 @@
-# PoC Stage 2｜S2-B2 第 1 批：本機 Emulator 基礎設施冒煙
+# PoC Stage 2｜S2-B2：本機 Emulator 基礎設施（第 1 批）與受控讀取 API 案例執行（第 2 批）
+
+> **第 2 批**：本機受控讀取 API、trace 記錄代理、狀態匯出、Observer 雛形，以及 POC-001、002、008、009 在真實 Emulator 上的執行。結果一律 `UNATTESTED`／`BLOCKED`，**沒有 PASS**。設計、案例對照與結果見 `docs/stage2/S2B2-B2-PLAN.md`。指令：`npm run s2:cases`。
 
 > **這不是後端契約測試。** 這裡只驗證「本機 Firebase Auth／Firestore Emulator 能啟動、只連本機、能載入與清除虛構資料、預設拒絕 client 存取」。Stage 1 的 36 項契約與 72 筆計畫維持 `NOT_RUN`；冒煙成功不等於任何 POC 案例 PASS。
 
@@ -21,6 +23,7 @@ npm ci
 npm run s2:test          # guard + 非破壞性測試（不需 Emulator）
 npm run s2:smoke         # 冒煙與全部負向控制
 npm run s2:occupied-real # 真實 Emulator 已占用時，確認總控不碰既有資料
+npm run s2:cases         # 第 2 批：四個案例＋負向／變異控制（UNATTESTED）
 ```
 
 - 只安裝在 `poc/stage2/node_modules`（專案本地），不需要全域安裝 firebase-tools。版本以 `package-lock.json` 鎖定（`firebase-tools` 精確版本 `15.35.0`）。
@@ -80,3 +83,12 @@ npm run s2:occupied-real # 真實 Emulator 已占用時，確認總控不碰既�
 | `test/real-occupied.mjs`、`scripts/run-occupied-real.mjs` | 在真實 Emulator 已占用且有外來資料時執行總控，確認資料不變 |
 | `test/negative-controls/` | 規則放寬負向控制（不用於正常執行） |
 | `scripts/run-smoke.mjs` | 冒煙與全部負向控制的總控入口 |
+| **第 2 批** | |
+| `src/api/response-shape.mjs`、`src/api/request-shape.mjs` | R1：子文件 scope 逐筆檢查與巢狀欄位白名單投影；請求 body 白名單與 trace 可記錄欄位 |
+| `src/api/server.mjs`、`src/api/token.mjs`、`src/api/store.mjs` | 本機受控讀取 API（只綁定 loopback、只支援 Emulator 模式）、token claim 檢查、權威文件讀取與 `auditLog` 寫入 |
+| `src/authz.mjs`、`src/time-validate.mjs` | 分支 C 授權（S2-B1 §6.1–6.2、§5）與嚴格時間驗證 |
+| `src/trace-proxy.mjs`、`src/mask.mjs` | front／back 記錄代理與寫入前遮罩 |
+| `src/world.mjs`、`src/harness.mjs` | 案例測資（唯讀 fixtures）、擁有權下的重置、狀態匯出、服務生命週期 |
+| `src/adapter.mjs`、`src/observer.mjs`、`src/verdict.mjs` | Firebase Adapter（Stage 1 介面）、Observer 雛形、Stage 2 判定（無 PASS） |
+| `scripts/run-cases.mjs`、`test/case-run.mjs`、`test/api-disconnect.mjs` | 第 2 批總控、案例與控制、真實斷線檢查 |
+| `test/batch2-unit.test.mjs` | 第 2 批單元測試（不需 Emulator；最後一項使用本機 HTTP） |
