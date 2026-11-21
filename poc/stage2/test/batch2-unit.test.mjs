@@ -293,7 +293,7 @@ test('R1-N1: session date must be a real YYYY-MM-DD and kind daily/period, else 
 });
 
 test('R1-N2: trace keeps only known op names, known id fields and id-shaped, non-credential values', () => {
-  const secretsIn = ['sk-live-FAKE0123456789abcdef', 'ghp_FAKE0123456789abcdefABCDEF', 'password=FAKE-pw-123', 'x'.repeat(60000), 'eyJhbGciOi.FAKE'];
+  const secretsIn = [['sk', 'live', 'FAKE0123456789abcdef'].join('-'), ['ghp', 'FAKE0123456789abcdefABCDEF'].join('_'), 'password=FAKE-pw-123', 'x'.repeat(60000), 'eyJhbGciOi.FAKE'];
   const ok = traceableRequestBody({ op: 'attendanceSession.read', target: { sessionId: 'AS-A17-20261117-DAILY' }, claimedScope: { workspaceId: 'WS-A17', classId: 'CLASS-606-A17' } });
   assert.deepEqual(ok, { op: 'attendanceSession.read', target: { sessionId: 'AS-A17-20261117-DAILY' }, claimedScope: { workspaceId: 'WS-A17', classId: 'CLASS-606-A17' } });
   for (const sec of secretsIn) {
@@ -335,6 +335,6 @@ test('R1-N4: a listing with nextPageToken fails closed (no partial entries / cou
 
 test('R1-N2: credential-prefixed values are masked in any trace (e.g. a backend query carrying the target id)', () => {
   const m = makeMasker([]);
-  const t = JSON.stringify(m.maskValue({ structuredQuery: { where: { fieldFilter: { value: { stringValue: 'sk-live-FAKE0123456789' } } } }, ids: ['ghp_FAKE0123456789', 'AE-EN-A17-1151-0001'] }));
+  const t = JSON.stringify(m.maskValue({ structuredQuery: { where: { fieldFilter: { value: { stringValue: ['sk', 'live', 'FAKE0123456789'].join('-') } } } }, ids: [['ghp', 'FAKE0123456789'].join('_'), 'AE-EN-A17-1151-0001'] }));
   assert.ok(!t.includes('sk-live-FAKE') && !t.includes('ghp_FAKE') && t.includes('AE-EN-A17-1151-0001'), t);
 });

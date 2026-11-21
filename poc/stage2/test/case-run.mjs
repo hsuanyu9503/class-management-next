@@ -284,7 +284,7 @@ const allFiles = Object.keys(digests);
   for (const u of Object.values(users)) secrets.push(u.token, u.password);
   const stack = await h.startStack({ frontFile: path.join(runDir, 'masking/trace-front.jsonl'), backFile: path.join(runDir, 'masking/trace-back.jsonl') });
   mkdirSync(path.join(runDir, 'masking'), { recursive: true });
-  const FAKE = ['eyJhbGciOiJub25lIiwidHlwIjoiSldUIn0.eyJzdWIiOiJGQUtFLVJFVjAwMi1BIn0.', 'eyJhbGciOiJub25lIiwidHlwIjoiSldUIn0.eyJzdWIiOiJGQUtFLVJFVjAwMi1CIn0.', 'FAKE-OPAQUE-REV002-CREDENTIAL-0123456789', 'sk-live-FAKER1N2opaque0123456789abcdef', 'ghp_FAKER1N2opaque0123456789ABCDEFabcd'];
+  const FAKE = ['eyJhbGciOiJub25lIiwidHlwIjoiSldUIn0.eyJzdWIiOiJGQUtFLVJFVjAwMi1BIn0.', 'eyJhbGciOiJub25lIiwidHlwIjoiSldUIn0.eyJzdWIiOiJGQUtFLVJFVjAwMi1CIn0.', 'FAKE-OPAQUE-REV002-CREDENTIAL-0123456789', ['sk', 'live', 'FAKER1N2opaque0123456789abcdef'].join('-'), ['ghp', 'FAKER1N2opaque0123456789ABCDEFabcd'].join('_')];
   secrets.push(...FAKE);
   const bodies = [
     { ...SESSION, note: { password: users[T].password, displayName: names[0], email: users[T].email } },
