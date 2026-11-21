@@ -1,6 +1,7 @@
 # S2-B2｜Firebase Adapter 對接計畫與後續批次 v0.1（草案）
 
-> **狀態：計畫，未實作。** 本批沒有 Firebase Adapter、受控 API、產品 Security Rules，也沒有執行任何 Stage 1 契約案例。
+> **狀態：S2-B2 #2 已實作並在本機執行**（`S2B2-B2-PLAN.md`）：受控讀取 API、trace 代理、Observer 雛形、Firebase Adapter；POC-001、002、008 為 `UNATTESTED`（觀察值符合契約），POC-009 為 `BLOCKED`（G-1、G-4）。沒有 PASS。產品 Security Rules 仍是拒絕一切。
+> 以下為 S2-B2 #1 時的計畫原文。
 
 ## 1. 與既有 Stage 1 執行器的介面
 

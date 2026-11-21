@@ -479,3 +479,21 @@
 - 未核准：Q1／Q2／Q3、D-01～D-17。72 筆正式後端計畫維持 `NOT_RUN`；技術選型 `UNDECIDED`。
 - ChatGPT 審查不是 GitHub 正式 Approve。
 - 使用者決策：`待驗收與合併決策`
+
+## S2-B2 第 1 批｜合併
+
+- 使用者合併 PR #4：Merge SHA `e98c46b05fe2a127f0356e66777c4484ec768ceb`；最終 Reviewed Head `ee756da8920080d4874e1f71915b97f27431576a`，兩者無檔案差異；合併後 CI [run 44854491499](https://github.com/hsuanyu9503/class-management-next/actions/runs/44854491499) 成功。
+- 合併不代表 D-01～D-17、Q1～Q3 已核准；REV-002 只在設計層面結案。
+
+## S2-B2 第 2 批｜本機受控讀取 API、trace、Observer 雛形與四個 P0 案例
+
+- Base SHA：`e98c46b05fe2a127f0356e66777c4484ec768ceb`
+- Reviewed Head SHA：`[尚未審查]`
+- 風險等級（初評）：**L3**。理由：第一次實作身分與授權邊界（token 驗證、binding／principal／membership、scope 解析、capability）、稽核寫入，以及作為後續認證基礎的 trace 與 Observer。最終等級由負責人決定。
+- 範圍：`poc/stage2/`（API、授權、時間驗證、trace 代理、遮罩、測資、Adapter、Observer、判定、總控與測試）、`docs/stage2/S2B2-B2-PLAN.md`、`S2B2-ADAPTER-PLAN.md` 狀態列、`HANDOFF`、`REVIEW_LOG`。
+- 不修改：Stage 1 鎖定檔、fixtures、`P0_PINNED`、安全斷言、外部錨定、`.github/workflows/`、根目錄 `package.json`、`tests/`、`firestore.rules`、`S2B1-*` 規格、`S2B2-ATTESTATION.md`。
+- 結果：POC-001、002、008 `UNATTESTED`＋觀察值符合契約；POC-009 `BLOCKED`（G-1、G-4）。**沒有 PASS**。
+- 新增規格缺口：G-1～G-4（`S2B2-B2-PLAN.md` §3），未自行選擇選項。
+- ChatGPT 結論：`未審查`
+- 使用者決策：`未核准`
+
