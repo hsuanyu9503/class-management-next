@@ -524,7 +524,7 @@
 
 - PR：https://github.com/hsuanyu9503/class-management-next/pull/5
 - 審查版本 Head SHA：`2fa78f74cd2b3b14e7e83934d372fc5022e88a30`
-- 修正後 Head SHA：見 PR #5（本輪單一 commit）
+- 修正後 Head SHA：`d2dafe16ba488df60e6a2340ad9cd075c691ed2a`。本輪是**兩個** commit（更正先前「單一 commit」的記載）：`d17e537` 是 R1-N1～N4 修正；`d2dafe1` 只把測試中的虛構憑證形狀值改為執行時組字串，原因是 `export_review_packet.py` 判定原寫法疑似憑證。沒有改寫歷史。
 
 | ID | 處理結果 | 修改位置／原因 | 驗證證據 | 待使用者決策 |
 |---|---|---|---|---|
@@ -565,4 +565,32 @@
 
 - （LOW）沒有已知前綴的 ID 形狀不透明憑證仍可能被記錄為 `target` 值（計畫 §8）。
 - （資訊）`DATA_INTEGRITY_ERROR`、`REQUEST_SHAPE_INVALID`、`LIST_TRUNCATED` 是實作層拒絕規則；是否寫入 S2-B1 由審查與負責人決定。
+
+### R2 複驗（ChatGPT，Reviewed Head `d2dafe16ba488df60e6a2340ad9cd075c691ed2a`，2026-11-21）
+
+依使用者轉交的 ChatGPT 複審報告記錄；以下是該報告的摘要，不是 Claude 的結論。
+
+- 結論：**本輪修正複驗通過，可交使用者驗收與合併決策**；未發現需阻擋本批本機 PoC 的 HIGH／MEDIUM 缺失。不是正式後端驗收、GitHub Approve 或合併授權。
+- 結案：REV001、REV002（含 R1 鍵名變體）、REV003、R1-N1、R1-N2（本輪修正範圍）、R1-N3、R1-N4。
+- 審查者核對：
+  - R2 manifest 338／338 檔案大小與 SHA-256 吻合；
+  - 獨立 Node 測試 58 項通過、0 失敗（不含 store HTTP 回歸與 `nondestructive.test.mjs`，本輪未執行）；
+  - Observer 以作者的 trace／state 重播 11／11 與附件一致（不是新的 Emulator 執行）；
+  - CI [run 44872969720](https://github.com/hsuanyu9503/class-management-next/actions/runs/44872969720) 對應本 Head（不含 Emulator）。
+- 作者證據（審查者未獨立重跑 Emulator）：乾淨 checkout `s2:test` 65／65、根目錄檢查、錨定、smoke、occupied、cases 成功，`gitDirty = false`；負向與對照 71／71、變異 7／7。
+- 審查者另外以函式層重現確認：R1 版本中，把虛構 JWT 放在 target 鍵名時 token 會出現在 trace；R2 只留下 `target.unknownField = {valueRecorded: false}`。
+
+**可追蹤待辦**（未修復；作者的「延後」記載不等於使用者批准）：
+
+| 項目 | 說明 |
+|---|---|
+| R1-N5 | `authorize` 內 `OPERATIONS[op]` 的原型鏈查找 |
+| R1-N6 | mask 對非 Bearer `Authorization` 值的雜湊與註解 |
+| R1-N7 | 遮罩掃描的 secrets 蒐集範圍；零洩漏只涵蓋可識別的值與規則 |
+| 不透明憑證 | 沒有已知前綴、形狀像 ID 的憑證仍可能被記錄；只能用於本機虛構資料 |
+| 分頁 | 單頁 300 筆以上一律拒絕；未實作跨頁讀取，不得宣稱完整查詢成功 |
+| 認證 | 沒有 Verifier、可信簽章、D-17、§9 隔離；Emulator token 無簽章。雜湊、重播一致與 CI 成功都不能把 `UNATTESTED` 提升為 PASS |
+| 待決 | G-1～G-4、D-01～D-17、Q1～Q3；POC-009 需要權限決策與可信節次日曆；實作層錯誤碼是否寫入規格另行處理 |
+
+- 使用者決策：`待驗收與合併決策`
 

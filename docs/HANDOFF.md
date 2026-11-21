@@ -19,8 +19,9 @@
 - S2-B1 架構決策（負責人已確認）：A 班級精確授權、B 敏感請假資訊分離、C 正式修改只經受控 API。待決事項 D-01～D-16（含決定前的預設拒絕值與解除阻擋條件）見 `docs/stage2/S2B1-AUTHORIZATION.md` §12。
 - S2-B2 第 1 批審查：R1（Head `d6181bb1ca24`）CHANGES REQUESTED（S2B2-REV-001 HIGH、S2B2-REV-002 MEDIUM）；R2（Head `9aac89570424`）CHANGES REQUESTED（S2B2-REV-003 MEDIUM；REV-001 原情境已修正、REV-002 設計結案）；R3（Reviewed Head `d195789ac42bac841cf463ccf1ed5310807ca520`）**複驗通過**，REV-001／002／003 結案（REV-002 僅設計層面；隔離未實作）。詳見 `docs/REVIEW_LOG.md`。
 - S2-B2 第 1 批狀態：已合併（PR #4）。
-- S2-B2 第 2 批狀態：PR #5。R1（Head `37546804c61c`）CHANGES REQUESTED；R1 複驗（Head `2fa78f74cd2b`）需修正（REV001／002 結案、REV003 部分結案；R1-N1～N4）；R2 修正已提交（單一 commit），待 ChatGPT 複驗 R2 增量（L3）。R1-N5～N7 延後。新增規格缺口 G-1～G-4 需要負責人決策（`S2B2-B2-PLAN.md` §3）。
-- 下一位負責人：ChatGPT（第 2 批 R2 增量複驗，L3）→ 你（驗收與合併決策；G-1～G-4；Q1～Q3；D-01～D-17 仍待決）。
+- S2-B2 第 2 批狀態：PR #5。R1（Head `37546804c61c`）CHANGES REQUESTED；R1 複驗（Head `2fa78f74cd2b`）需修正（REV001／002 結案、REV003 部分結案；R1-N1～N4）；R2 修正共兩個 commit（`d17e537` 修正、`d2dafe1` 只改測試假值的寫法）；**R2 複驗（Reviewed Head `d2dafe16ba488df60e6a2340ad9cd075c691ed2a`）通過**，可交使用者驗收與合併決策。R1-N5～N7、無前綴不透明憑證、分頁拒絕仍是待辦（`docs/REVIEW_LOG.md`）。新增規格缺口 G-1～G-4 需要負責人決策（`S2B2-B2-PLAN.md` §3）。
+- 狀態：**第 2 批 R2 複驗通過，待使用者驗收與合併決策**。POC-001／002／008 最多 `UNATTESTED`，POC-009 `BLOCKED`；Stage 1 的 72 筆 `NOT_RUN` 不變；Emulator 結果是 Claude 本機證據，CI 不含 Emulator。
+- 下一位負責人：你（驗收與合併決策；G-1～G-4、Q1～Q3、D-01～D-17 仍待決）。下一批（例如 Verifier）未取得明確指示前不開始。
 - 最近更新：2026-11-21（臺灣）
 
 ## PR #1 正式合併紀錄
@@ -128,6 +129,7 @@
 | 2026-11-21 | ChatGPT → Claude | 審查 `37546804c61c`：CHANGES REQUESTED（S2B2-B2-REV001 HIGH；REV002、REV003 MEDIUM） | R1 修正 |
 | 2026-11-21 | Claude → ChatGPT | S2-B2 第 2 批 R1 修正（Head `2fa78f74cd2b`） | 複驗 |
 | 2026-11-21 | ChatGPT → Claude | 複驗 `2fa78f74cd2b`：需修正（R1-N1 MEDIUM；R1-N2～N4 LOW） | R2 修正 |
-| 2026-11-21 | Claude → ChatGPT | S2-B2 第 2 批 R2 修正（Head 見 PR #5） | R2 增量複驗 |
+| 2026-11-21 | Claude → ChatGPT | S2-B2 第 2 批 R2 修正（Head `d2dafe16ba48`，兩個 commit） | R2 增量複驗 |
+| 2026-11-21 | ChatGPT → 你 | 複驗 `d2dafe16ba48`：通過，可交使用者驗收與合併決策 | 使用者驗收與合併決策（待決） |
 
 > 規格的正式變更請同步修改 SPEC／TECH，不要只在這裡留下新決策。
