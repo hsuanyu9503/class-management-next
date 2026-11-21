@@ -1,0 +1,7 @@
+node_modules/
+evidence/runs/
+evidence/private/
+firebase-debug.log
+firestore-debug.log
+*-debug.log
+.firebase/

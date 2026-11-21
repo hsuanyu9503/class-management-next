@@ -1,0 +1,19 @@
+{
+  "name": "classroom-manager-next-poc-stage2",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "S2-B2 batch 1: local-only Firebase Emulator infrastructure smoke; not a backend contract run",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "s2:test": "node --test test/guard.test.mjs test/port-state.test.mjs test/nondestructive.test.mjs",
+    "s2:guard-test": "node --test test/guard.test.mjs",
+    "s2:smoke": "node scripts/run-smoke.mjs",
+    "s2:occupied-real": "node scripts/run-occupied-real.mjs"
+  },
+  "devDependencies": {
+    "firebase-tools": "15.35.0"
+  }
+}

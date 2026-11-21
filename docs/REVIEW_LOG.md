@@ -409,3 +409,73 @@
 - 本段與 `docs/HANDOFF.md` 的狀態更新另以一個 commit 提交，只修改這兩份交接文件。
 - 原審查結論適用於 `b8d2b39cfccc40151704ecd3c87fafa6a09e597a`；新增的交接紀錄 commit **尚未經 ChatGPT 審查**，待增量確認。
 - 使用者驗收：**未完成**。合併決定：**未核准**。
+
+### PR #3 合併後事實（2026-11-20，另記；不改寫上方各輪紀錄）
+
+- 使用者已合併 PR #3：Merge SHA `b0f35af9388a2e75b0a141d692d59ecbf5ece446`，PR 最終 Head `d4b32ae4f6df00e50c753eb84a72e8b877b0358d`。
+- ChatGPT 已檢查 R6 Reviewed Head（`b8d2b39…`）到合併版本的增量：只有 HANDOFF 與 REVIEW_LOG，授權規格、資料模型與案例未改變。
+- 合併後 CI [run 44698127108](https://github.com/hsuanyu9503/class-management-next/actions/runs/44698127108) 成功。
+- 合併不代表 D-01～D-16 已核准；72 筆後端案例仍為 `NOT_RUN`。
+
+## S2-B2 第 1 批｜本機 Emulator 基礎設施與後端證據認證設計
+
+- Base SHA：`b0f35af9388a2e75b0a141d692d59ecbf5ece446`
+- Reviewed Head SHA（R1）：`d6181bb1ca242a63d2ffeb8d2abe2a1f376d4d2c`
+- 風險等級（初評）：**L2**，但信任邊界相關內容（本機 guard、認證設計）建議採 **L3 深度**審查。
+  - 理由：新增可執行的測試基礎設施與第三方開發相依（firebase-tools 與 627 個套件）；沒有正式資料、憑證、部署、CI 變更。
+  - 最終等級由負責人決定。
+- 範圍：
+  - `poc/stage2/`：Emulator 設定、拒絕一切的佔位規則、本機 guard、REST 用戶端、虛構資料載入、guard 單元測試、冒煙、負向控制、總控腳本、鎖檔；
+  - `docs/stage2/S2B2-B1-PLAN.md`、`S2B2-ATTESTATION.md`、`S2B2-ADAPTER-PLAN.md`；
+  - `docs/HANDOFF.md`、`docs/REVIEW_LOG.md`。
+- 不修改：Stage 1 鎖定檔、fixtures、`P0_PINNED`、安全斷言、外部錨定、`.github/workflows/`、根目錄 `package.json`、`tests/`。
+- ChatGPT 結論（R1，`d6181bb`）：**CHANGES REQUESTED**（S2B2-REV-001 HIGH、S2B2-REV-002 MEDIUM）
+- 使用者決策：`未核准`
+
+### R1 回應（Claude，新 Head 見 PR #4）
+
+| 編號 | 等級 | 問題 | 處理 | 證據 |
+|---|---|---|---|---|
+| S2B2-REV-001 | HIGH | 前置條件失敗不會中止；「未啟動」負向控制重用會 `DELETE` 的冒煙；固定專案／連接埠可能清除他人 Emulator | **已修正**：前置條件改為硬性停止（exit 2）；「未啟動」「斷線」與 guard 負向控制改用唯讀探測；冒煙寫入前證明環境為空、寫入 nonce 標記、清除前再確認，否則拒絕；每次 Emulator 啟動前後檢查 5 個連接埠；CLI 改以 `node firebase.js` 啟動並回報 `spawnError` | `poc/stage2/src/ownership.mjs`、`test/probe.mjs`、`scripts/run-smoke.mjs`；`test/nondestructive.test.mjs`（假伺服器記錄請求：占用時 0 請求、外來資料時無 `DELETE`／`PATCH`）；`npm run s2:occupied-real`（真實 Emulator 內的外來文件與帳號不變）；修正前同情境對占用者送出 104 個請求含兩個 `DELETE` |
+| S2B2-REV-002 | MEDIUM | 認證設計缺少 Adapter 與證據收集／驗證／簽章之間的隔離 | **已補設計**（未實作）：`S2B2-ATTESTATION.md` v0.2 §9 隔離要求（受信任元件固定版本並與 Adapter SHA 分別綁定、不從 PR checkout 載入；Adapter 程序／網路／檔案／憑證隔離；nonce 由 Runner 在 Adapter 啟動後寫入；獨立驗證與簽章環境；狀態變化必須能由 trace 解釋；每次執行的隔離自我檢查）與 §10 攻擊驗收情境；隔離無法查證時只能 `UNATTESTED`／`BLOCKED`。D-17 未決定 | `docs/stage2/S2B2-ATTESTATION.md` §5、§8～§10；`S2B2-ADAPTER-PLAN.md` §1、§4 |
+| （附帶） | — | Windows 上 `spawnSync` 執行 `.bin/firebase` 的相容性 | 改以 `process.execPath` 執行 `firebase.js`；回報 `spawnError`／`signal`。**未在 Windows 實測** | `S2B2-B1-PLAN.md` §5.3 |
+
+- 範圍未擴大：未修改 Stage 1 鎖定檔、CI、外部錨定、防護斷言或待決權限；72 筆後端計畫維持 `NOT_RUN`。
+
+### R2 複驗（ChatGPT，Reviewed Head `9aac895704248ca6657da74350b2bb7e6adb94a1`）
+
+- 結論：**CHANGES REQUESTED**。S2B2-REV-001 原始占用情境已修正；S2B2-REV-002 設計層面結案（不代表隔離已實作或已驗證；D-17 仍待決）。
+- 新增 S2B2-REV-003（MEDIUM）：`portState()` 把所有 socket 錯誤與逾時當成「關閉」，在 `EACCES`／逾時時前置條件被錯誤放行。
+- 審查者的獨立測試：10／14 通過，4 項失敗都涉及本機 HTTP 連線，審查環境回報 `EACCES`，所以不視為產品缺陷，也不宣稱獨立 14／14 通過。真實 Emulator 冒煙未由審查者獨立重跑成功。
+
+### R2 回應（Claude，新 Head 見 PR #4）
+
+| 編號 | 等級 | 處理 | 證據 |
+|---|---|---|---|
+| S2B2-REV-003 | MEDIUM | **已修正**：`src/port-state.mjs` 回傳 `open`／`closed`／`unknown`；只有 `ECONNREFUSED` 是 `closed`；`open` 與 `unknown` 都讓前置條件 exit 2 並輸出連接埠與錯誤碼；第一個結果生效、socket 一律銷毀。總控邏輯移到 `src/orchestrator.mjs`，可注入探測與子程序 | `test/port-state.test.mjs`：占用、`ECONNREFUSED`、`EACCES`、`EPERM`、逾時、其他錯誤；在第一次與 Emulator 停止後的檢查都斷言 probe／CLI 啟動次數（非 `closed` 時為 0）；變異測試確認新測試會抓到回歸 |
+
+- 未擴大安全宣稱：空環境檢查與 nonce 標記不是原子鎖，也不能對抗惡意本機程序（已寫入 README 與 PLAN）。
+- 範圍未擴大：未修改 Stage 1 鎖定檔、CI、外部錨定、防護斷言或待決權限；72 筆後端計畫維持 `NOT_RUN`。
+
+### R3 複驗（ChatGPT，Reviewed Head `d195789ac42bac841cf463ccf1ed5310807ca520`，2026-11-21）
+
+- 結論：**R2 複驗通過，可進入使用者驗收**；未發現新增阻擋項目。限於本批基礎設施程式、文件設計與取得的測試證據；**不是** Windows Emulator 驗收、正式後端契約通過、D 項目核准或合併授權。
+
+| 編號 | 等級 | 最終狀態 | 界線 |
+|---|---|---|---|
+| S2B2-REV-001 | HIGH | 原始問題已修正，結案 | 空環境檢查與 nonce 標記不是原子鎖，不能對抗惡意本機程序 |
+| S2B2-REV-002 | MEDIUM | 文件設計層面結案 | 隔離仍未實作，不能據此產生 `PASS`；D-17 待決 |
+| S2B2-REV-003 | MEDIUM | 已修正，結案 | — |
+
+證據來源分開記錄：
+
+| 來源 | 內容 |
+|---|---|
+| ChatGPT 獨立執行 | guard 8 項＋port-state／總控停止 28 項 = **36／36 通過**；實際執行 `run-smoke` 入口：審查環境對 5 個本機連接埠回報 `EACCES`，全部判為 `unknown`，在第一次前置條件停止，未進入冒煙或負向探測。真實 socket 測試在該環境只驗證「連線受限 → `unknown`」路徑。PR Base／Head 與附件一致；25 個新增檔案 blob SHA 與遠端一致；鎖檔 SHA-256 未變 |
+| Claude 本機證據（未經審查者獨立重跑） | 乾淨 clone：`s2:test` 42／42、`s2:smoke` exit 0（正向冒煙 14 步，JSON 綁定 Reviewed Head）、`s2:occupied-real` exit 0（外來文件與帳號不變）；根目錄測試、Stage 1、錨定、受保護檔案差異通過 |
+| CI（[run 44703084167](https://github.com/hsuanyu9503/class-management-next/actions/runs/44703084167)） | `validate`、`baseline-anchor` success。**CI 不包含 Emulator 冒煙**，CI 成功不代表 Emulator 冒煙通過 |
+
+- 未驗證：Windows 完整流程；認證隔離實作與攻擊驗收；第三方 CLI 與相依套件的完整外連行為與平台相容性。
+- 未核准：Q1／Q2／Q3、D-01～D-17。72 筆正式後端計畫維持 `NOT_RUN`；技術選型 `UNDECIDED`。
+- ChatGPT 審查不是 GitHub 正式 Approve。
+- 使用者決策：`待驗收與合併決策`
