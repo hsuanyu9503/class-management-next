@@ -33,6 +33,12 @@ export const ENDPOINTS = Object.freeze([
   { name: 'sentinel', port: SENTINEL_TCP_PORT, kind: 'sentinel', expect: 'listening' },
 ]);
 
+/** B3A-N3: checks that MUST carry a host-side positive control (positiveControlOk === true); every other
+ *  check must report positiveControlOk === null. Not part of the sandbox config → configDigest unchanged. */
+export const POSITIVE_CONTROL_REQUIRED = Object.freeze([
+  'NS_NET_DISTINCT', 'NS_PID_DISTINCT', 'NS_MNT_DISTINCT', 'NS_IPC_DISTINCT', 'NS_UTS_DISTINCT',
+  'HOST_ENDPOINTS_BLOCKED', 'NO_OTHER_SOCKETS', 'NO_SUDO', 'FS_EVIDENCE_HIDDEN', 'FS_TOOLCHAIN_HIDDEN', 'FS_GIT_HIDDEN', 'OUTPUT_CHANNELS_HIDDEN',
+]);
 export const ENV_ALLOWLIST = Object.freeze(['HOME', 'PATH']);
 export const DEV_ALLOWLIST = Object.freeze(['null', 'urandom', 'zero']);
 export const INHERITED_FDS = Object.freeze([0, 1, 2, 3]);      // stdin, stdout, stderr, control

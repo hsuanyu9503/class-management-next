@@ -5,7 +5,7 @@ import net from 'node:net';
 import { existsSync, mkdirSync, readlinkSync, rmSync, writeFileSync } from 'node:fs';
 import { spawnSync } from 'node:child_process';
 import path from 'node:path';
-import { CHECK_IDS, ENDPOINTS, SENTINEL_TCP_PORT, DEV_ALLOWLIST, ENV_ALLOWLIST, INHERITED_FDS, MOUNT_TARGETS, configDigest } from './isolation-policy.mjs';
+import { CHECK_IDS, POSITIVE_CONTROL_REQUIRED, ENDPOINTS, SENTINEL_TCP_PORT, DEV_ALLOWLIST, ENV_ALLOWLIST, INHERITED_FDS, MOUNT_TARGETS, configDigest } from './isolation-policy.mjs';
 import { launchSandbox } from './sandbox.mjs';
 
 const tcpHost = (port) => new Promise((res) => { const s = net.connect(port, '127.0.0.1'); const t = setTimeout(() => { s.destroy(); res(false); }, 1500); s.once('connect', () => { clearTimeout(t); s.destroy(); res(true); }); s.once('error', () => { clearTimeout(t); res(false); }); });
@@ -60,7 +60,7 @@ export async function runSelfCheck({ cfg, pathMap, hostPaths, outputChannels, wo
   const C = {};
   const set = (id, ok, observed, pos = null) => { C[id] = { ok: !!ok, observed: String(observed).slice(0, 200), positiveControlOk: pos }; };
   if (!inside || !done) {
-    for (const id of CHECK_IDS) set(id, false, `self-check did not complete (done=${done}, violations=${o.violations.join('|')})`, null);
+    for (const id of CHECK_IDS) set(id, false, `self-check did not complete (done=${done}, violations=${o.violations.join('|')})`, POSITIVE_CONTROL_REQUIRED.includes(id) ? false : null);
   } else {
     for (const n of ['net', 'pid', 'mnt', 'ipc', 'uts']) set(`NS_${n.toUpperCase()}_DISTINCT`, inside.ns[n] !== hostNs[n], `${inside.ns[n]} vs host ${hostNs[n]}`, true);
     set('NET_NO_INTERFACES', inside.interfaces.length === 1 && inside.interfaces[0] === 'lo', inside.interfaces.join(','));

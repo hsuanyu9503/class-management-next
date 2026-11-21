@@ -22,9 +22,9 @@ export function reconcile({ front, back, pre, post, runnerLog, caseWindow, marke
   const byTrace = new Map(fronts.map((e) => [e.traceId, e]));
 
   // audit records
-  const added = Object.keys(post).filter((k) => isAudit(k) && !(k in pre));
+  const added = Object.keys(post).filter((k) => isAudit(k) && !Object.hasOwn(pre, k));
   let auditModifiedOrDeleted = 0;
-  for (const k of Object.keys(pre)) if (isAudit(k) && (!(k in post) || stableJson(pre[k]) !== stableJson(post[k]))) auditModifiedOrDeleted += 1;
+  for (const k of Object.keys(pre)) if (isAudit(k) && (!Object.hasOwn(post, k) || stableJson(pre[k]) !== stableJson(post[k]))) auditModifiedOrDeleted += 1;
   if (auditModifiedOrDeleted) p('AUDIT_MODIFIED_OR_DELETED', String(auditModifiedOrDeleted));
   const auditsByTrace = new Map();
   for (const k of added) { const a = post[k]; if (!auditsByTrace.has(a.traceId)) auditsByTrace.set(a.traceId, []); auditsByTrace.get(a.traceId).push({ path: k, ...a }); }
@@ -45,7 +45,7 @@ export function reconcile({ front, back, pre, post, runnerLog, caseWindow, marke
     if ((a.decision === 'allow') !== (a.reasonCode === 'OK')) why.push('reasonCode');
     if (a.resourceRef !== null && a.resourceRef !== undefined) {
       const tv = Object.values(f.requestBody?.target || {})[0];
-      if (!(a.resourceRef in pre) || a.resourceRef.split('/').pop() !== tv) why.push('resourceRef');
+      if (!Object.hasOwn(pre, a.resourceRef) || a.resourceRef.split('/').pop() !== tv) why.push('resourceRef');
     }
     if (a.workspaceId !== undefined && !a.path.startsWith(`workspaces/${a.workspaceId}/`)) why.push('workspace');
     if (why.length) p('AUDIT_UNRECONCILED', `${tid} ${why.join(',')}`); else auditMatched += 1;

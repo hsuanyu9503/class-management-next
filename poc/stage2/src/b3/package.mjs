@@ -5,7 +5,8 @@
  *  - readPackageSafe(): parses untrusted bytes WITHOUT touching the filesystem; enforces path rules,
  *    entry types (regular files only), duplicates, case/NFC collisions, counts and sizes, and that the
  *    package holds exactly manifest.json + the payload it lists.
- *  - parseStrictJson(): rejects duplicate keys, depth > 64, non-finite numbers, unsafe integers. */
+ *  - parseStrictJson(): rejects duplicate keys, the key "__proto__" (B3A-N2), depth > 64, non-finite numbers,
+ *    unsafe integers; properties are defined as OWN data properties (never through the prototype setter). */
 import { createHash } from 'node:crypto';
 
 export const LIMITS = Object.freeze({ maxFiles: 2000, maxFileBytes: 16 * 1024 * 1024, maxPackageBytes: 256 * 1024 * 1024, maxJsonDepth: 64 });
@@ -111,7 +112,7 @@ export function parseStrictJson(text) {
     if (depth > LIMITS.maxJsonDepth) err('too deep');
     ws(); const c = text[i];
     if (c === '{') { i++; const o = {}; const seen = new Set(); ws(); if (text[i] === '}') { i++; return o; }
-      while (true) { ws(); const k = str(); if (seen.has(k)) fail('ARTIFACT_JSON_INVALID', `duplicate key ${k}`); seen.add(k); ws(); if (text[i++] !== ':') err('expected :'); o[k] = val(depth + 1); ws(); const d = text[i++]; if (d === '}') return o; if (d !== ',') err('expected , or }'); } }
+      while (true) { ws(); const k = str(); if (seen.has(k)) fail('ARTIFACT_JSON_INVALID', `duplicate key ${k}`); seen.add(k); ws(); if (text[i++] !== ':') err('expected :'); if (k === '__proto__') fail('ARTIFACT_JSON_INVALID', 'key __proto__ not allowed'); Object.defineProperty(o, k, { value: val(depth + 1), enumerable: true, writable: true, configurable: true }); ws(); const d = text[i++]; if (d === '}') return o; if (d !== ',') err('expected , or }'); } }
     if (c === '[') { i++; const a = []; ws(); if (text[i] === ']') { i++; return a; }
       while (true) { a.push(val(depth + 1)); ws(); const d = text[i++]; if (d === ']') return a; if (d !== ',') err('expected , or ]'); } }
     if (c === '"') return str();

@@ -11,7 +11,7 @@ export const BLOCKED_FIELDS = Object.freeze({
 });
 
 export function verdict({ caseSpec, observation, adapterOutput, stage1Result, inputDigestsVerified }) {
-  const blocked = BLOCKED_FIELDS[caseSpec.testId] || null;
+  const blocked = Object.hasOwn(BLOCKED_FIELDS, caseSpec.testId) ? BLOCKED_FIELDS[caseSpec.testId] : null;
   const problems = [...(observation?.problems || [])];
   if (inputDigestsVerified !== true) problems.push('INPUT_DIGEST_MISMATCH');
   const canonical = observation?.canonical ?? null;

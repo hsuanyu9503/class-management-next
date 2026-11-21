@@ -99,3 +99,22 @@ A17（不安全封裝）與其他純函式規則在 `test/b3-unit.test.mjs`（8 
   - Windows。
 - 沙箱以 root 建立；Adapter 本身以 uid 65534 執行。這不是「非 root Runner」的驗證。
 - POC-009 維持 `BLOCKED`；72 筆維持 `NOT_RUN`；沒有 PASS。
+
+## 5. R1 修正（回應 PR #7 審查 B3A-N1～N4）
+
+依據：審查基準 Head `211e11433bc3e005d3ef68383340e9b27e8183cf`。四項的修正、影響與測試如下。
+
+| ID | 問題 | 修正 | 影響 | 測試（`test/b3-unit.test.mjs`） |
+|---|---|---|---|---|
+| **B3A-N1** | `selfCheck` 的項目值不是物件時被略過（`if (c && …)`） | 必要 ID 必須是 own key（否則 `ISOLATION_CHECK_MISSING`）；值必須是純物件且 `ok === true`（否則 `ISOLATION_CHECK_FAILED`）；`selfCheck` 本身不是純物件 → `ISOLATION_CHECK_MISSING` | 只會讓原本被略過的偽造證據改判 `BLOCKED` | 「B3A-N1 (P1)」：單項 null、false、0、""、[]、true、1、"ok"；22 項全為 null；`selfCheck` 為 null／[]／字串／0 |
+| **B3A-N2** | `parseStrictJson` 遇到 `"__proto__"` 會改寫物件原型；`in` 判斷會沿原型鏈 | 解析器拒絕 `"__proto__"`（`ARTIFACT_JSON_INVALID`），並以 `Object.defineProperty` 建立 own 屬性。verifier／reconcile 的 `in` 全部改為 `Object.hasOwn`。`CASE_ACTORS`、`BLOCKED_FIELDS`（含 `verdict.mjs`）改為 own-key 查表 | 合法封裝不受影響 | 「B3A-N2」：解析器直接測試；「(P2)」稽核藏在 `state-pre.__proto__`；「(P3)」非稽核文件藏在原型；「(P4)」檢查項藏在 `selfCheck.__proto__`。每種都有不用原型手法的對照組（本來就 `BLOCKED`） |
+| **B3A-N3** | 正向控制只拒絕 `false`，接受 null 或缺欄位 | 新增凍結清單 `POSITIVE_CONTROL_REQUIRED`（12 項）：清單內必須 `=== true`；清單外必須 own 且 `=== null`；否則 `ISOLATION_CHECK_FAILED`。自我檢查未完成時，清單內填 `false`。schema 草案改為逐 ID 指定（必要項 boolean、其他 null） | 不屬於沙箱設定 → `configDigest` **不變**（`5151d6d4…`） | 「B3A-N3 (P5)」：必要項 null／刪除／字串 `"true"`；全部刪除；清單外 true／刪除；誠實封裝逐項符合清單 |
+| **B3A-N4** | `platformSupported` 取自封裝 | 改為必填的可信輸入（Runner 記憶體，比照 job outputs）；與封裝不一致 → `ISOLATION_PLATFORM_MISMATCH`。「無法查證」分支也檢查設定 digest（含 `run.adapterSandboxPolicyDigest`）、控制管道、`READY`、終止 | A9 的可信輸入同步設為 false，結果維持 `UNATTESTED ISOLATION_UNVERIFIABLE` | 「B3A-N4」：封裝 false／可信 true → `BLOCKED`；兩邊 false 且正常 → `UNATTESTED`；兩邊 false 但 digest 錯、有違規、未 READY、終止未成立 → 各自 `BLOCKED`；缺少可信輸入 → `TRUSTED_INPUT_MISSING` |
+
+其他：
+
+- 單元測試使用已提交的誠實 POC-001 封裝（`test/fixtures/b3a-honest-poc001/`，虛構且遮罩）。探針以 `writePackage()` 重新打包，並一致地提供新 digest，所以只測 Verifier 的政策與對帳層，不需要 root 或 Emulator。
+- 「B3A-N5 (P6)」tar 結尾後附加內容：依指示標為 `todo`，本輪未修。
+- 審查者提供的 `S2B2-B3A-reviewer-probes.mjs` 沒有傳到 Claude 的環境；上表的探針依審查說明的 P1～P6 自行撰寫，需請審查者對照原探針確認涵蓋範圍。
+- `s2:b3` 26 項在修正後全部維持原判定（逐項比對見審查請求）。
+

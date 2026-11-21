@@ -57,7 +57,13 @@
     }
    }
   },
-  "check": {
+  "relPath": {
+   "type": "string",
+   "maxLength": 512,
+   "pattern": "^[A-Za-z0-9_-][A-Za-z0-9._-]{0,63}(/[A-Za-z0-9_-][A-Za-z0-9._-]{0,63}){0,7}$",
+   "description": "Relative, normalised path: every segment starts with [A-Za-z0-9_-] (so no '.', '..', hidden names, empty segments, leading '/', or backslashes). Symlinks, hardlinks, case/Unicode collisions and post-extraction escapes are rejected by the safe-parsing layer (plan 7.4), not by this pattern."
+  },
+  "checkWithPositiveControl": {
    "type": "object",
    "additionalProperties": false,
    "required": [
@@ -74,19 +80,32 @@
      "maxLength": 200
     },
     "positiveControlOk": {
-     "type": [
-      "boolean",
-      "null"
-     ],
-     "description": "null only for checks that have no positive control in the policy."
+     "type": "boolean",
+     "description": "Required positive control (B3A-N3); the semantic layer requires exactly true."
     }
    }
   },
-  "relPath": {
-   "type": "string",
-   "maxLength": 512,
-   "pattern": "^[A-Za-z0-9_-][A-Za-z0-9._-]{0,63}(/[A-Za-z0-9_-][A-Za-z0-9._-]{0,63}){0,7}$",
-   "description": "Relative, normalised path: every segment starts with [A-Za-z0-9_-] (so no '.', '..', hidden names, empty segments, leading '/', or backslashes). Symlinks, hardlinks, case/Unicode collisions and post-extraction escapes are rejected by the safe-parsing layer (plan 7.4), not by this pattern."
+  "checkWithoutPositiveControl": {
+   "type": "object",
+   "additionalProperties": false,
+   "required": [
+    "ok",
+    "observed",
+    "positiveControlOk"
+   ],
+   "properties": {
+    "ok": {
+     "type": "boolean"
+    },
+    "observed": {
+     "type": "string",
+     "maxLength": 200
+    },
+    "positiveControlOk": {
+     "type": "null",
+     "description": "Checks outside POSITIVE_CONTROL_REQUIRED must report null (B3A-N3)."
+    }
+   }
   }
  },
  "properties": {
@@ -301,73 +320,73 @@
         "MOUNT_ALLOWLIST",
         "OUTPUT_CHANNELS_HIDDEN"
        ],
-       "description": "Closed set of s2-isolation-policy-v1 check IDs: missing or unknown IDs fail this schema; duplicate keys are rejected by the strict parser (plan 7.4); any ok=false or positiveControlOk=false → BLOCKED (plan 3.3(c)).",
+       "description": "Closed set of s2-isolation-policy-v1 check IDs: missing or unknown IDs fail this schema; duplicate keys are rejected by the strict parser (plan 7.4); any ok=false or positiveControlOk=false → BLOCKED (plan 3.3(c)). Positive controls: required (true) for the 12 IDs in POSITIVE_CONTROL_REQUIRED, null for the rest (B3A-N3). Keys named __proto__ are rejected by the strict parser (B3A-N2).",
        "properties": {
         "NS_NET_DISTINCT": {
-         "$ref": "#/$defs/check"
+         "$ref": "#/$defs/checkWithPositiveControl"
         },
         "NS_PID_DISTINCT": {
-         "$ref": "#/$defs/check"
+         "$ref": "#/$defs/checkWithPositiveControl"
         },
         "NS_MNT_DISTINCT": {
-         "$ref": "#/$defs/check"
+         "$ref": "#/$defs/checkWithPositiveControl"
         },
         "NS_IPC_DISTINCT": {
-         "$ref": "#/$defs/check"
+         "$ref": "#/$defs/checkWithPositiveControl"
         },
         "NS_UTS_DISTINCT": {
-         "$ref": "#/$defs/check"
+         "$ref": "#/$defs/checkWithPositiveControl"
         },
         "NET_NO_INTERFACES": {
-         "$ref": "#/$defs/check"
+         "$ref": "#/$defs/checkWithoutPositiveControl"
         },
         "HOST_ENDPOINTS_BLOCKED": {
-         "$ref": "#/$defs/check"
+         "$ref": "#/$defs/checkWithPositiveControl"
         },
         "ENTRY_SOCKET_REACHABLE": {
-         "$ref": "#/$defs/check"
+         "$ref": "#/$defs/checkWithoutPositiveControl"
         },
         "NO_OTHER_SOCKETS": {
-         "$ref": "#/$defs/check"
+         "$ref": "#/$defs/checkWithPositiveControl"
         },
         "UID_NONROOT": {
-         "$ref": "#/$defs/check"
+         "$ref": "#/$defs/checkWithoutPositiveControl"
         },
         "NO_CAPS": {
-         "$ref": "#/$defs/check"
+         "$ref": "#/$defs/checkWithoutPositiveControl"
         },
         "NO_NEW_PRIVS": {
-         "$ref": "#/$defs/check"
+         "$ref": "#/$defs/checkWithoutPositiveControl"
         },
         "NO_SUDO": {
-         "$ref": "#/$defs/check"
+         "$ref": "#/$defs/checkWithPositiveControl"
         },
         "FS_EVIDENCE_HIDDEN": {
-         "$ref": "#/$defs/check"
+         "$ref": "#/$defs/checkWithPositiveControl"
         },
         "FS_TOOLCHAIN_HIDDEN": {
-         "$ref": "#/$defs/check"
+         "$ref": "#/$defs/checkWithPositiveControl"
         },
         "FS_GIT_HIDDEN": {
-         "$ref": "#/$defs/check"
+         "$ref": "#/$defs/checkWithPositiveControl"
         },
         "PROC_ISOLATED": {
-         "$ref": "#/$defs/check"
+         "$ref": "#/$defs/checkWithoutPositiveControl"
         },
         "DEV_ALLOWLIST": {
-         "$ref": "#/$defs/check"
+         "$ref": "#/$defs/checkWithoutPositiveControl"
         },
         "ENV_ALLOWLIST": {
-         "$ref": "#/$defs/check"
+         "$ref": "#/$defs/checkWithoutPositiveControl"
         },
         "FD_ALLOWLIST": {
-         "$ref": "#/$defs/check"
+         "$ref": "#/$defs/checkWithoutPositiveControl"
         },
         "MOUNT_ALLOWLIST": {
-         "$ref": "#/$defs/check"
+         "$ref": "#/$defs/checkWithoutPositiveControl"
         },
         "OUTPUT_CHANNELS_HIDDEN": {
-         "$ref": "#/$defs/check"
+         "$ref": "#/$defs/checkWithPositiveControl"
         }
        }
       },

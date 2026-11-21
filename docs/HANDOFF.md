@@ -23,8 +23,15 @@
 - S2-B2 第 1 批狀態：已合併（PR #4）。
 - S2-B2 第 2 批狀態：PR #5。R1（Head `37546804c61c`）CHANGES REQUESTED；R1 複驗（Head `2fa78f74cd2b`）需修正（REV001／002 結案、REV003 部分結案；R1-N1～N4）；R2 修正共兩個 commit（`d17e537` 修正、`d2dafe1` 只改測試假值的寫法）；**R2 複驗（Reviewed Head `d2dafe16ba488df60e6a2340ad9cd075c691ed2a`）通過**，可交使用者驗收與合併決策。R1-N5～N7、無前綴不透明憑證、分頁拒絕仍是待辦（`docs/REVIEW_LOG.md`）。新增規格缺口 G-1～G-4 需要負責人決策（`S2B2-B2-PLAN.md` §3）。
 - 第 2 批狀態：**已合併**（PR #5）。POC-001／002／008 最多 `UNATTESTED`，POC-009 `BLOCKED`；Stage 1 的 72 筆 `NOT_RUN` 不變。R1-N5～N7、無前綴不透明憑證、分頁拒絕仍是待辦，第 3 批計畫 §10 把 N5～N7 列為 B3a 前置。
-- 第 3 批狀態：準備文件已合併（PR #6）；**B3a 實作完成，待 ChatGPT L3 審查**。B3b（D-17、CI／錨定、repository variable、公開與保存）尚未批准，不開始。
-- 下一位負責人：ChatGPT（B3a L3 審查）→ 你（驗收與合併；B3b 前的 Q-1～Q-3）。
+- 第 3 批狀態：準備文件已合併（PR #6）；B3a（PR #7）R1（Head `211e1143`）需修正 → B3A-N1～N4 已修，**待 ChatGPT 增量複驗**。後續（B3b 前處理）：
+  - B3A-N5：tar 嚴格解析；
+  - B3A-N6：稽核與請求的完整綁定；
+  - B3A-N7：掛載選項、FS 隱藏測試、最小化 `/etc`／`/usr`、`pathMap` 入 digest；
+  - B3A-N8：`case.json` 只給該 actor 的 token；
+  - NOTE ①～⑨。
+
+  B3b（D-17、CI／錨定、repository variable、公開與保存）尚未批准，不開始。
+- 下一位負責人：ChatGPT（B3a R1 增量複驗）→ 你（驗收與合併；B3b 前的 Q-1～Q-3）。
 - 最近更新：2026-11-21（臺灣）
 
 ## PR #1 正式合併紀錄
@@ -142,6 +149,8 @@
 | 2026-11-21 | Claude → 你 | 決策包 v0.3（收尾 5 項＋一頁決策摘要；Head `5876ddb0ff6f`） | B3a 與 Q-4 決策 |
 | 2026-11-21 | ChatGPT → 你 | 收尾複核 `5876ddb0ff6f`：通過 | 驗收與決策 |
 | 2026-11-21 | 你 | 三項都同意：合併 PR #6、批准 B3a、同意 Q-4 | Claude 合併 PR #6 → `636e13088a39`；B3a 實作 |
-| 2026-11-21 | Claude → ChatGPT | B3a PR（Base `636e13088a39`） | L3 審查 |
+| 2026-11-21 | Claude → ChatGPT | B3a PR #7（Base `636e13088a39`，Head `211e11433bc3`） | L3 審查 |
+| 2026-11-21 | ChatGPT → Claude | 審查 `211e11433bc3`：需修正（B3A-N1～N4；N5～N8 後續） | R1 修正 |
+| 2026-11-21 | Claude → ChatGPT | B3a R1 修正（Head 見 PR #7） | 增量複驗 |
 
 > 規格的正式變更請同步修改 SPEC／TECH，不要只在這裡留下新決策。

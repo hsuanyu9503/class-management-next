@@ -124,7 +124,7 @@ async function attestedRun(label, { testId, entry = '/adapter/main.mjs', cfg = s
   };
   const pkg = writePackage(files);
   // "job outputs": the trusted channel (here: Runner memory), never read back from the package
-  const trusted = { packageSha256: pkg.packageSha256, manifestSha256: pkg.manifestSha256, runId, runAttempt, attestationNonce, testId, trustedToolchainCommit: HEAD, adapterCommit: HEAD, caseSpec, runnerKind: 'local-untrusted' };
+  const trusted = { packageSha256: pkg.packageSha256, manifestSha256: pkg.manifestSha256, runId, runAttempt, attestationNonce, testId, trustedToolchainCommit: HEAD, adapterCommit: HEAD, caseSpec, runnerKind: 'local-untrusted', platformSupported: iso.platformSupported === true };   // B3A-N4: from Runner memory
   const result = verifyPackage(pkg.packageBytes, trusted);
   writeFileSync(path.join(dir, 'package.tar'), pkg.packageBytes);
   writeFileSync(path.join(dir, 'job-outputs.json'), JSON.stringify({ runId, runAttempt, packageSha256: pkg.packageSha256, manifestSha256: pkg.manifestSha256, attestationNonce }, null, 1));

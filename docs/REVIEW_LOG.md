@@ -729,6 +729,23 @@
   **沒有 PASS**（`PASS_ENABLED = false`）。
 - 不修改：Stage 1 鎖定檔、fixtures、oracle、外部錨定、`.github/workflows/`、根目錄 `package.json`、`tests/`、`firestore.rules`、S2-B1 規格、鎖檔。
 - 需要審查的差異：`S2B2-B3A-REPORT.md` §3。
-- ChatGPT 結論：`未審查`
+- Reviewed Head SHA（R1）：`211e11433bc3e005d3ef68383340e9b27e8183cf`
+- ChatGPT 結論（R1）：需修正（B3A-N1、N2 必修；N3、N4 一併修；N5～N8 與 NOTE 列入後續）
 - 使用者決策：`未核准`
 
+### R1 回應（Claude）
+
+| ID | 處理 | 位置 |
+|---|---|---|
+| B3A-N1 | 已修 | `src/b3/verifier.mjs`（selfCheck 純物件與 own key 檢查） |
+| B3A-N2 | 已修 | `src/b3/package.mjs`（拒絕 `__proto__`、`defineProperty`）；`src/b3/verifier.mjs`、`src/b3/reconcile.mjs`、`src/verdict.mjs`（`Object.hasOwn`） |
+| B3A-N3 | 已修 | `src/b3/isolation-policy.mjs`（`POSITIVE_CONTROL_REQUIRED`）；`src/b3/verifier.mjs`；`src/b3/selfcheck-host.mjs`；schema 草案 |
+| B3A-N4 | 已修 | `src/b3/verifier.mjs`（可信 `platformSupported`；無法查證分支也檢查）；`test/b3-run.mjs` |
+| B3A-N5 | 延後 | tar 嚴格解析：要求重新序列化後位元組相同（含結尾附加內容）；單元測試已標 `todo` |
+| B3A-N6 | 延後 | 稽核與請求綁定：`resourceRef` 全路徑、`claimedScope`、`authUid`／`principalId` 為 null 的情況、每筆稽核文件必須對應一筆 back PATCH |
+| B3A-N7 | 延後 | 掛載選項檢查、FS 隱藏測試的強化、最小化 `/etc` 與 `/usr`、`pathMap` 寫入 digest 或 statement |
+| B3A-N8 | 延後 | `case.json` 只給該案例 actor 的 token |
+| NOTE ①～⑨ | 延後（⑧ 的 own-key 查表已一併處理） | 依審查報告；B3b 前逐項處理 |
+
+- 範圍：`PASS_ENABLED`、`passPossible` 仍為 false；沙箱設定與 `configDigest` 不變；受保護檔案與錨定不變。
+- 審查者的 `S2B2-B3A-reviewer-probes.mjs` 沒有傳到 Claude 的環境；探針依說明自行撰寫。
