@@ -15,6 +15,9 @@ export const PORTS = Object.freeze({ api: 18300, front: 18301, back: 18302, clos
 export const BATCH2_PORTS = Object.freeze([PORTS.api, PORTS.front, PORTS.back, PORTS.closedBackend]);
 
 export function createHarness({ cfg, nonce, fixtures, masker }) {
+  // R1-N7: every secret this harness issues (passwords, ID tokens) — kept in memory only, used to scan
+  // every artifact before it leaves the run. Never written anywhere.
+  const issued = [];
   const fs = firestoreClient(cfg); const au = authClient(cfg);
   const docsPrefix = `projects/${cfg.projectId}/databases/(default)/documents`;
   const base = `${cfg.firestore.origin}/v1/${docsPrefix}`;
@@ -50,7 +53,9 @@ export function createHarness({ cfg, nonce, fixtures, masker }) {
     const users = {};
     for (const actor of ACTORS) {
       const email = `${actor.toLowerCase()}@example.invalid`; const password = randomBytes(12).toString('hex');
+      issued.push(password);
       const su = must(await authCall('accounts:signUp?key=emulator-local', { email, password, returnSecureToken: true }), `signUp ${actor}`);
+      issued.push(su.json.idToken); if (su.json.refreshToken) issued.push(su.json.refreshToken);
       const uid = su.json.localId;
       await putDoc(`authBindings/${uid}`, { authUid: uid, principalId: actor, status: 'active', activatedAt: isoSec(Date.now() - 1000), bindingVersion: 1 });
       users[actor] = { uid, email, password };
@@ -59,7 +64,7 @@ export function createHarness({ cfg, nonce, fixtures, masker }) {
     for (const actor of ACTORS) users[actor].token = await signIn(users[actor]);
     return users;
   }
-  async function signIn(u) { return must(await authCall('accounts:signInWithPassword?key=emulator-local', { email: u.email, password: u.password, returnSecureToken: true }), 'signIn').json.idToken; }
+  async function signIn(u) { const t = must(await authCall('accounts:signInWithPassword?key=emulator-local', { email: u.email, password: u.password, returnSecureToken: true }), 'signIn').json; issued.push(t.idToken); if (t.refreshToken) issued.push(t.refreshToken); return t.idToken; }
   async function disableAuthUser(uid) { must(await authCall(`projects/${cfg.projectId}/accounts:update`, { localId: uid, disableUser: true }, EMULATOR_OWNER), 'disable user'); }
 
   /** Recursive export of every document (masked), sorted by path. */
@@ -87,15 +92,15 @@ export function createHarness({ cfg, nonce, fixtures, masker }) {
   }
 
   /** Starts back proxy → API → front proxy. `authorizeFn` override is for mutation tests only. */
-  async function startStack({ frontFile, backFile, authorizeFn, backendOrigin } = {}) {
+  async function startStack({ frontFile, backFile, authorizeFn, backendOrigin, frontSocketPath } = {}) {
     const back = createTraceProxy({ role: 'back', port: PORTS.back, masker, file: backFile, route: (u) => (u.startsWith('/identitytoolkit.googleapis.com/') ? cfg.auth.origin : cfg.firestore.origin) });
     await back.listen();
     const api = createApi({ port: PORTS.api, projectId: cfg.projectId, backendOrigin: backendOrigin || `http://127.0.0.1:${PORTS.back}`, emulatorMode: true, ...(authorizeFn ? { authorizeFn } : {}) });
     await api.listen();
-    const front = createTraceProxy({ role: 'front', port: PORTS.front, masker, file: frontFile, route: () => `http://127.0.0.1:${PORTS.api}` });
+    const front = createTraceProxy({ role: 'front', port: PORTS.front, socketPath: frontSocketPath || null, masker, file: frontFile, route: () => `http://127.0.0.1:${PORTS.api}` });
     await front.listen();
     return { frontOrigin: `http://127.0.0.1:${PORTS.front}`, front, back, api, stop: async () => { await front.close(); await api.close(); await back.close(); } };
   }
 
-  return { ownedReset, seedWorld, signIn, disableAuthUser, putDoc, patchDoc, getDoc, deleteDoc, deleteField, exportState, startStack, markerIds };
+  return { issuedSecrets: () => [...issued], ownedReset, seedWorld, signIn, disableAuthUser, putDoc, patchDoc, getDoc, deleteDoc, deleteField, exportState, startStack, markerIds };
 }

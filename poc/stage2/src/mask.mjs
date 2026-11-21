@@ -35,7 +35,8 @@ export function tokenRef(token) {
 export function maskAuthorization(value) {
   if (typeof value !== 'string' || value === '') return null;
   const m = /^Bearer (.+)$/.exec(value);
-  return m ? { scheme: 'Bearer', ...tokenRef(m[1]) } : { masked: true, scheme: 'other', valueSha256: sha256(value) };
+  // R1-N6: non-Bearer values (e.g. Basic user:pass) can be low-entropy; never record a hash of them
+  return m ? { scheme: 'Bearer', ...tokenRef(m[1]) } : { masked: true, scheme: 'other' };
 }
 
 export function makeMasker(names = []) {

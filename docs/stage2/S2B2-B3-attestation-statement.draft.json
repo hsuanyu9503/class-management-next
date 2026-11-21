@@ -273,101 +273,109 @@
      "description": "false → UNATTESTED (ISOLATION_UNVERIFIABLE)."
     },
     "selfCheck": {
-     "type": "object",
-     "additionalProperties": false,
-     "required": [
-      "NS_NET_DISTINCT",
-      "NS_PID_DISTINCT",
-      "NS_MNT_DISTINCT",
-      "NS_IPC_DISTINCT",
-      "NS_UTS_DISTINCT",
-      "NET_NO_INTERFACES",
-      "HOST_ENDPOINTS_BLOCKED",
-      "ENTRY_SOCKET_REACHABLE",
-      "NO_OTHER_SOCKETS",
-      "UID_NONROOT",
-      "NO_CAPS",
-      "NO_NEW_PRIVS",
-      "NO_SUDO",
-      "FS_EVIDENCE_HIDDEN",
-      "FS_TOOLCHAIN_HIDDEN",
-      "FS_GIT_HIDDEN",
-      "PROC_ISOLATED",
-      "DEV_ALLOWLIST",
-      "ENV_ALLOWLIST",
-      "FD_ALLOWLIST",
-      "MOUNT_ALLOWLIST",
-      "OUTPUT_CHANNELS_HIDDEN"
-     ],
-     "description": "Closed set of s2-isolation-policy-v1 check IDs: missing or unknown IDs fail this schema; duplicate keys are rejected by the strict parser (plan 7.4); any ok=false or positiveControlOk=false → BLOCKED (plan 3.3(c)).",
-     "properties": {
-      "NS_NET_DISTINCT": {
-       "$ref": "#/$defs/check"
+     "anyOf": [
+      {
+       "type": "object",
+       "additionalProperties": false,
+       "required": [
+        "NS_NET_DISTINCT",
+        "NS_PID_DISTINCT",
+        "NS_MNT_DISTINCT",
+        "NS_IPC_DISTINCT",
+        "NS_UTS_DISTINCT",
+        "NET_NO_INTERFACES",
+        "HOST_ENDPOINTS_BLOCKED",
+        "ENTRY_SOCKET_REACHABLE",
+        "NO_OTHER_SOCKETS",
+        "UID_NONROOT",
+        "NO_CAPS",
+        "NO_NEW_PRIVS",
+        "NO_SUDO",
+        "FS_EVIDENCE_HIDDEN",
+        "FS_TOOLCHAIN_HIDDEN",
+        "FS_GIT_HIDDEN",
+        "PROC_ISOLATED",
+        "DEV_ALLOWLIST",
+        "ENV_ALLOWLIST",
+        "FD_ALLOWLIST",
+        "MOUNT_ALLOWLIST",
+        "OUTPUT_CHANNELS_HIDDEN"
+       ],
+       "description": "Closed set of s2-isolation-policy-v1 check IDs: missing or unknown IDs fail this schema; duplicate keys are rejected by the strict parser (plan 7.4); any ok=false or positiveControlOk=false → BLOCKED (plan 3.3(c)).",
+       "properties": {
+        "NS_NET_DISTINCT": {
+         "$ref": "#/$defs/check"
+        },
+        "NS_PID_DISTINCT": {
+         "$ref": "#/$defs/check"
+        },
+        "NS_MNT_DISTINCT": {
+         "$ref": "#/$defs/check"
+        },
+        "NS_IPC_DISTINCT": {
+         "$ref": "#/$defs/check"
+        },
+        "NS_UTS_DISTINCT": {
+         "$ref": "#/$defs/check"
+        },
+        "NET_NO_INTERFACES": {
+         "$ref": "#/$defs/check"
+        },
+        "HOST_ENDPOINTS_BLOCKED": {
+         "$ref": "#/$defs/check"
+        },
+        "ENTRY_SOCKET_REACHABLE": {
+         "$ref": "#/$defs/check"
+        },
+        "NO_OTHER_SOCKETS": {
+         "$ref": "#/$defs/check"
+        },
+        "UID_NONROOT": {
+         "$ref": "#/$defs/check"
+        },
+        "NO_CAPS": {
+         "$ref": "#/$defs/check"
+        },
+        "NO_NEW_PRIVS": {
+         "$ref": "#/$defs/check"
+        },
+        "NO_SUDO": {
+         "$ref": "#/$defs/check"
+        },
+        "FS_EVIDENCE_HIDDEN": {
+         "$ref": "#/$defs/check"
+        },
+        "FS_TOOLCHAIN_HIDDEN": {
+         "$ref": "#/$defs/check"
+        },
+        "FS_GIT_HIDDEN": {
+         "$ref": "#/$defs/check"
+        },
+        "PROC_ISOLATED": {
+         "$ref": "#/$defs/check"
+        },
+        "DEV_ALLOWLIST": {
+         "$ref": "#/$defs/check"
+        },
+        "ENV_ALLOWLIST": {
+         "$ref": "#/$defs/check"
+        },
+        "FD_ALLOWLIST": {
+         "$ref": "#/$defs/check"
+        },
+        "MOUNT_ALLOWLIST": {
+         "$ref": "#/$defs/check"
+        },
+        "OUTPUT_CHANNELS_HIDDEN": {
+         "$ref": "#/$defs/check"
+        }
+       }
       },
-      "NS_PID_DISTINCT": {
-       "$ref": "#/$defs/check"
-      },
-      "NS_MNT_DISTINCT": {
-       "$ref": "#/$defs/check"
-      },
-      "NS_IPC_DISTINCT": {
-       "$ref": "#/$defs/check"
-      },
-      "NS_UTS_DISTINCT": {
-       "$ref": "#/$defs/check"
-      },
-      "NET_NO_INTERFACES": {
-       "$ref": "#/$defs/check"
-      },
-      "HOST_ENDPOINTS_BLOCKED": {
-       "$ref": "#/$defs/check"
-      },
-      "ENTRY_SOCKET_REACHABLE": {
-       "$ref": "#/$defs/check"
-      },
-      "NO_OTHER_SOCKETS": {
-       "$ref": "#/$defs/check"
-      },
-      "UID_NONROOT": {
-       "$ref": "#/$defs/check"
-      },
-      "NO_CAPS": {
-       "$ref": "#/$defs/check"
-      },
-      "NO_NEW_PRIVS": {
-       "$ref": "#/$defs/check"
-      },
-      "NO_SUDO": {
-       "$ref": "#/$defs/check"
-      },
-      "FS_EVIDENCE_HIDDEN": {
-       "$ref": "#/$defs/check"
-      },
-      "FS_TOOLCHAIN_HIDDEN": {
-       "$ref": "#/$defs/check"
-      },
-      "FS_GIT_HIDDEN": {
-       "$ref": "#/$defs/check"
-      },
-      "PROC_ISOLATED": {
-       "$ref": "#/$defs/check"
-      },
-      "DEV_ALLOWLIST": {
-       "$ref": "#/$defs/check"
-      },
-      "ENV_ALLOWLIST": {
-       "$ref": "#/$defs/check"
-      },
-      "FD_ALLOWLIST": {
-       "$ref": "#/$defs/check"
-      },
-      "MOUNT_ALLOWLIST": {
-       "$ref": "#/$defs/check"
-      },
-      "OUTPUT_CHANNELS_HIDDEN": {
-       "$ref": "#/$defs/check"
+      {
+       "type": "null"
       }
-     }
+     ],
+     "description": "Closed object of all s2-isolation-policy-v1 check IDs; null ONLY when platformSupported = false (B3a refinement, see plan §11)."
     },
     "termination": {
      "type": "object",
@@ -390,7 +398,25 @@
       }
      }
     }
-   }
+   },
+   "allOf": [
+    {
+     "if": {
+      "properties": {
+       "platformSupported": {
+        "const": true
+       }
+      }
+     },
+     "then": {
+      "properties": {
+       "selfCheck": {
+        "type": "object"
+       }
+      }
+     }
+    }
+   ]
   },
   "artifacts": {
    "type": "object",

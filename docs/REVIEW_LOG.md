@@ -696,3 +696,39 @@
 - schema 重跑：合法控制組接受（只代表形狀），16 個拒絕案例全部拒絕（新增：statement 自稱已簽章、manifest 被列為 payload），重複鍵由嚴格解析器拒絕。
 - 使用者決策：`待決`（B3a 範圍＋Q-4；B3b 前 Q-1～Q-3）
 
+### R3 收尾複核（ChatGPT，Reviewed Head `5876ddb0ff6fbd3469fe6c027c95f5d261c69ed2`）
+
+- 依使用者轉交的報告摘要：5 項收尾完成，準備包複核通過；B3-REV001～004 維持「設計結案，實作待驗收」。
+- 審查者核對：三份附件的 blob SHA 與固定 Head 一致；`signed` 欄位已移除；封閉物件設定。
+- 審查者未重跑：完整 schema suite；repository tests；Emulator；Linux 隔離；端到端簽章。
+
+## S2-B2 第 3 批｜合併準備文件，批准 B3a
+
+- 使用者（負責人）回覆「三項都同意」，即：
+  1. 驗收並合併 PR #6；
+  2. 批准 `S2B2-B3-DECISION-SUMMARY.md` A 節的 B3a 本機範圍；
+  3. 同意 Q-4（nonce 一致流程與 ATTESTATION v0.3）。
+- PR #6 由 Claude 依該明確批准合併：merge `636e13088a39c3bd956461e6f8fbab75949c58c1`（Head `5876ddb0`，與 Reviewed Head 相同）。
+- 這不代表 D-17、CI、錨定、repository variable、公開或保存範圍已批准（B3b 前另行批准）。
+
+## S2-B2 第 3 批 B3a｜本機沙箱、Verifier 與攻擊測試
+
+- Base SHA：`636e13088a39c3bd956461e6f8fbab75949c58c1`
+- Reviewed Head SHA：`[尚未審查]`
+- 風險等級（初評）：**L3**。理由：
+  - 實作隔離與證據鏈的核心（沙箱、自我檢查、封存、Verifier、對帳）；
+  - 以 root 執行命名空間與掛載；
+  - 修改第 2 批 API 的稽核 `action` 規則。
+
+  最終等級由負責人決定。
+- 結果：
+  - POC-001／002／008 `UNATTESTED`（觀察值符合契約）；
+  - POC-009 `BLOCKED`；
+  - 攻擊與控制 26／26 符合預期。
+
+  **沒有 PASS**（`PASS_ENABLED = false`）。
+- 不修改：Stage 1 鎖定檔、fixtures、oracle、外部錨定、`.github/workflows/`、根目錄 `package.json`、`tests/`、`firestore.rules`、S2-B1 規格、鎖檔。
+- 需要審查的差異：`S2B2-B3A-REPORT.md` §3。
+- ChatGPT 結論：`未審查`
+- 使用者決策：`未核准`
+
