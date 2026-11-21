@@ -608,7 +608,55 @@
   - 新增 `docs/stage2/S2B2-B3-PLAN.md`、`docs/stage2/S2B2-B3-attestation-statement.draft.json`；
   - 更新 `docs/HANDOFF.md`、`docs/REVIEW_LOG.md`。
 - 不修改：程式、測試、workflow、repository 設定、外部錨定、Stage 1 鎖定檔、`S2B2-ATTESTATION.md`。nonce 的一致流程只是提案（計畫 §5）。
-- 待決：`S2B2-B3-PLAN.md` §13 Q-A～Q-F。官方 GitHub 文件無法連線，平台能力全部未驗證。
-- ChatGPT 結論：`未審查`
+- 待決：`S2B2-B3-PLAN.md` §13（v0.1：Q-A～Q-F；v0.2 縮減為 Q-1～Q-4）。
+- Reviewed Head SHA（R1）：`29f47a5e82b7f09654849ae206ba7188b400233f`
+- ChatGPT 結論（R1）：**CHANGES REQUESTED**（設計層 B3-REV001 HIGH；B3-REV002、003、004 MEDIUM）
 - 使用者決策：`未核准`
+
+### R1 審查摘要（ChatGPT）
+
+- 審查者核對：
+  - GitHub 比較只有 4 份文件；附件 PLAN 與 JSON 的 blob SHA 與固定 Head 相同；
+  - CI 同 Head 成功，但不能證明設計或隔離正確；
+  - checks.log 只有摘要與 exit code；isolation-probe.log 是作者以 root 的本機探查，審查者未重跑。
+- 審查者另外核對官方文件並提供：
+  - public repository 在 Free／Pro／Team 支援 artifact attestations；
+  - 官方範例權限；
+  - Sigstore bundle 進入公開不可變透明度日誌；
+  - CLI 的 signer-digest、source-digest、source-ref 限制。
+  
+  Claude 引用這些事實並標明來源，沒有自行連線。
+
+### R1 回應（Claude，依 `templates/CLAUDE_REVIEW_RESPONSE.md`）
+
+- PR：https://github.com/hsuanyu9503/class-management-next/pull/6
+- 審查版本 Head SHA：`29f47a5e82b7f09654849ae206ba7188b400233f`
+- 修正後 Head SHA：見 PR #6
+
+| ID | 處理結果 | 修改位置／原因 | 驗證證據 | 待使用者決策 |
+|---|---|---|---|---|
+| B3-REV001 HIGH | 已修（設計） | 計畫 §3.4：封存後產生 manifest 與可重現封裝；`artifactId`／`packageSha256`／`manifestSha256` 以 job outputs 交出；選取條件（repository、run、attempt、producer、不可變 ID、內容 digest）；明列信任假設與殘餘風險。§7.2 新增對應可信輸入。攻擊 A13（整包替換）、A14（選錯 artifact） | schema `package`；計畫 §3.4、§8 | 無（平台保證在 B3b 前核對） |
+| B3-REV002 MEDIUM | 已修（設計） | 計畫 §3.3：`s2-isolation-policy-v1`。實際設定的 canonical digest 涵蓋命名空間、uid／gid、capability、`no_new_privs`、rootfs、掛載、`/proc`、`/dev`、socket、環境、fd、限制。22 個必要檢查 ID，含正向控制。缺項、未知、重複、型別、失敗、參數改變、平台不支援各有判定。攻擊 A15、A16 | schema `isolation.selfCheck` 改為封閉物件；`sandboxPolicyDigest`；本機 schema 檢查 | 無 |
+| B3-REV003 MEDIUM | 已修（設計） | 計畫 §7.4 安全解析規則（路徑、碰撞、連結與特殊檔、realpath、重複、數量與大小、JSON 深度與重複鍵、不執行內容、失敗即停止）；§7.5 分工（安全解析 → schema → 語意）。攻擊 A17 | schema `relPath` 修正：`../outside.json`、`/tmp/outside.json`、`a/../../outside.json` v0.1 接受、v0.2 拒絕 | 無 |
+| B3-REV004 MEDIUM | 已修（設計） | 計畫 §4：簽章政策版本（`attest.yml` blob）與工具鏈版本分開；批准紀錄 `S2B2-TRUST-POLICY.json`（版本、撤銷、有效期間）；首次建立與更新步驟；舊證明規則。§7.3：以 build provenance 簽 `statement.json`（subject digest）；第三方驗證身分、signer workflow blob、source digest、subject digest 與內容政策。攻擊 A18 | 計畫 §4、§7.3、§8 | Q-2 |
+| 對帳 | 已修 | 計畫 §6.3：`traceId` 唯一；front／back／audit 一對一，audit 內容逐欄吻合；setup／case／teardown 流量階段 | 計畫 §6.3；schema `reconciliation` | 無 |
+| 簽章範圍 | 已修 | v0.1 寫「都簽章」→ v0.2 維持 ATTESTATION §9.3「只簽 PASS」；FAIL／BLOCKED 只有未簽章診斷 | 計畫 §3.1；schema `verdict.signed` | 無 |
+| A10 | 已修 | 讀到平台憑證即隔離失敗：`BLOCKED`、停止上傳與簽章；「沒有 id-token」只降低影響 | 計畫 §8 | 無 |
+| Verifier 權限描述 | 已修 | `id-token` 是 job 層級；改述為只執行可信程式、不主動使用 OIDC、安全解析、PASS 後的獨立簽章步驟 | 計畫 §3.1 | 無 |
+| nonce | 已補充（仍是提案） | 逾時、READY／DONE、`runAttempt` 綁定、標記不可改寫、不取代隔離與內容綁定 | 計畫 §5 | Q-4 |
+| 公開範圍 | 已修 | 分列 bundle、statement、封裝檔、診斷的去向、存取範圍與保存 | 計畫 §9.6 | Q-3 |
+| 決策問題 | 已縮減 | Q-1 D-17、Q-2 CI／錨定／批准、Q-3 公開與保存、Q-4 nonce；取消開放網路的問題 | 計畫 §13 | Q-1～Q-4 |
+
+#### 已執行的測試
+
+| 命令／操作 | 結果 | 對應 Commit |
+|---|---|---|
+| npm run check、npm test、npm run stage1:all、verify-anchor | 成功 | 新 Head |
+| schema 草案驗證（本機 `jsonschema` 4.26，合法控制組＋15 個拒絕案例＋重複鍵示範） | 成功 | 新 Head |
+| GitHub runner 上的隔離、端到端簽章 | 未執行（NOT_RUN，B3b） | — |
+
+#### 未解風險與新發現
+
+- （設計）內容綁定只保護封存後的替換；若 Adapter 在封存前突破沙箱，可以偽造全部內容，依賴 §3.3 隔離。
+- （未核對）job outputs、artifact ID 不可變性與 artifact 存取範圍。
 
