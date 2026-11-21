@@ -847,3 +847,18 @@
 - 只修 PR1-REV001；N5／N7／N8 與既有行為維持不變。
 - 使用者決策：`未核准`
 
+### PR-1 R1 增量複驗（ChatGPT）與回應
+
+- Reviewed Head：`18c6e7c80b1eddca2570f98729a87606aa7d0daf`（增量 Base `30f4ccc`）
+- 結論：修正後再複驗，暫不合併。
+  - PR1-REV001 **已關閉**：審查者獨立重跑前輪反例，現在判 `BLOCKED AUDIT_UNRECONCILED`。
+  - 新發現 **PR1-R1-REV001（MEDIUM／P2）**：query 的參數名稱可以繞過遮罩，進入證據紀錄。審查者以 `queryOf → maskValue → JSON.stringify` 重現（全部是虛構資料）；HTTP 端到端只以原始碼確認。
+- 審查者獨立執行：b3-unit 29／0／0；manifest 91／91；封裝重播 15／15；CI run 44906499146 對應同一 Head。
+
+| ID | 處理（Claude） | 位置 |
+|---|---|---|
+| PR1-R1-REV001 | 已修 | `src/trace-proxy.mjs` 的 `queryOf`（允許清單投影） |
+
+- 只修 PR1-R1-REV001；PR1-REV001 的逐欄對帳與 create-only 驗證保留不變。
+- 使用者決策：`未核准`
+

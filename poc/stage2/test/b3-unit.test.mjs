@@ -475,6 +475,78 @@ test('PR1-REV001: audit write content is compared field by field, strictly decod
   assert.ok(run((b) => { const e = encAudit(b.post[A]); e.fields.authUid = MASK; setBody(b, e); }).some((x) => x.includes('content differs') && x.includes('authUid')));
   // the proxy's structured query
   assert.deepEqual(queryOf('/v1/x/auditLog/a?currentDocument.exists=false'), [{ 'currentDocument.exists': 'false' }]);
-  assert.deepEqual(queryOf('/v1/x?a=1&a=2&b='), [{ a: '1' }, { a: '2' }, { b: '' }]);
+  assert.deepEqual(queryOf('/v1/x?a=1&a=2&b='), [{ unknownParameter: { valueRecorded: false } }, { unknownParameter: { valueRecorded: false } }, { unknownParameter: { valueRecorded: false } }]);   // PR1-R1-REV001
   assert.deepEqual(queryOf('/v1/read'), []);
+});
+
+// ======================================================================= PR1-R1-REV001: query names/values never leak
+import http from 'node:http';
+import { mkdtempSync, readFileSync as rfs, rmSync as rms } from 'node:fs';
+import { tmpdir } from 'node:os';
+import path from 'node:path';
+import { createTraceProxy, MAX_QUERY_PARAMS } from '../src/trace-proxy.mjs';
+import { makeMasker, findLeaks } from '../src/mask.mjs';
+
+const FAKE_JWT = 'eyJhbGciOiJub25lIn0.eyJzdWIiOiJGQUtFX09OTFkifQ.fake_signature';   // fictional
+const FAKE_NAME = '測試姓名甲'; const FAKE_EMAIL = 'fake.person@example.invalid'; const FAKE_KEY = 'sk-live-FAKE0000000000';
+const NR = { valueRecorded: false };
+const hostileQueries = () => [
+  `${encodeURIComponent(FAKE_JWT)}=x`, `${encodeURIComponent(FAKE_NAME)}=1`, `${encodeURIComponent(FAKE_EMAIL)}=1`,
+  `token=${encodeURIComponent(FAKE_JWT)}`, `key=${FAKE_KEY}`, `pageToken=${encodeURIComponent(FAKE_EMAIL)}`,
+  `currentDocument.exists=${encodeURIComponent(FAKE_NAME)}`, `updateMask.fieldPaths=${encodeURIComponent(FAKE_JWT)}`,
+  `currentDocument.exists=false&${encodeURIComponent(FAKE_JWT)}=1`, `currentDocument.exists=false&currentDocument.exists=false`,
+  `${'%65%79%4A'}hbGciOiJub25lIn0.x.y=1`,   // percent-encoded "eyJ…" name
+];
+
+test('PR1-R1-REV001: queryOf is an allow-list projection — no caller-chosen name or value is copied', () => {
+  for (const q of hostileQueries()) {
+    const out = queryOf(`/v1/read?${q}`); const text = JSON.stringify(out);
+    for (const secret of [FAKE_JWT, FAKE_NAME, FAKE_EMAIL, FAKE_KEY, 'eyJhbG']) assert.ok(!text.includes(secret), `${q} → ${text}`);
+  }
+  assert.deepEqual(queryOf('/x?currentDocument.exists=false'), [{ 'currentDocument.exists': 'false' }]);
+  assert.deepEqual(queryOf('/x?pageSize=300&pageToken=abc&key=emulator-local'), [{ pageSize: '300' }, { pageToken: NR }, { key: 'emulator-local' }]);
+  assert.deepEqual(queryOf(`/x?currentDocument.exists=false&${encodeURIComponent(FAKE_JWT)}=1`), [{ 'currentDocument.exists': 'false' }, { unknownParameter: NR }]);
+  assert.deepEqual(queryOf(`/x?currentDocument.exists=${encodeURIComponent(FAKE_NAME)}`), [{ 'currentDocument.exists': NR }]);
+  assert.equal(queryOf(`/x?${Array.from({ length: 40 }, (_, i) => `p${i}=1`).join('&')}`).length, MAX_QUERY_PARAMS + 1);
+});
+
+test('PR1-R1-REV001: extra, duplicate or invalid query parameters keep the audit PATCH rejectable', () => {
+  const run = (url) => { const b = base(); b.back[1].query = queryOf(url); return reconcile(b).problems; };
+  assert.deepEqual(run('/p?currentDocument.exists=false'), []);   // normal create stays reconcilable
+  for (const u of [`/p?currentDocument.exists=false&${encodeURIComponent(FAKE_JWT)}=1`, '/p?currentDocument.exists=false&currentDocument.exists=false', `/p?currentDocument.exists=${encodeURIComponent(FAKE_NAME)}`, '/p?currentDocument.exists=false&updateMask.fieldPaths=decision', '/p?']) {
+    assert.ok(run(u).some((x) => x.includes('not an observable create')), u);
+  }
+});
+
+test('PR1-R1-REV001: the JSONL the trace proxy actually writes holds none of the hostile query names/values (incl. failed requests)', async () => {
+  const dir = mkdtempSync(path.join(tmpdir(), 'cmn-q-'));
+  const upstream = http.createServer((req, res) => { req.resume(); res.writeHead(req.url.startsWith('/v1/read') ? 403 : 200, { 'content-type': 'application/json' }); res.end('{"code":"FORBIDDEN"}'); });
+  await new Promise((r) => upstream.listen(0, '127.0.0.1', r));
+  const upOrigin = `http://127.0.0.1:${upstream.address().port}`;
+  const masker = makeMasker([FAKE_NAME]);
+  const proxies = [];
+  try {
+    for (const [role, routeTo] of [['front', upOrigin], ['back', upOrigin], ['back', 'http://127.0.0.1:1']]) {   // last one: upstream down → 502 (failed request)
+      const file = path.join(dir, `${role}-${proxies.length}.jsonl`);
+      const px = createTraceProxy({ role, route: () => routeTo, masker, file, port: 0 });
+      const port = await px.listen(); proxies.push({ px, file });
+      for (const q of hostileQueries()) {
+        const p = role === 'front' ? '/v1/read' : '/v1/projects/p/databases/(default)/documents/workspaces/W/auditLog/a1';
+        await fetch(`http://127.0.0.1:${port}${p}?${q}`, { method: role === 'front' ? 'POST' : 'PATCH', headers: { 'content-type': 'application/json', ...(role === 'back' ? { 'x-cmn-trace-id': 'TR-00000000-0000-4000-8000-000000000000' } : {}) }, body: '{"op":"attendanceSession.read","target":{"sessionId":"S1"}}' }).then((r) => r.text()).catch(() => null);
+      }
+    }
+    for (const { px, file } of proxies) {
+      await px.close(); px.closed = true;
+      const text = rfs(file, 'utf8'); const lines = text.split('\n').filter(Boolean).map((l) => JSON.parse(l));
+      assert.equal(lines.length, hostileQueries().length, file);
+      assert.deepEqual(findLeaks(text, { names: [FAKE_NAME], secrets: [FAKE_JWT, FAKE_EMAIL, FAKE_KEY] }), [], file);
+      for (const s of [FAKE_JWT, FAKE_NAME, FAKE_EMAIL, FAKE_KEY, 'eyJhbG', encodeURIComponent(FAKE_JWT), encodeURIComponent(FAKE_NAME)]) assert.ok(!text.includes(s), `${file}: ${s}`);
+      for (const l of lines) for (const e of l.query) assert.equal(Object.keys(e).length, 1);
+    }
+    // the failed-request proxy really recorded failures
+    assert.ok(rfs(proxies[2].file, 'utf8').split('\n').filter(Boolean).every((l) => JSON.parse(l).status === 502));
+  } finally {
+    for (const { px } of proxies) if (!px.closed) await Promise.race([px.close(), new Promise((r) => setTimeout(r, 2000))]);
+    upstream.closeAllConnections?.(); await new Promise((r) => upstream.close(r)); rms(dir, { recursive: true, force: true });
+  }
 });
