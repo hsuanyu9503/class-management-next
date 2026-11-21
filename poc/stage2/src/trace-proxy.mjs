@@ -5,7 +5,7 @@
  *  boundary (S2B2-ATTESTATION §9 is not implemented): a local process could bypass it. */
 import http from 'node:http';
 import { randomUUID } from 'node:crypto';
-import { appendFileSync, writeFileSync, mkdirSync } from 'node:fs';
+import { appendFileSync, writeFileSync, mkdirSync, chmodSync } from 'node:fs';
 import path from 'node:path';
 import { assertLoopbackUrl } from './local-guard.mjs';
 import { maskAuthorization } from './mask.mjs';
@@ -30,12 +30,17 @@ function readBody(req) {
  *  @param opts.route (path) => upstream origin (loopback)
  *  @param opts.masker makeMasker(...)
  *  @param opts.file optional JSONL file path */
-export function createTraceProxy({ role, route, masker, file = null, port, host = '127.0.0.1' }) {
+/** B3a: `socketPath` makes the proxy listen on a Unix socket instead of TCP (the sandboxed Adapter's only
+ *  entry). On the front proxy, GET /__entry_probe is answered locally (204) and never forwarded, so the
+ *  isolation self-check can prove the entry is reachable without creating API traffic or audit records. */
+export const ENTRY_PROBE_PATH = '/__entry_probe';
+export function createTraceProxy({ role, route, masker, file = null, port, host = '127.0.0.1', socketPath = null }) {
   const entries = [];
   let seq = 0;
   if (file) { mkdirSync(path.dirname(file), { recursive: true }); writeFileSync(file, ''); }
   const record = (e) => { const m = masker.maskValue(e); entries.push(m); if (file) appendFileSync(file, JSON.stringify(m) + '\n'); };
   const server = http.createServer(async (req, res) => {
+    if (role === 'front' && req.method === 'GET' && req.url === ENTRY_PROBE_PATH) { req.resume(); res.writeHead(204); res.end(); return; }
     const started = Date.now();
     let traceId;
     if (role === 'front') traceId = `TR-${randomUUID()}`;
@@ -64,7 +69,11 @@ export function createTraceProxy({ role, route, masker, file = null, port, host 
   });
   return {
     entries,
-    listen: () => new Promise((resolve, reject) => { server.once('error', reject); server.listen(port, host, () => resolve(server.address().port)); }),
+    listen: () => new Promise((resolve, reject) => {
+      server.once('error', reject);
+      if (socketPath) server.listen(socketPath, () => { chmodSync(socketPath, 0o666); resolve(socketPath); });
+      else server.listen(port, host, () => resolve(server.address().port));
+    }),
     close: () => new Promise((resolve) => server.close(() => resolve())),
   };
 }

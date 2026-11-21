@@ -696,3 +696,56 @@
 - schema 重跑：合法控制組接受（只代表形狀），16 個拒絕案例全部拒絕（新增：statement 自稱已簽章、manifest 被列為 payload），重複鍵由嚴格解析器拒絕。
 - 使用者決策：`待決`（B3a 範圍＋Q-4；B3b 前 Q-1～Q-3）
 
+### R3 收尾複核（ChatGPT，Reviewed Head `5876ddb0ff6fbd3469fe6c027c95f5d261c69ed2`）
+
+- 依使用者轉交的報告摘要：5 項收尾完成，準備包複核通過；B3-REV001～004 維持「設計結案，實作待驗收」。
+- 審查者核對：三份附件的 blob SHA 與固定 Head 一致；`signed` 欄位已移除；封閉物件設定。
+- 審查者未重跑：完整 schema suite；repository tests；Emulator；Linux 隔離；端到端簽章。
+
+## S2-B2 第 3 批｜合併準備文件，批准 B3a
+
+- 使用者（負責人）回覆「三項都同意」，即：
+  1. 驗收並合併 PR #6；
+  2. 批准 `S2B2-B3-DECISION-SUMMARY.md` A 節的 B3a 本機範圍；
+  3. 同意 Q-4（nonce 一致流程與 ATTESTATION v0.3）。
+- PR #6 由 Claude 依該明確批准合併：merge `636e13088a39c3bd956461e6f8fbab75949c58c1`（Head `5876ddb0`，與 Reviewed Head 相同）。
+- 這不代表 D-17、CI、錨定、repository variable、公開或保存範圍已批准（B3b 前另行批准）。
+
+## S2-B2 第 3 批 B3a｜本機沙箱、Verifier 與攻擊測試
+
+- Base SHA：`636e13088a39c3bd956461e6f8fbab75949c58c1`
+- Reviewed Head SHA：`[尚未審查]`
+- 風險等級（初評）：**L3**。理由：
+  - 實作隔離與證據鏈的核心（沙箱、自我檢查、封存、Verifier、對帳）；
+  - 以 root 執行命名空間與掛載；
+  - 修改第 2 批 API 的稽核 `action` 規則。
+
+  最終等級由負責人決定。
+- 結果：
+  - POC-001／002／008 `UNATTESTED`（觀察值符合契約）；
+  - POC-009 `BLOCKED`；
+  - 攻擊與控制 26／26 符合預期。
+
+  **沒有 PASS**（`PASS_ENABLED = false`）。
+- 不修改：Stage 1 鎖定檔、fixtures、oracle、外部錨定、`.github/workflows/`、根目錄 `package.json`、`tests/`、`firestore.rules`、S2-B1 規格、鎖檔。
+- 需要審查的差異：`S2B2-B3A-REPORT.md` §3。
+- Reviewed Head SHA（R1）：`211e11433bc3e005d3ef68383340e9b27e8183cf`
+- ChatGPT 結論（R1）：需修正（B3A-N1、N2 必修；N3、N4 一併修；N5～N8 與 NOTE 列入後續）
+- 使用者決策：`未核准`
+
+### R1 回應（Claude）
+
+| ID | 處理 | 位置 |
+|---|---|---|
+| B3A-N1 | 已修 | `src/b3/verifier.mjs`（selfCheck 純物件與 own key 檢查） |
+| B3A-N2 | 已修 | `src/b3/package.mjs`（拒絕 `__proto__`、`defineProperty`）；`src/b3/verifier.mjs`、`src/b3/reconcile.mjs`、`src/verdict.mjs`（`Object.hasOwn`） |
+| B3A-N3 | 已修 | `src/b3/isolation-policy.mjs`（`POSITIVE_CONTROL_REQUIRED`）；`src/b3/verifier.mjs`；`src/b3/selfcheck-host.mjs`；schema 草案 |
+| B3A-N4 | 已修 | `src/b3/verifier.mjs`（可信 `platformSupported`；無法查證分支也檢查）；`test/b3-run.mjs` |
+| B3A-N5 | 延後 | tar 嚴格解析：要求重新序列化後位元組相同（含結尾附加內容）；單元測試已標 `todo` |
+| B3A-N6 | 延後 | 稽核與請求綁定：`resourceRef` 全路徑、`claimedScope`、`authUid`／`principalId` 為 null 的情況、每筆稽核文件必須對應一筆 back PATCH |
+| B3A-N7 | 延後 | 掛載選項檢查、FS 隱藏測試的強化、最小化 `/etc` 與 `/usr`、`pathMap` 寫入 digest 或 statement |
+| B3A-N8 | 延後 | `case.json` 只給該案例 actor 的 token |
+| NOTE ①～⑨ | 延後（⑧ 的 own-key 查表已一併處理） | 依審查報告；B3b 前逐項處理 |
+
+- 範圍：`PASS_ENABLED`、`passPossible` 仍為 false；沙箱設定與 `configDigest` 不變；受保護檔案與錨定不變。
+- 審查者的 `S2B2-B3A-reviewer-probes.mjs` 沒有傳到 Claude 的環境；探針依說明自行撰寫。

@@ -309,6 +309,9 @@ const allFiles = Object.keys(digests);
   allFiles.push('masking/trace-front.jsonl', 'masking/trace-back.jsonl');
 }
 for (const k of Object.keys(digests)) if (!allFiles.includes(k)) allFiles.push(k);
+// R1-N7: scan with EVERY secret issued during this run, not only the last world's
+for (const sec of h.issuedSecrets()) if (!secrets.includes(sec)) secrets.push(sec);
+const secretsScanned = secrets.length;
 for (const rel of allFiles) { const text = readFileSync(path.join(runDir, rel), 'utf8'); const leaks = findLeaks(text, { names, secrets }); if (leaks.length) leakReport.push({ file: rel, leaks }); }
 console.log(`${leakReport.length === 0 ? 'OK  ' : 'FAIL'} MASKING no token / password / Authorization header / fictional name in ${allFiles.length} artifact files`);
 
@@ -328,7 +331,7 @@ const summary = {
   gitCommit, gitDirty, fixtureFileSha256: fileSha256, oracleFileSha256: sha256Hex(oracleBytes),
   versions: { node: process.version, firebaseTools: pkg('firebase-tools'), projectId: cfg.projectId },
   cases: caseResults.map((r) => ({ testId: r.testId, actor: r.actor, caseSpecDigest: r.caseSpecDigest, stage2Status: r.verdict.stage2Status, contractMatch: r.verdict.contractMatch, observedCanonical: r.verdict.observedCanonical, oracleFailures: r.verdict.oracleFailures, blockedFields: r.verdict.blockedFields, problems: r.verdict.problems, adapterClaimAgreesWithObserver: r.verdict.adapterClaimAgreesWithObserver, stage1Runner: r.verdict.stage1Runner, stateDigests: r.stateDigests, artifactDigests: r.artifactDigests })),
-  negativeControls: negResults, mutationControls: mutants, masking: { filesChecked: allFiles.length, leaks: leakReport }, cleanupOk,
+  negativeControls: negResults, mutationControls: mutants, masking: { filesChecked: allFiles.length, secretsScanned, leaks: leakReport }, cleanupOk,
   artifactDigests: digests,
 };
 const casesOk = caseResults.every((r) => r.verdict.contractMatch === EXPECTED_MATCH[r.testId]);

@@ -8,11 +8,12 @@
     "node": ">=22"
   },
   "scripts": {
-    "s2:test": "node --test test/guard.test.mjs test/port-state.test.mjs test/nondestructive.test.mjs test/batch2-unit.test.mjs",
+    "s2:test": "node --test test/guard.test.mjs test/port-state.test.mjs test/nondestructive.test.mjs test/batch2-unit.test.mjs test/b3-unit.test.mjs",
     "s2:guard-test": "node --test test/guard.test.mjs",
     "s2:smoke": "node scripts/run-smoke.mjs",
     "s2:occupied-real": "node scripts/run-occupied-real.mjs",
-    "s2:cases": "node scripts/run-cases.mjs"
+    "s2:cases": "node scripts/run-cases.mjs",
+    "s2:b3": "node scripts/run-b3.mjs"
   },
   "devDependencies": {
     "firebase-tools": "15.35.0"

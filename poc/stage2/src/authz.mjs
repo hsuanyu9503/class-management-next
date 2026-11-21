@@ -73,7 +73,8 @@ export function effectiveClassCapabilities(m, { principalId, workspaceId, classI
  *  @param store  { getBinding(uid), getPrincipal(pid), findTargets(collection, idField, id), listMemberships(wid, pid) }
  *  @returns { decision, reasonCode, principalId?, scope?, resource?, effectiveCapabilities? } */
 export async function authorize({ op, claims, target, claimedScope, nowMs, store }) {
-  const def = OPERATIONS[op];
+  // R1-N5: own keys only — prototype names (toString, __proto__, constructor …) are unknown operations
+  const def = typeof op === 'string' && Object.hasOwn(OPERATIONS, op) ? OPERATIONS[op] : null;
   if (!def) return deny('UNKNOWN_OPERATION');
   // §6.1 step 1 — token already verified by the caller; without verified claims nothing proceeds.
   if (!claims || typeof claims.authUid !== 'string' || !Number.isSafeInteger(claims.iat)) return deny('TOKEN_INVALID');

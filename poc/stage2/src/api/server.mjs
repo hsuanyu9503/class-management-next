@@ -53,7 +53,8 @@ export function createApi({ port, host = '127.0.0.1', projectId, backendOrigin, 
       if (req.method !== 'POST' || req.url !== '/v1/read') { audit.reasonCode = 'ROUTE_NOT_FOUND'; return await finish(403, { code: 'FORBIDDEN' }); }
       const text = await new Promise((resolve, reject) => { let s = ''; req.on('data', (c) => { s += c; if (s.length > 65536) reject(new Error('too large')); }); req.on('end', () => resolve(s)); req.on('error', reject); });
       try { body = JSON.parse(text); } catch { body = null; }
-      audit.action = typeof body?.op === 'string' && OPERATIONS[body.op] ? body.op : null;
+      // action is recorded only for a well-shaped request naming an OWN operation key (R1-N5; matches the trace)
+      audit.action = checkRequestShape(body) && Object.hasOwn(OPERATIONS, body.op) ? body.op : null;
       // §6.1 step 1
       const m = /^Bearer (.+)$/.exec(req.headers.authorization || '');
       const v = m ? await verifyEmulatorIdToken(m[1], { projectId, nowSec: Math.floor(nowMs / 1000), lookup: lookupVia(traceId) }) : { ok: false, reason: 'TOKEN_MISSING' };

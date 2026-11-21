@@ -1,7 +1,8 @@
-# S2-B2｜後端證據認證（attestation）設計 v0.2（草案）
+# S2-B2｜後端證據認證（attestation）設計 v0.3（草案）
 
 > **狀態：設計文件，未實作。** 本批沒有任何認證流程、簽章或 PASS 判定的實作。Stage 1 的 `toBackendEvidence()` 仍然拒絕 `PASS`，本設計**不放寬** Stage 1 的任何防護。
 > v0.2：回應 PR #4 審查 S2B2-REV-002，新增 §9「隔離要求」與 §10「攻擊驗收情境」。在隔離條件未滿足或無法查證時，結果只能是 `UNATTESTED` 或 `BLOCKED`。
+> v0.3：依負責人同意的 Q-4（`S2B2-B3-DECISION-SUMMARY.md`），統一 nonce 時序（§3、§4、§9.2 原本互相矛盾）：T0 產生 → T2 Adapter 啟動但入口未開 → T3 寫入標記 → T4 匯出初始狀態 → T5 開始操作。詳見 `S2B2-B3-PLAN.md` §5。
 > 相關：`docs/stage2/S2B2-B1-PLAN.md`、`docs/stage2/S2B2-ADAPTER-PLAN.md`、`poc/stage1/src/evidence.mjs`、`poc/stage1/contracts/evidence-schema-v1.0.json`。
 
 ## 1. 要解決的問題
@@ -42,7 +43,7 @@ Stage 1 只能把真實後端結果記成 `PENDING_ATTESTATION`，因為 Adapter
 | `gitCommit` | 執行時的完整 commit SHA | 綁定程式碼 |
 | `anchorDigest` | `scripts/verify-anchor.mjs` 的 digest（受保護檔案） | 綁定防護程式與鎖定基準 |
 | `environment` | Node、Java、firebase-tools 版本、Emulator jar 版本與 MD5、作業系統映像、Runner 識別 | 綁定執行環境 |
-| `runId`、`runAttempt`、`nonce` | Runner 在執行**之前**產生的隨機 nonce，同時寫進 Emulator 中的一份標記文件 | 防止重播 |
+| `runId`、`runAttempt`、`nonce` | Runner 在 Adapter 啟動**之前**產生的隨機 nonce（T0）。Adapter 回報 `READY` 之後、操作開始之前，Runner 才把它連同 `runId`、`runAttempt` 寫進 Emulator 的標記文件 `_attestationRuns/{runId}`（T3）。標記寫入後不得改寫 | 防止重播 |
 | `startedAt`、`finishedAt` | §7.6 格式的 UTC 時間 | |
 | `traceDigest` | Runner 記錄的請求／回應 trace 檔的 SHA-256 | 綁定實際操作 |
 | `stateExportDigest` | 執行後 Emulator 狀態匯出檔的 SHA-256 | 綁定實際狀態 |
@@ -53,7 +54,15 @@ Stage 1 只能把真實後端結果記成 `PENDING_ATTESTATION`，因為 Adapter
 
 ## 4. canonical 的來源
 
-1. Runner 先清空 Emulator，載入鎖定的 fixtures，寫入 nonce 標記文件，再交給 Adapter 執行。
+1. Runner 依下列順序執行：
+   1. 產生 nonce（T0）；
+   2. 清空 Emulator、載入鎖定的 fixtures（T1）；
+   3. 啟動 Adapter，但入口尚未開放（T2）；
+   4. 收到 Adapter 的 `READY` 後寫入 nonce 標記文件（T3）；
+   5. 匯出初始狀態並送出 `GO`（T4）；
+   6. Adapter 開始案例操作（T5）。
+
+   `READY`／`GO` 逾時一律終止並判為 `BLOCKED`。
 2. Adapter 執行後，Runner 透過 Emulator 的本機管理介面（owner 權限）**匯出狀態**；在 Adapter 執行期間，Runner 以本機代理記錄 Adapter 與 Emulator 之間的所有請求與回應，形成 trace。
 3. Observer 只讀匯出的狀態與 trace，算出 canonical。例如 POC-008 的計數是由匯出的 `entries` 文件重算，而不是讀 Adapter 回傳的數字。
 4. Verifier 比對 `observedCanonical` 與 oracle（並遵守 `P0_PINNED` 與安全斷言）：
@@ -126,7 +135,10 @@ Stage 1 只能把真實後端結果記成 `PENDING_ATTESTATION`，因為 Adapter
 - **網路**：Adapter 只能連到受控 API 的單一入口（經記錄代理）。Emulator 的資料埠、管理端點（`/emulator/v1/...`）、hub、logging、websocket 對 Adapter **都不可達**；Adapter 的環境中不提供 `FIRESTORE_EMULATOR_HOST` 等變數，也拿不到 owner token。
 - **檔案系統**：Adapter 只看得到唯讀的程式碼與自己的暫存目錄；看不到 oracle、fixtures 的原始檔以外的鎖定檔、證據目錄、匯出檔、trace、Observer 與 Verifier 的程式碼。
 - **憑證**：簽章權限（例如 OIDC token、簽章金鑰）只存在 §9.3 的簽章環境；Adapter 與 Runner 的執行環境都沒有。
-- **nonce**：由 Runner 在 Adapter 啟動**之後**、操作開始前才寫入 Emulator，Adapter 無法預先取得或改寫標記文件。
+- **nonce**：由 Runner 在 Adapter 啟動之前產生（T0），在 Adapter 回報 `READY` 之後、`GO` 之前才寫入 Emulator（T3）。
+  - Adapter 無法預先取得或改寫標記文件。
+  - 控制管道只允許 `READY`（Adapter → Runner）、`GO`（Runner → Adapter）、`DONE`（Adapter → Runner）。
+  - nonce 不取代隔離，也不取代封裝內容的綁定。
 
 ### 9.3 驗證與簽章環境
 
