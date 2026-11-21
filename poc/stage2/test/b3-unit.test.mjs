@@ -488,7 +488,8 @@ import { createTraceProxy, MAX_QUERY_PARAMS } from '../src/trace-proxy.mjs';
 import { makeMasker, findLeaks } from '../src/mask.mjs';
 
 const FAKE_JWT = 'eyJhbGciOiJub25lIn0.eyJzdWIiOiJGQUtFX09OTFkifQ.fake_signature';   // fictional
-const FAKE_NAME = '測試姓名甲'; const FAKE_EMAIL = 'fake.person@example.invalid'; const FAKE_KEY = 'sk-live-FAKE0000000000';
+const FAKE_NAME = '測試姓名甲'; const FAKE_EMAIL = 'fake.person@example.invalid';
+const FAKE_KEY = ['sk', 'live', 'FAKE0000000000'].join('-');   // fictional; built at runtime so the source holds no credential-shaped literal
 const NR = { valueRecorded: false };
 const hostileQueries = () => [
   `${encodeURIComponent(FAKE_JWT)}=x`, `${encodeURIComponent(FAKE_NAME)}=1`, `${encodeURIComponent(FAKE_EMAIL)}=1`,
