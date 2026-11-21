@@ -139,7 +139,7 @@ A17（不安全封裝）與其他純函式規則在 `test/b3-unit.test.mjs`（8 
 
 - 範圍：`PASS_ENABLED`、`passPossible` 仍為 false；沙箱設定與 `configDigest` 不變。
 - 審查者探針 `S2B2-B3A-R1-reviewer-probes.mjs`（X1～X10）沒有傳到 Claude 的環境，**未執行**。
-- B3A-N5～N8 與 NOTE-c 保留到 B3b 前。
+- B3A-N5～N8 保留到 B3b 前（見 §7）。NOTE-c：原文缺失，待確認，與 N5～N8 分開追蹤。
 
 ## 7. B3b 前修正 PR-1（B3A-N5～N8）
 
@@ -156,4 +156,4 @@ A17（不安全封裝）與其他純函式規則在 `test/b3-unit.test.mjs`（8 
 - `s2:b3` 由 26 項增為 30 項：N8、兩個 N7 變體、N5。原 26 項的判定（結果＋reason code）不變。
 - §3 中「`/etc` 以唯讀方式掛入沙箱」一項由 N7 取代。
 - 範圍：`PASS_ENABLED`、`passPossible` 仍為 false；Stage 1、錨定、CI、workflow 未變更。
-- NOTE-c 的具體內容沒有傳到 Claude 的環境，所以本 PR 沒有處理 NOTE-c；NOTE ①～⑦ 的原文也沒有傳到 Claude 的環境，本 PR 只依 REVIEW_LOG 的 N5～N8 描述處理。
+- NOTE-c：**原文缺失，待確認**（只有編號）。依負責人指示不推測內容、不據此修改程式，也不作為獨立阻擋條件；NOTE ①～⑦ 的原文也沒有傳到 Claude 的環境，本 PR 只依 REVIEW_LOG 的 N5～N8 描述處理。

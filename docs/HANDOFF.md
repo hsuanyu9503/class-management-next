@@ -29,7 +29,7 @@
   - B3A-N7：最小 rootfs（無 `/etc`、`/usr` 只含所需檔案）、掛載選項檢查、FS 隱藏強化、`pathMapDigest` 入 statement；**configDigest 改為 `18d9e21f…`**；
   - B3A-N8：`case.json` 只給該 actor 的 token。
 
-  尚未處理：NOTE-c（內容沒有傳到 Claude 的環境）；NOTE ①～⑦ 的原文同樣沒有傳到 Claude 的環境。
+  NOTE-c：**原文缺失，待確認**（目前只有編號）。依負責人指示不推測內容、不據此修改程式，也不作為獨立阻擋條件；找到原文後再補具體要求。B3A-N5～N8 另有明確描述，與 NOTE-c 分開追蹤。NOTE ①～⑦ 的原文同樣沒有傳到 Claude 的環境。
 - 負責人決定（2026-11-21）：Q-1（D-17）、Q-2、Q-3 採 `S2B2-B3-DECISION-SUMMARY.md` B 節的推薦；分兩個 PR（PR-1 本機修正 → PR-2 B3b）；Q-3 artifact 保存 30 天。PR-2 合併後，負責人仍須設定錨定 digest、`CMN_S2_TRUSTED_TOOLCHAIN_SHA`、`CMN_S2_SIGNING_POLICY_BLOB`；完成前不得 `PASS`。
 - 下一位負責人：ChatGPT（PR-1 審查，L3）→ 你（PR-1 驗收與合併）→ Claude（PR-2：B3b）。
 - 最近更新：2026-11-21（臺灣）

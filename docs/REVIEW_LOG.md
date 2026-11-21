@@ -800,7 +800,7 @@
 - 負責人回覆「1.合併 2.全部開始」。Claude 依明確批准合併 PR #8：merge `322f65b0373c1fda0f040cc0d249c930da0a6a7e`（Head `493feb86`，同 Head CI run 44903688999 success）。
 - 「全部開始」的範圍經負責人確認：
   - Q-1（D-17）、Q-2、Q-3 採用 `S2B2-B3-DECISION-SUMMARY.md` B 節的推薦；
-  - **分兩個 PR**：PR-1 先處理 B3A-N5～N8 與 NOTE-c（只在本機，不碰 workflow）；合併後 PR-2 才做 B3b（`attest.yml`、批准紀錄、錨定清單）；
+  - **分兩個 PR**：PR-1 先處理 B3A-N5～N8（只在本機，不碰 workflow；NOTE-c 分開追蹤，見下方）；合併後 PR-2 才做 B3b（`attest.yml`、批准紀錄、錨定清單）；
   - Q-3 Actions artifact 保存天數：**30 天**。
 - 仍待負責人處理（Claude 不代設）：錨定 digest、`CMN_S2_TRUSTED_TOOLCHAIN_SHA`、`CMN_S2_SIGNING_POLICY_BLOB`。完成前結果一律不得 `PASS`。
 - Q-3 的「可下載範圍」：repository 為 public；artifact 的實際存取範圍在 B3b 實作時核對並回報，不以推定代替。
@@ -818,7 +818,14 @@
 | B3A-N6 | 已修 | `src/b3/reconcile.mjs`（完整 `resourceRef`、null 順序、`claimedScope`、每筆稽核對應一筆 PATCH） |
 | B3A-N7 | 已修 | `src/b3/isolation-policy.mjs`、`sandbox.mjs`、`selfcheck-host.mjs`、`sandbox-check/selfcheck.mjs`、`verifier.mjs`、`test/b3-run.mjs`、schema 草案；**configDigest 改為 `18d9e21f…`** |
 | B3A-N8 | 已修 | `src/b3/case-input.mjs`（`buildCaseInput()`：`case.json` 只含該案例 actor 的 token）；`test/b3-run.mjs` |
-| NOTE-c | **未處理** | 具體內容沒有傳到 Claude 的環境；請審查者補上 |
+| NOTE-c | 原文缺失，待確認 | 只有編號；不推測內容、不據此修改程式、不作為獨立阻擋條件 |
 
 - 範圍：`PASS_ENABLED`、`passPossible` 仍為 false；Stage 1、錨定、CI、workflow、repository variable、OIDC 未變更。
 - 使用者決策：`未核准`
+
+### NOTE-c 的處理方式（負責人指示，2026-11-21）
+
+- NOTE-c 目前只有編號，缺少原文，狀態標為「**原文缺失，待確認**」。
+- 不推測內容、不據此修改程式、不把它當成獨立的阻擋條件。之後找到原文，再補上具體要求。
+- B3A-N5～N8 另有明確描述，與 NOTE-c **分開追蹤**。上方 F1 紀錄中「B3A-N5～N8、NOTE-c」並列的寫法，以本節為準。
+- F1 增量複驗「通過」的結論不變。
