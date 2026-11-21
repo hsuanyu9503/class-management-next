@@ -763,7 +763,7 @@
 ## S2-B2 第 3 批 B3a 後續修正 F1（B3A-R1-N1、NOTE-a、NOTE-b）
 
 - Base SHA：`15a7c51fe6341d79afdafc5aefb22501fe081377`（PR #7 合併）
-- Reviewed Head SHA：`[尚未審查]`；審查方式 INCREMENTAL
+- Reviewed Head SHA：`df83fb5204d142b44a89906cd5c9d71048ca6f8d`；審查方式 INCREMENTAL
 - 風險等級（初評）：**L3**（Verifier 變更）
 - 範圍：一個小 commit。B3A-N5～N8 與 NOTE-c 不動，保留到 B3b 前。
 
@@ -777,3 +777,20 @@
 - 範圍：`PASS_ENABLED`、`passPossible` 仍為 false；沙箱設定與 `configDigest` 不變；受保護檔案與錨定不變；未改 CI、workflow、repository variable、OIDC。
 - 審查者的 `S2B2-B3A-R1-reviewer-probes.mjs`（X1～X10）**沒有傳到 Claude 的環境**，所以 X1～X10 **未執行**；指令列出的非物件案例已自行寫成單元測試。
 - 使用者決策：`未核准`
+
+### F1 增量複驗（ChatGPT，2026-11-21）
+
+- 結論：**通過，可交使用者驗收與合併決策**；未發現新增阻擋性缺失。B3A-R1-N1、NOTE-a、NOTE-b 在本輪範圍結案。範圍只限 PR #8 的輸入型別與例外處理、原型鏈回歸測試、版本號；**不等於**重新驗收完整 B3a 隔離，也**不批准** B3b。
+- Reviewed Head：`df83fb5204d142b44a89906cd5c9d71048ca6f8d`；同 Head CI [run 44893134293](https://github.com/hsuanyu9503/class-management-next/actions/runs/44893134293) success（不含 Emulator／B3a）。
+- 審查者獨立執行：
+  - b3-unit：21 pass、0 fail、**1 todo**。todo 是 tar 結束標記後附加資料的拒絕測試（B3A-N5）；斷言目前仍不成立，**不算通過**。
+  - manifest：91／91 檔大小與 SHA-256 吻合。
+  - Verifier 封裝重播：15／15 的 result、完整 reasons、observedCanonical 與 verify.json 一致。重播用的 trusted 參數由作者交付的材料重建，只證明固定程式對這組材料可重現，**不構成**執行來源認證。
+- 只有作者本機證據（審查者未重跑）：乾淨 checkout 完整流程、Emulator、s2:b3 26／26、16 項 mutation、schema 測試、225 個秘密的遮罩掃描。
+- **未執行**：
+  - X1～X10 原探針（檔案未取得；新增測試與其不宣稱逐項等價）；
+  - hosted runner；A4／A10／A14／A18；簽章與第三方驗證；非 root Runner；
+  - Windows 隔離（審查者只在 Windows 執行純函式測試）。
+- 未解決（B3b 前處理）：B3A-N5～N8、NOTE-c。
+- 使用者決策：`未核准`（待驗收與合併決策）
+

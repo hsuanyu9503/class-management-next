@@ -23,7 +23,7 @@
 - S2-B2 第 1 批狀態：已合併（PR #4）。
 - S2-B2 第 2 批狀態：PR #5。R1（Head `37546804c61c`）CHANGES REQUESTED；R1 複驗（Head `2fa78f74cd2b`）需修正（REV001／002 結案、REV003 部分結案；R1-N1～N4）；R2 修正共兩個 commit（`d17e537` 修正、`d2dafe1` 只改測試假值的寫法）；**R2 複驗（Reviewed Head `d2dafe16ba488df60e6a2340ad9cd075c691ed2a`）通過**，可交使用者驗收與合併決策。R1-N5～N7、無前綴不透明憑證、分頁拒絕仍是待辦（`docs/REVIEW_LOG.md`）。新增規格缺口 G-1～G-4 需要負責人決策（`S2B2-B2-PLAN.md` §3）。
 - 第 2 批狀態：**已合併**（PR #5）。POC-001／002／008 最多 `UNATTESTED`，POC-009 `BLOCKED`；Stage 1 的 72 筆 `NOT_RUN` 不變。R1-N5～N7、無前綴不透明憑證、分頁拒絕仍是待辦，第 3 批計畫 §10 把 N5～N7 列為 B3a 前置。
-- 第 3 批狀態：準備文件已合併（PR #6）；**B3a 已合併**（PR #7，merge `15a7c51fe6341d79afdafc5aefb22501fe081377`；R1 增量複驗 Head `9a9450b2` 結論「可合併；N1～N4 已關閉」，使用者確認 CI 後合併）。**後續修正 PR 進行中**（F1：B3A-R1-N1、NOTE-a、NOTE-b）。B3b 前的待辦：
+- 第 3 批狀態：準備文件已合併（PR #6）；**B3a 已合併**（PR #7，merge `15a7c51fe6341d79afdafc5aefb22501fe081377`；R1 增量複驗 Head `9a9450b2` 結論「可合併；N1～N4 已關閉」，使用者確認 CI 後合併）。**後續修正 F1**（PR #8，B3A-R1-N1、NOTE-a、NOTE-b）：ChatGPT 增量複驗**通過**（Reviewed Head `df83fb52`；b3-unit 21 pass／1 todo，todo 為 B3A-N5，仍不成立；封裝重播 15／15 一致，但不構成來源認證；X1～X10 未執行），**待使用者驗收與合併**。B3b 前的待辦：
   - B3A-N5：tar 嚴格解析；
   - B3A-N6：稽核與請求的完整綁定；
   - B3A-N7：掛載選項、FS 隱藏測試、最小化 `/etc`／`/usr`、`pathMap` 入 digest；
@@ -32,7 +32,7 @@
   - NOTE ①～⑨ 的其餘項目（⑨ 已在 F1 處理）。
 
   B3b（D-17、CI／錨定、repository variable、公開與保存）尚未批准，不開始。
-- 下一位負責人：ChatGPT（後續修正 F1 的增量複驗）→ 你（F1 驗收與合併；B3b 前的 Q-1～Q-3，以及 B3b 是否開始）。
+- 下一位負責人：你（PR #8 驗收與合併決策；B3b 前的 Q-1～Q-3，以及 B3b 是否開始）。
 - 最近更新：2026-11-21（臺灣）
 
 ## PR #1 正式合併紀錄
