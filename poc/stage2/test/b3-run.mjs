@@ -18,6 +18,7 @@ import { sandboxConfig, configDigest, POLICY_VERSION, pathMapDigest } from '../s
 import { launchSandbox, cleanupSandboxDirs, resolvePathMap } from '../src/b3/sandbox.mjs';
 import { runSelfCheck } from '../src/b3/selfcheck-host.mjs';
 import { writePackage } from '../src/b3/package.mjs';
+import { buildCaseInput } from '../src/b3/case-input.mjs';
 import { verifyPackage, PAYLOAD, CASE_ACTORS } from '../src/b3/verifier.mjs';
 import { stableJson, sha256Hex } from '../src/stable.mjs';
 import { executeCase } from '../../stage1/src/runner.mjs';
@@ -87,9 +88,7 @@ async function attestedRun(label, { testId, entry = '/adapter/main.mjs', cfg = s
   rl('setup', 'isolation-self-check');
   const inputDir = path.join(workDir, `input-${runId}`); mkdirSync(inputDir, { recursive: true }); chmodSync(inputDir, 0o755);
   // B3A-N8: the Adapter receives ONLY the token of this case's actor (trusted CASE_ACTORS table), never the others
-  const caseActor = Object.hasOwn(CASE_ACTORS, testId) ? CASE_ACTORS[testId] : null;
-  if (!caseActor || !users[caseActor]?.token) throw new Error(`no trusted actor/token for ${testId}`);
-  writeFileSync(path.join(inputDir, 'case.json'), JSON.stringify({ testId, fixtures, tokens: { [caseActor]: users[caseActor].token }, attackHints }));
+  writeFileSync(path.join(inputDir, 'case.json'), JSON.stringify(buildCaseInput({ testId, fixtures, users, attackHints, caseActors: CASE_ACTORS })));
   chmodSync(path.join(inputDir, 'case.json'), 0o644);
   const caseTokenActors = Object.keys(JSON.parse(readFileSync(path.join(inputDir, 'case.json'), 'utf8')).tokens);   // as written (N8)
   let sbx = null; let ready = false; let doneOk = false; let term = null; let nonceWrittenAt = null; let pre = null; let caseStartedAt = null; let caseEndedAt = null;

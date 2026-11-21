@@ -817,7 +817,7 @@
 | B3A-N5 | 已修 | `src/b3/package.mjs`（重新序列化後位元組必須相同，`ARTIFACT_NONCANONICAL`） |
 | B3A-N6 | 已修 | `src/b3/reconcile.mjs`（完整 `resourceRef`、null 順序、`claimedScope`、每筆稽核對應一筆 PATCH） |
 | B3A-N7 | 已修 | `src/b3/isolation-policy.mjs`、`sandbox.mjs`、`selfcheck-host.mjs`、`sandbox-check/selfcheck.mjs`、`verifier.mjs`、`test/b3-run.mjs`、schema 草案；**configDigest 改為 `18d9e21f…`** |
-| B3A-N8 | 已修 | `test/b3-run.mjs`（`case.json` 只含該案例 actor 的 token） |
+| B3A-N8 | 已修 | `src/b3/case-input.mjs`（`buildCaseInput()`：`case.json` 只含該案例 actor 的 token）；`test/b3-run.mjs` |
 | NOTE-c | **未處理** | 具體內容沒有傳到 Claude 的環境；請審查者補上 |
 
 - 範圍：`PASS_ENABLED`、`passPossible` 仍為 false；Stage 1、錨定、CI、workflow、repository variable、OIDC 未變更。

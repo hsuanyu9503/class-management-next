@@ -391,3 +391,18 @@ test('B3A-N7: pathMapDigest covers every host source and file digest; the Verifi
   // statement carries the digest
   assert.equal(verifyMod().statement.isolation.pathMapDigest, iso.pathMapDigest);
 });
+
+// ======================================================================= PR-1 (B3A-N8): actor-only token
+import { buildCaseInput } from '../src/b3/case-input.mjs';
+import { CASE_ACTORS } from '../src/b3/verifier.mjs';
+
+test('B3A-N8: case input carries only the case actor\'s token', () => {
+  const users = { 'ACTOR-TEACHER': { token: 't-teacher' }, 'ACTOR-OTHER': { token: 't-other' }, 'ACTOR-SC01-TEACHER': { token: 't-sc01' } };
+  for (const t of ['POC-001', 'POC-002', 'POC-008', 'POC-009']) {
+    const inp = buildCaseInput({ testId: t, fixtures: {}, users, caseActors: CASE_ACTORS });
+    assert.deepEqual(Object.keys(inp.tokens), [CASE_ACTORS[t]], t); assert.equal(inp.tokens[CASE_ACTORS[t]], users[CASE_ACTORS[t]].token);
+    assert.ok(!JSON.stringify(inp).includes(Object.values(users).map((u) => u.token).find((x) => x !== users[CASE_ACTORS[t]].token)), t);
+  }
+  for (const t of ['POC-999', 'toString', '__proto__', null]) assert.throws(() => buildCaseInput({ testId: t, fixtures: {}, users, caseActors: CASE_ACTORS }), /no trusted actor/, String(t));
+  assert.throws(() => buildCaseInput({ testId: 'POC-001', fixtures: {}, users: { 'ACTOR-OTHER': { token: 'x' } }, caseActors: CASE_ACTORS }), /no trusted actor/);
+});
