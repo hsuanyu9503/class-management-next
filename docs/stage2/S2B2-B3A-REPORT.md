@@ -140,3 +140,20 @@ A17（不安全封裝）與其他純函式規則在 `test/b3-unit.test.mjs`（8 
 - 範圍：`PASS_ENABLED`、`passPossible` 仍為 false；沙箱設定與 `configDigest` 不變。
 - 審查者探針 `S2B2-B3A-R1-reviewer-probes.mjs`（X1～X10）沒有傳到 Claude 的環境，**未執行**。
 - B3A-N5～N8 與 NOTE-c 保留到 B3b 前。
+
+## 7. B3b 前修正 PR-1（B3A-N5～N8）
+
+依據：PR #8 合併 `322f65b0373c1fda0f040cc0d249c930da0a6a7e`。負責人決定：B3b 分兩個 PR，PR-1 先處理 B3A-N5～N8（只在本機，不碰 workflow）；Q-3 保存天數 30 天（見 REVIEW_LOG）。Verifier 版本 `s2-verifier-b3a-2`。
+
+| ID | 問題 | 修正 | 影響 | 測試 |
+|---|---|---|---|---|
+| **B3A-N5** | 安全讀取器接受 tar 結束標記後的附加內容，以及其他非標準的序列化 | `readPackageSafe` 最後以 `writePackage()` 重新序列化 payload，manifest 與整包位元組都必須完全相同，否則 `ARTIFACT_NONCANONICAL`。涵蓋結尾附加內容、缺少的結束標記、非 0 的 mtime、權限、uname、payload 順序、manifest 的 JSON 文字 | 封裝格式本來就由 `writePackage()` 產生，合法封裝不受影響 | `B3A-N5 (P6)`（原本的 todo 改為正式測試）；`B3A-N5: every non-canonical serialisation…`；`s2:b3`「N5 bytes appended…」 |
+| **B3A-N6** | 稽核紀錄只比對 `resourceRef` 的最後一段；null 欄位、`claimedScope`、稽核文件與 back PATCH 的對應沒有檢查 | reconcile：`resourceRef` 必須是目標查找唯一回傳文件的**完整路徑**（由 pre 狀態以 `OPERATIONS` 的 collection／idField 重算，有歧義則拒絕）；null 欄位順序（allow 必須四欄齊全；`authUid` 為 null 時 principal 與 resource 也必須為 null；principal 為 null 時 resource 必須為 null）；`claimedScope` 與判定一致（allow 必須等於路徑 scope；`SCOPE_CLAIM_MISMATCH` 必須不同；`SCOPE_CLAIM_MISSING` 必須不存在）；每筆新稽核文件必須正好對應同一 trace、同一路徑、狀態 200 的一筆 back PATCH | 誠實案例與攻擊判定不變。A1/A2 降級沙箱多了一個同代碼（`AUDIT_UNRECONCILED`）的細節 | `B3A-N6: audit fields are bound to the request…`（13 種違規＋3 個合法的 deny 對照組） |
+| **B3A-N7** | 沙箱掛入 host 的整個 `/usr` 與 `/etc`、整個 node 安裝目錄；只檢查掛載目標，不檢查掛載選項；pathMap 不在任何 digest 中 | `/usr` 改為唯讀 tmpfs，只複製 `USR_BINARIES`（env、rmdir、setpriv、umount）以及這些程式與 node 的 `ldd` 函式庫；**不掛 `/etc`**；`/opt/node` 只綁定 node 執行檔。自我檢查 `MOUNT_ALLOWLIST` 加查每個掛載的模式與 flags、根目錄清單、`/usr` 的檔案集合。FS 隱藏檢查加入更多 host 路徑：整個 runs 目錄、`test`、`scripts`、`node_modules`、`poc/stage1`、node 安裝的 `lib`、`/etc`、`.github`。`pathMap`（含每個複製檔與 node 執行檔的 SHA-256）與 `pathMapDigest` 寫入 `isolation.json` 與 statement；Verifier 檢查一致性與內容規則（`PATH_MAP_INVALID`） | **configDigest 改變**：`5151d6d4…` → `18d9e21f0fbdbc3a48aff834b6b6e21fdb536e339cb0b453cb3297baca9bb7db`（沙箱設定本身改變，這是預期的）。`pathMapDigest` 取決於 host，不納入 configDigest。statement schema 草案新增必填的 `isolation.pathMapDigest`（平台不支援時可為 null）。沙箱內沒有 sudo，`NO_SUDO` 觀察值為 `ENOENT`，正向控制（host 可提權）仍成立 | `B3A-N7: rootfs has no host /usr or /etc tree…`；`B3A-N7: pathMapDigest covers…`（7 種錯誤的 path map）；`s2:b3` 兩個 A15 path map 變體 |
+| **B3A-N8** | `case.json` 含有所有 actor 的 token | 只放這個案例 actor 的 token（取自可信的 `CASE_ACTORS` 表）；找不到時停止 | Adapter 本來就只用這個 actor | `s2:b3`「N8 case.json holds only the case actor's token」 |
+
+- 單元測試的誠實 fixture 已從 PR-1 工作樹的執行重新產生（見 fixture README），因為沙箱設定與 path map 改變。
+- `s2:b3` 由 26 項增為 30 項：N8、兩個 N7 變體、N5。原 26 項的判定（結果＋reason code）不變。
+- §3 中「`/etc` 以唯讀方式掛入沙箱」一項由 N7 取代。
+- 範圍：`PASS_ENABLED`、`passPossible` 仍為 false；Stage 1、錨定、CI、workflow 未變更。
+- NOTE-c 的具體內容沒有傳到 Claude 的環境，所以本 PR 沒有處理 NOTE-c；NOTE ①～⑦ 的原文也沒有傳到 Claude 的環境，本 PR 只依 REVIEW_LOG 的 N5～N8 描述處理。

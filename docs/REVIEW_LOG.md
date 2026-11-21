@@ -794,3 +794,31 @@
 - 未解決（B3b 前處理）：B3A-N5～N8、NOTE-c。
 - 使用者決策：`未核准`（待驗收與合併決策）
 
+
+### PR #8 合併與負責人決定（2026-11-21）
+
+- 負責人回覆「1.合併 2.全部開始」。Claude 依明確批准合併 PR #8：merge `322f65b0373c1fda0f040cc0d249c930da0a6a7e`（Head `493feb86`，同 Head CI run 44903688999 success）。
+- 「全部開始」的範圍經負責人確認：
+  - Q-1（D-17）、Q-2、Q-3 採用 `S2B2-B3-DECISION-SUMMARY.md` B 節的推薦；
+  - **分兩個 PR**：PR-1 先處理 B3A-N5～N8 與 NOTE-c（只在本機，不碰 workflow）；合併後 PR-2 才做 B3b（`attest.yml`、批准紀錄、錨定清單）；
+  - Q-3 Actions artifact 保存天數：**30 天**。
+- 仍待負責人處理（Claude 不代設）：錨定 digest、`CMN_S2_TRUSTED_TOOLCHAIN_SHA`、`CMN_S2_SIGNING_POLICY_BLOB`。完成前結果一律不得 `PASS`。
+- Q-3 的「可下載範圍」：repository 為 public；artifact 的實際存取範圍在 B3b 實作時核對並回報，不以推定代替。
+
+## S2-B2 第 3 批 B3b 前修正 PR-1（B3A-N5～N8）
+
+- Base SHA：`322f65b0373c1fda0f040cc0d249c930da0a6a7e`（PR #8 合併）
+- Reviewed Head SHA：`[尚未審查]`
+- 風險等級（初評）：**L3**（Verifier、reconcile、沙箱設定與自我檢查變更）
+- 詳細內容：`S2B2-B3A-REPORT.md` §7
+
+| ID | 處理 | 位置 |
+|---|---|---|
+| B3A-N5 | 已修 | `src/b3/package.mjs`（重新序列化後位元組必須相同，`ARTIFACT_NONCANONICAL`） |
+| B3A-N6 | 已修 | `src/b3/reconcile.mjs`（完整 `resourceRef`、null 順序、`claimedScope`、每筆稽核對應一筆 PATCH） |
+| B3A-N7 | 已修 | `src/b3/isolation-policy.mjs`、`sandbox.mjs`、`selfcheck-host.mjs`、`sandbox-check/selfcheck.mjs`、`verifier.mjs`、`test/b3-run.mjs`、schema 草案；**configDigest 改為 `18d9e21f…`** |
+| B3A-N8 | 已修 | `test/b3-run.mjs`（`case.json` 只含該案例 actor 的 token） |
+| NOTE-c | **未處理** | 具體內容沒有傳到 Claude 的環境；請審查者補上 |
+
+- 範圍：`PASS_ENABLED`、`passPossible` 仍為 false；Stage 1、錨定、CI、workflow、repository variable、OIDC 未變更。
+- 使用者決策：`未核准`

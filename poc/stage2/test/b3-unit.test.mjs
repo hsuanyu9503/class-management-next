@@ -32,7 +32,7 @@ test('isolation policy: 22 check IDs; digest is stable and changes with any laun
   }
   assert.deepEqual(unshareArgs(sandboxConfig()), ['--ipc', '--mount', '--net', '--pid', '--uts', '--fork']);
   assert.ok(!unshareArgs(sandboxConfig({ namespaces: ['ipc', 'mnt', 'pid', 'uts'] })).includes('--net'));
-  const s = initScript(sandboxConfig(), { nodeDir: '/n', adapterDir: '/a', checkDir: '/c', inputDir: '/i', entryDir: '/e' }, '/adapter/main.mjs');
+  const s = initScript(sandboxConfig(), { nodeBinary: '/n/bin/node', adapterDir: '/a', checkDir: '/c', inputDir: '/i', entryDir: '/e', usrFiles: [{ inside: '/usr/bin/env', source: '/usr/bin/env' }] }, '/adapter/main.mjs');
   for (const frag of ['pivot_root . oldroot', '--reuid 65534', '--no-new-privs', '--bounding-set=-all', '/usr/bin/env -i', "remount,bind,ro,nodev,nosuid \"$R\"'/adapter'", 'CMN_INIT_FDS']) assert.ok(s.includes(frag), frag);
 });
 
@@ -91,10 +91,10 @@ test('Verifier: content binding and payload set are checked before anything else
 // ---- reconciliation on a synthetic world
 const T = '2026-11-21T00:00:10.000Z';
 const base = () => ({
-  front: [{ role: 'front', traceId: 'TR-1', at: T, status: 200, requestBody: { op: 'attendanceEntry.read', target: { attendanceEntryId: 'E1' } }, authorizationRef: { claimedAuthUid: 'U1' } }],
-  back: [{ role: 'back', traceId: 'TR-1', at: T, method: 'GET', path: '/v1/projects/p/databases/(default)/documents/authBindings/U1' }, { role: 'back', traceId: 'TR-1', at: T, method: 'PATCH', path: '/v1/projects/p/databases/(default)/documents/workspaces/W/auditLog/a1' }],
-  pre: { 'authBindings/U1': { principalId: 'P1' }, 'workspaces/W/classes/C/attendanceSessions/S/entries/E1': { status: 'N' }, '_attestationRuns/1': { nonce: 'n' } },
-  post: { 'authBindings/U1': { principalId: 'P1' }, 'workspaces/W/classes/C/attendanceSessions/S/entries/E1': { status: 'N' }, '_attestationRuns/1': { nonce: 'n' }, 'workspaces/W/auditLog/a1': { traceId: 'TR-1', authUid: 'U1', principalId: 'P1', action: 'attendanceEntry.read', decision: 'allow', reasonCode: 'OK', resourceRef: 'workspaces/W/classes/C/attendanceSessions/S/entries/E1', workspaceId: 'W' } },
+  front: [{ role: 'front', traceId: 'TR-1', at: T, status: 200, requestBody: { op: 'attendanceEntry.read', target: { attendanceEntryId: 'E1' }, claimedScope: { workspaceId: 'W', classId: 'C' } }, authorizationRef: { claimedAuthUid: 'U1' } }],
+  back: [{ role: 'back', traceId: 'TR-1', at: T, method: 'GET', path: '/v1/projects/p/databases/(default)/documents/authBindings/U1' }, { role: 'back', traceId: 'TR-1', at: T, method: 'PATCH', status: 200, path: '/v1/projects/p/databases/(default)/documents/workspaces/W/auditLog/a1' }],
+  pre: { 'authBindings/U1': { principalId: 'P1' }, 'workspaces/W/classes/C/attendanceSessions/S/entries/E1': { attendanceEntryId: 'E1', status: 'N' }, '_attestationRuns/1': { nonce: 'n' } },
+  post: { 'authBindings/U1': { principalId: 'P1' }, 'workspaces/W/classes/C/attendanceSessions/S/entries/E1': { attendanceEntryId: 'E1', status: 'N' }, '_attestationRuns/1': { nonce: 'n' }, 'workspaces/W/auditLog/a1': { traceId: 'TR-1', authUid: 'U1', principalId: 'P1', action: 'attendanceEntry.read', decision: 'allow', reasonCode: 'OK', resourceRef: 'workspaces/W/classes/C/attendanceSessions/S/entries/E1', workspaceId: 'W' } },
   runnerLog: [], caseWindow: { start: Date.parse('2026-11-21T00:00:00Z'), end: Date.parse('2026-11-21T00:01:00Z') }, markerPath: '_attestationRuns/1', expectedMarker: { nonce: 'n' },
 });
 const probs = (mut) => { const b = base(); mut(b); return reconcile(b).problems.map((x) => x.split(':')[0]); };
@@ -224,17 +224,37 @@ test('B3A-N4: platformSupported comes from the trusted input; the unverifiable b
   assert.equal(missing.result, 'BLOCKED'); assert.ok(codes(missing).includes('TRUSTED_INPUT_MISSING'));
 });
 
-test('B3A-N5 (P6): bytes appended after the tar end-of-archive marker are rejected by the safe reader', { todo: 'B3A-N5 deferred: strict tar parsing (re-serialisation must be byte-identical)' }, () => {
+test('B3A-N5 (P6): bytes appended after the tar end-of-archive marker are rejected by the safe reader', () => {
   const p = writePackage({ 'a.json': '{}' });
-  assert.equal(code(() => readPackageSafe(Buffer.concat([p.packageBytes, Buffer.from('trailing')]))), 'ARTIFACT_FORMAT');
+  assert.equal(code(() => readPackageSafe(p.packageBytes)), 'NO_ERROR');   // control: canonical package
+  for (const tail of [Buffer.from('trailing'), Buffer.alloc(512, 0), Buffer.alloc(1, 0)]) assert.equal(code(() => readPackageSafe(Buffer.concat([p.packageBytes, tail]))), 'ARTIFACT_NONCANONICAL');
+  assert.equal(code(() => readPackageSafe(p.packageBytes.subarray(0, p.packageBytes.length - 512))), 'ARTIFACT_NONCANONICAL');   // short end marker
+});
+
+test('B3A-N5: every non-canonical serialisation of a valid payload is refused (headers, order, manifest text)', () => {
+  const p = writePackage({ 'a.json': '{}', 'b.json': '[]' }); const b = Buffer.from(p.packageBytes);
+  const reheader = (buf, off, field, val) => { const x = Buffer.from(buf); x.write(val, off + field); let sum = 0; for (let i = 0; i < 512; i++) sum += (i >= 148 && i < 156) ? 32 : x[off + i]; x.write(sum.toString(8).padStart(6, '0') + '\0 ', off + 148); return x; };
+  assert.equal(code(() => readPackageSafe(reheader(b, 0, 136, '00000000001\0'))), 'ARTIFACT_NONCANONICAL');   // mtime ≠ 0
+  assert.equal(code(() => readPackageSafe(reheader(b, 0, 100, '0000755\0'))), 'ARTIFACT_NONCANONICAL');       // mode ≠ 0644
+  assert.equal(code(() => readPackageSafe(reheader(b, 0, 265, 'root'))), 'ARTIFACT_NONCANONICAL');            // uname set
+  // same files, payload entries in reverse order
+  const m = JSON.parse(p.manifestBytes); const raw = rawTar([{ name: 'manifest.json', content: p.manifestBytes.toString() }, { name: 'b.json', content: '[]' }, { name: 'a.json', content: '{}' }]);
+  assert.equal(code(() => readPackageSafe(raw)), 'ARTIFACT_NONCANONICAL');
+  // manifest with the same content but different JSON text (whitespace)
+  const pretty = JSON.stringify(m, null, 1);
+  const raw2 = rawTar([{ name: 'manifest.json', content: pretty }, { name: 'a.json', content: '{}' }, { name: 'b.json', content: '[]' }]);
+  assert.equal(code(() => readPackageSafe(raw2)), 'ARTIFACT_NONCANONICAL');
+  // control: rawTar with canonical order and text reproduces writePackage exactly
+  const raw3 = rawTar([{ name: 'manifest.json', content: p.manifestBytes.toString() }, { name: 'a.json', content: '{}' }, { name: 'b.json', content: '[]' }]);
+  assert.ok(raw3.equals(p.packageBytes)); assert.equal(code(() => readPackageSafe(raw3)), 'NO_ERROR');
 });
 
 // ======================================================================= F1 (B3A-R1-N1, NOTE-a, NOTE-b)
 import { VERIFIER_VERSION } from '../src/b3/verifier.mjs';
 
-test('NOTE-b: Verifier version is s2-verifier-b3a-1', () => {
-  assert.equal(VERIFIER_VERSION, 's2-verifier-b3a-1');
-  assert.equal(verifyMod().verifierVersion, 's2-verifier-b3a-1');
+test('NOTE-b: Verifier version is s2-verifier-b3a-2 (PR-1)', () => {
+  assert.equal(VERIFIER_VERSION, 's2-verifier-b3a-2');
+  assert.equal(verifyMod().verifierVersion, 's2-verifier-b3a-2');
 });
 
 test('B3A-R1-N1: non-object top-level JSON is BLOCKED with a named reason and never throws', () => {
@@ -293,4 +313,81 @@ test('NOTE-a: reconcile never treats keys on the prototype chain of pre/post as 
     const p = reconcile(b).problems; assert.ok(p.some((x) => x.startsWith('AUDIT_UNRECONCILED') && x.includes('resourceRef')), JSON.stringify(p)); }
   // control: the same documents as own keys reconcile cleanly
   assert.deepEqual(reconcile(base()).problems, []);
+});
+
+// ======================================================================= PR-1 (B3A-N6): audit ↔ request binding
+test('B3A-N6: audit fields are bound to the request (full resourceRef, null order, claimedScope, one PATCH per audit)', () => {
+  const A = 'workspaces/W/auditLog/a1';
+  const has = (mut, code = 'AUDIT_UNRECONCILED') => { const b = base(); mut(b); const pr = reconcile(b).problems; return pr.some((x) => x.startsWith(code)); };
+  assert.deepEqual(reconcile(base()).problems, []);   // control
+  const cases = {
+    // resourceRef: same last segment, different (real) document → was accepted by the last-segment rule
+    'resourceRef in another class with the same id': (b) => { const o = 'workspaces/W/classes/C2/attendanceSessions/S/entries/E1'; b.pre[o] = { attendanceEntryId: 'OTHER' }; b.post[o] = { attendanceEntryId: 'OTHER' }; b.post[A].resourceRef = o; },
+    'target id matches two documents (ambiguous)': (b) => { const o = 'workspaces/W/classes/C2/attendanceSessions/S2/entries/E9'; b.pre[o] = { attendanceEntryId: 'E1' }; b.post[o] = { attendanceEntryId: 'E1' }; },
+    'unknown op cannot resolve a resource': (b) => { b.front[0].requestBody.op = 'toString'; b.post[A].action = 'toString'; },
+    // null order
+    'allow without resourceRef': (b) => { b.post[A].resourceRef = null; },
+    'authUid null but principal set': (b) => { b.post[A].authUid = null; b.post[A].decision = 'deny'; b.post[A].reasonCode = 'TOKEN_MISSING'; b.front[0].status = 403; },
+    'principal null but resource set': (b) => { b.post[A].principalId = null; b.post[A].decision = 'deny'; b.post[A].reasonCode = 'BINDING_NOT_FOUND'; b.front[0].status = 403; },
+    // claimedScope
+    'allow while the claimed class differs': (b) => { b.front[0].requestBody.claimedScope = { workspaceId: 'W', classId: 'C9' }; },
+    'allow without claimedScope': (b) => { delete b.front[0].requestBody.claimedScope; },
+    'SCOPE_CLAIM_MISMATCH while the claim matches': (b) => { Object.assign(b.post[A], { decision: 'deny', reasonCode: 'SCOPE_CLAIM_MISMATCH' }); b.front[0].status = 403; },
+    'SCOPE_CLAIM_MISSING while a claim is present': (b) => { Object.assign(b.post[A], { decision: 'deny', reasonCode: 'SCOPE_CLAIM_MISSING', resourceRef: null }); b.front[0].status = 403; },
+    // PATCH binding
+    'no back PATCH for the audit': (b) => { b.back = b.back.filter((x) => x.method !== 'PATCH'); },
+    'PATCH to a different audit path': (b) => { b.back[1].path = b.back[1].path.replace('/a1', '/a2'); },
+    'PATCH failed (409)': (b) => { b.back[1].status = 409; },
+  };
+  for (const [n, fn] of Object.entries(cases)) assert.ok(has(fn), n);
+  // controls: consistent deny records reconcile cleanly
+  const mismatchOk = (b) => { Object.assign(b.post[A], { decision: 'deny', reasonCode: 'SCOPE_CLAIM_MISMATCH' }); b.front[0].status = 403; b.front[0].requestBody.claimedScope = { workspaceId: 'W', classId: 'C9' }; };
+  const missingOk = (b) => { Object.assign(b.post[A], { decision: 'deny', reasonCode: 'SCOPE_CLAIM_MISSING', resourceRef: null }); b.front[0].status = 403; delete b.front[0].requestBody.claimedScope; };
+  const tokenOk = (b) => { Object.assign(b.post[A], { decision: 'deny', reasonCode: 'TOKEN_MISSING', authUid: null, principalId: null, resourceRef: null }); b.front[0].status = 403; b.front[0].authorizationRef = null; };
+  for (const [n, fn] of [['mismatch', mismatchOk], ['missing', missingOk], ['token', tokenOk]]) { const b = base(); fn(b); assert.deepEqual(reconcile(b).problems, [], n); }
+});
+
+// ======================================================================= PR-1 (B3A-N7): minimal rootfs + path map
+import { expectedRootEntries, insidePathOf, pathMapDigest, USR_BINARIES, MOUNT_TARGETS } from '../src/b3/isolation-policy.mjs';
+
+test('B3A-N7: rootfs has no host /usr or /etc tree; /usr is a read-only copy of the listed files; node binary only', () => {
+  const cfg = sandboxConfig();
+  assert.ok(!cfg.mounts.some((m) => m.source === 'host:/usr' || m.source === 'host:/etc' || m.target === '/etc'), 'no host /usr or /etc');
+  assert.ok(!MOUNT_TARGETS.includes('/etc') && MOUNT_TARGETS.includes('/opt/node/bin/node') && !MOUNT_TARGETS.includes('/opt/node'));
+  const usr = cfg.mounts.find((m) => m.target === '/usr'); assert.equal(usr.source, 'tmpfs'); assert.equal(usr.mode, 'ro');
+  const pm = { nodeBinary: '/n/bin/node', adapterDir: '/a', checkDir: '/c', inputDir: '/i', entryDir: '/e', usrFiles: [{ inside: '/usr/bin/env', source: '/usr/bin/env' }, { inside: '/usr/lib/x/libc.so.6', source: '/usr/lib/x/libc.so.6' }] };
+  const s = initScript(cfg, pm, '/adapter/main.mjs');
+  for (const frag of ["cp -L '/usr/bin/env' \"$R\"'/usr/bin/env'", "cp -L '/usr/lib/x/libc.so.6' \"$R\"'/usr/lib/x/libc.so.6'", "mount -o remount,ro,nodev,nosuid \"$R\"'/usr'", "touch \"$R\"'/opt/node/bin/node'", "mount --bind '/n/bin/node' \"$R\"'/opt/node/bin/node'"]) assert.ok(s.includes(frag), frag);
+  assert.ok(!/mount --bind '\/usr' /.test(s) && !s.includes("'/etc'"), 'no bind of host /usr or /etc');
+  // the copy happens before the read-only remount
+  assert.ok(s.indexOf("cp -L '/usr/bin/env'") < s.indexOf("mount -o remount,ro,nodev,nosuid \"$R\"'/usr'"));
+  assert.throws(() => initScript(cfg, { ...pm, usrFiles: [{ inside: '/etc/passwd', source: '/etc/passwd' }] }, '/x'), /outside \/usr/);
+  assert.throws(() => initScript(cfg, { ...pm, usrFiles: [] }, '/x'), /no files/);
+  assert.deepEqual(expectedRootEntries(cfg), ['adapter', 'bin', 'check', 'dev', 'entry', 'input', 'lib', 'lib64', 'opt', 'proc', 'sbin', 'usr', 'work']);
+  assert.equal(insidePathOf('/lib/x86_64-linux-gnu/libc.so.6'), '/usr/lib/x86_64-linux-gnu/libc.so.6'); assert.equal(insidePathOf('/lib64/ld-linux-x86-64.so.2'), '/usr/lib64/ld-linux-x86-64.so.2');
+  // the config digest covers the population rule
+  assert.notEqual(configDigest(sandboxConfig({ usrPopulation: { ...cfg.usrPopulation, binaries: [...USR_BINARIES, '/usr/bin/sudo'] } })), configDigest(cfg));
+});
+
+test('B3A-N7: pathMapDigest covers every host source and file digest; the Verifier rejects inconsistent path maps', () => {
+  const iso = JSON.parse(fixFiles['isolation.json']); const pm = iso.pathMap;
+  assert.equal(pathMapDigest(pm), iso.pathMapDigest);
+  for (const mut of [(p) => { p.nodeBinarySha256 = '0'.repeat(64); }, (p) => { p.adapterDir = '/x'; }, (p) => { p.usrFiles[0].sha256 = '1'.repeat(64); }, (p) => { p.usrFiles.pop(); }]) {
+    const p = structuredClone(pm); mut(p); assert.notEqual(pathMapDigest(p), iso.pathMapDigest);
+  }
+  const bad = {
+    'pathMap missing': (i) => { i.pathMap = null; },
+    'digest missing': (i) => { i.pathMapDigest = null; },
+    'digest of another map': (i) => { i.pathMap.adapterDir = '/elsewhere'; },
+    'required binary absent (digest recomputed)': (i) => { i.pathMap.usrFiles = i.pathMap.usrFiles.filter((f) => f.inside !== '/usr/bin/setpriv'); i.pathMapDigest = pathMapDigest(i.pathMap); },
+    'file outside /usr (digest recomputed)': (i) => { i.pathMap.usrFiles.push({ inside: '/etc/shadow', source: '/etc/shadow', sha256: '2'.repeat(64) }); i.pathMapDigest = pathMapDigest(i.pathMap); },
+    'duplicate inside path (digest recomputed)': (i) => { i.pathMap.usrFiles.push({ ...i.pathMap.usrFiles[0] }); i.pathMapDigest = pathMapDigest(i.pathMap); },
+    'traversal (digest recomputed)': (i) => { i.pathMap.usrFiles.push({ inside: '/usr/../etc/passwd', source: '/etc/passwd', sha256: '3'.repeat(64) }); i.pathMapDigest = pathMapDigest(i.pathMap); },
+  };
+  for (const [n, fn] of Object.entries(bad)) { const r = verifyMod(isoMod(fn)); assert.equal(r.result, 'BLOCKED', n); assert.ok(codes(r).includes('PATH_MAP_INVALID'), n); }
+  // unsupported platform: no path map is required (still UNATTESTED ISOLATION_UNVERIFIABLE)
+  const un = verifyMod(isoMod((i) => { i.platformSupported = false; i.selfCheck = null; i.pathMap = null; i.pathMapDigest = null; }), { platformSupported: false });
+  assert.equal(un.result, 'UNATTESTED'); assert.deepEqual(un.reasons, ['ISOLATION_UNVERIFIABLE']);
+  // statement carries the digest
+  assert.equal(verifyMod().statement.isolation.pathMapDigest, iso.pathMapDigest);
 });

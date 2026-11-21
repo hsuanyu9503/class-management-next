@@ -5,6 +5,7 @@
  *  - readPackageSafe(): parses untrusted bytes WITHOUT touching the filesystem; enforces path rules,
  *    entry types (regular files only), duplicates, case/NFC collisions, counts and sizes, and that the
  *    package holds exactly manifest.json + the payload it lists.
+ *    The bytes must equal the canonical re-serialisation of the payload (B3A-N5: ARTIFACT_NONCANONICAL).
  *  - parseStrictJson(): rejects duplicate keys, the key "__proto__" (B3A-N2), depth > 64, non-finite numbers,
  *    unsafe integers; properties are defined as OWN data properties (never through the prototype setter). */
 import { createHash } from 'node:crypto';
@@ -89,6 +90,12 @@ export function readPackageSafe(bytes) {
     listed.add(f.path);
   }
   for (const n of files.keys()) if (n !== 'manifest.json' && !listed.has(n)) fail('ARTIFACT_MANIFEST', `unlisted file ${n}`);
+  // B3A-N5: the package must be the ONE canonical serialisation of its payload — re-serialising with
+  // writePackage() must give identical bytes (entry order, headers, padding, manifest text, end-of-archive
+  // marker, and nothing after it). Anything else (trailing data, odd headers, re-ordered entries) is refused.
+  const canon = writePackage(Object.fromEntries([...files].filter(([n]) => n !== 'manifest.json')));
+  if (!canon.manifestBytes.equals(manifestBytes)) fail('ARTIFACT_NONCANONICAL', 'manifest is not the canonical serialisation');
+  if (!canon.packageBytes.equals(bytes)) fail('ARTIFACT_NONCANONICAL', 'package bytes are not the canonical serialisation');
   return { files, manifest, manifestSha256: sha(manifestBytes), packageSha256: sha(bytes) };
 }
 

@@ -7,11 +7,22 @@
  *   - front/back traffic happens only inside the case window; the Runner does nothing inside it;
  *   - the attestation marker is unchanged; nothing else changes. */
 import { stableJson } from '../stable.mjs';
+import { OPERATIONS } from '../authz.mjs';
 
 const AUDIT_PATH = /^(workspaces\/[^/]+\/auditLog|auditLogUnscoped)\/[^/]+$/;
 const isAudit = (p) => AUDIT_PATH.test(p);
 const docPathOf = (backPath) => backPath.replace(/^.*\/documents\/?/, '');
 const READ_ONLY_POST = [/:runQuery$/, /:listCollectionIds$/, /\/accounts:lookup$/];
+const isObj = (v) => v !== null && typeof v === 'object' && !Array.isArray(v);
+const CLASS_SCOPE_RE = /^workspaces\/([^/]+)\/classes\/([^/]+)\//;
+/** B3A-N6: the documents the API's target lookup can return for (op, target) — a collection-group query on
+ *  def.collection with def.idField == id — recomputed from the exported pre-state (trusted toolchain). */
+function targetCandidates(pre, op, target) {
+  const def = typeof op === 'string' && Object.hasOwn(OPERATIONS, op) ? OPERATIONS[op] : null;
+  if (!def || !isObj(target) || !Object.hasOwn(target, def.idField)) return null;
+  const id = target[def.idField];
+  return Object.keys(pre).filter((k) => { const seg = k.split('/'); return seg.length >= 2 && seg[seg.length - 2] === def.collection && isObj(pre[k]) && pre[k][def.idField] === id; });
+}
 
 export function reconcile({ front, back, pre, post, runnerLog, caseWindow, markerPath, expectedMarker, ownershipMarkerPath }) {
   const problems = []; const p = (code, d) => problems.push(`${code}${d ? ':' + d : ''}`);
@@ -43,11 +54,23 @@ export function reconcile({ front, back, pre, post, runnerLog, caseWindow, marke
     if (expectDecision && a.decision !== expectDecision) why.push('decision');
     if (f.status === 503 && !a.outcome) why.push('outcome');
     if ((a.decision === 'allow') !== (a.reasonCode === 'OK')) why.push('reasonCode');
-    if (a.resourceRef !== null && a.resourceRef !== undefined) {
-      const tv = Object.values(f.requestBody?.target || {})[0];
-      if (!Object.hasOwn(pre, a.resourceRef) || a.resourceRef.split('/').pop() !== tv) why.push('resourceRef');
+    // B3A-N6: null fields follow the API's order (token → binding/principal → target); an allow has them all
+    const has = (v) => v !== null && v !== undefined;
+    if (a.decision === 'allow' && !(has(a.authUid) && has(a.principalId) && has(a.resourceRef) && has(a.workspaceId))) why.push('allowFieldsMissing');
+    if (!has(a.authUid) && (has(a.principalId) || has(a.resourceRef))) why.push('nullOrder');
+    if (!has(a.principalId) && has(a.resourceRef)) why.push('nullOrder');
+    // B3A-N6: resourceRef is the FULL path of the unique document the target lookup returns
+    if (has(a.resourceRef)) {
+      const cands = targetCandidates(pre, f.requestBody?.op, f.requestBody?.target);
+      if (!Object.hasOwn(pre, a.resourceRef) || !cands || cands.length !== 1 || cands[0] !== a.resourceRef) why.push('resourceRef');
     }
     if (a.workspaceId !== undefined && !a.path.startsWith(`workspaces/${a.workspaceId}/`)) why.push('workspace');
+    // B3A-N6: claimedScope agrees with the decision (allow ⇒ equals the path scope; mismatch ⇒ differs; missing ⇒ absent)
+    const cs = f.requestBody?.claimedScope; const csOk = isObj(cs) && typeof cs.workspaceId === 'string' && typeof cs.classId === 'string';
+    const ps = has(a.resourceRef) ? CLASS_SCOPE_RE.exec(a.resourceRef) : null;
+    if (a.decision === 'allow' && !(csOk && ps && cs.workspaceId === ps[1] && cs.classId === ps[2] && a.workspaceId === ps[1])) why.push('claimedScope');
+    if (a.reasonCode === 'SCOPE_CLAIM_MISMATCH' && !(csOk && ps && !(cs.workspaceId === ps[1] && cs.classId === ps[2]))) why.push('claimedScope');
+    if (a.reasonCode === 'SCOPE_CLAIM_MISSING' && csOk) why.push('claimedScope');
     if (why.length) p('AUDIT_UNRECONCILED', `${tid} ${why.join(',')}`); else auditMatched += 1;
   }
   const reached = fronts.filter((e) => e.status !== 502);
@@ -60,10 +83,16 @@ export function reconcile({ front, back, pre, post, runnerLog, caseWindow, marke
     const isRead = b.method === 'GET' || (b.method === 'POST' && READ_ONLY_POST.some((re) => re.test(b.path)));
     if (isRead) continue;
     const dp = docPathOf(b.path);
-    if (b.method === 'PATCH' && isAudit(dp)) auditWrites.set(b.traceId, (auditWrites.get(b.traceId) || 0) + 1);
+    if (b.method === 'PATCH' && isAudit(dp)) { if (!auditWrites.has(b.traceId)) auditWrites.set(b.traceId, []); auditWrites.get(b.traceId).push({ path: dp, status: b.status }); }
     else nonAuditBackendWrites += 1;
   }
-  for (const [tid, n] of auditWrites) if (n !== 1) p('AUDIT_UNRECONCILED', `${n} audit writes for ${tid}`);
+  for (const [tid, ws] of auditWrites) if (ws.length !== 1) p('AUDIT_UNRECONCILED', `${ws.length} audit writes for ${tid}`);
+  // B3A-N6: every new audit document is the one successful back PATCH of its own trace, at the same path
+  for (const [tid, list] of auditsByTrace) {
+    if (list.length !== 1) continue;
+    const ws = auditWrites.get(tid) || [];
+    if (ws.length !== 1 || ws[0].path !== list[0].path || ws[0].status !== 200) p('AUDIT_UNRECONCILED', `${tid} audit write not bound to its PATCH`);
+  }
   if (unattributedBackendRequests) p('UNATTRIBUTED_BACKEND_TRAFFIC', String(unattributedBackendRequests));
   if (nonAuditBackendWrites) p('NON_AUDIT_BACKEND_WRITE', String(nonAuditBackendWrites));
 

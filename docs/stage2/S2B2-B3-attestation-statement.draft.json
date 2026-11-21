@@ -284,7 +284,8 @@
    "required": [
     "platformSupported",
     "selfCheck",
-    "termination"
+    "termination",
+    "pathMapDigest"
    ],
    "properties": {
     "platformSupported": {
@@ -416,6 +417,17 @@
        "type": "boolean"
       }
      }
+    },
+    "pathMapDigest": {
+     "anyOf": [
+      {
+       "$ref": "#/$defs/sha256"
+      },
+      {
+       "type": "null"
+      }
+     ],
+     "description": "B3A-N7: SHA-256 of the launch's host path map (adapter/check/entry dirs, node binary and its digest, every file copied into the sandbox /usr with its digest). Host-dependent, so not part of sandboxPolicyDigest; null only when the platform is unsupported."
     }
    },
    "allOf": [
@@ -431,6 +443,9 @@
       "properties": {
        "selfCheck": {
         "type": "object"
+       },
+       "pathMapDigest": {
+        "$ref": "#/$defs/sha256"
        }
       }
      }

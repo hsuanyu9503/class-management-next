@@ -5,7 +5,7 @@ import net from 'node:net';
 import { existsSync, mkdirSync, readlinkSync, rmSync, writeFileSync } from 'node:fs';
 import { spawnSync } from 'node:child_process';
 import path from 'node:path';
-import { CHECK_IDS, POSITIVE_CONTROL_REQUIRED, ENDPOINTS, SENTINEL_TCP_PORT, DEV_ALLOWLIST, ENV_ALLOWLIST, INHERITED_FDS, MOUNT_TARGETS, configDigest } from './isolation-policy.mjs';
+import { CHECK_IDS, POSITIVE_CONTROL_REQUIRED, ENDPOINTS, SENTINEL_TCP_PORT, DEV_ALLOWLIST, ENV_ALLOWLIST, INHERITED_FDS, MOUNT_TARGETS, configDigest, expectedRootEntries } from './isolation-policy.mjs';
 import { launchSandbox } from './sandbox.mjs';
 
 const tcpHost = (port) => new Promise((res) => { const s = net.connect(port, '127.0.0.1'); const t = setTimeout(() => { s.destroy(); res(false); }, 1500); s.once('connect', () => { clearTimeout(t); s.destroy(); res(true); }); s.once('error', () => { clearTimeout(t); res(false); }); });
@@ -20,7 +20,7 @@ export function platformSupport() {
 }
 
 /** @param o.cfg sandbox config (normally sandboxConfig())
- *  @param o.pathMap {nodeDir, adapterDir, checkDir, entryDir, inputDir}
+ *  @param o.pathMap {nodeBinary, adapterDir, checkDir, entryDir, usrFiles} (resolvePathMap) — inputDir is set here
  *  @param o.hostPaths {evidence:[], toolchain:[], git:[]} host paths that must exist on the host and be invisible inside
  *  @param o.outputChannels host files standing for GITHUB_OUTPUT etc.
  *  @param o.workDir runner-private dir for sentinels
@@ -81,7 +81,18 @@ export async function runSelfCheck({ cfg, pathMap, hostPaths, outputChannels, wo
     set('DEV_ALLOWLIST', JSON.stringify(inside.dev) === JSON.stringify([...DEV_ALLOWLIST].sort()), inside.dev.join(','));
     set('ENV_ALLOWLIST', JSON.stringify(inside.env) === JSON.stringify([...ENV_ALLOWLIST].sort()), inside.env.join(','));
     set('FD_ALLOWLIST', !!fds && JSON.stringify(fds) === JSON.stringify([...INHERITED_FDS]), `init fds=${fds}`);
-    set('MOUNT_ALLOWLIST', JSON.stringify(inside.mounts) === JSON.stringify([...MOUNT_TARGETS].sort()), inside.mounts.join(','));
+    // B3A-N7: targets AND options of every policy mount, the root listing, and the exact /usr file set
+    const optProblems = [];
+    for (const m of cfg.mounts) {
+      const o = (inside.mountOptions?.[m.target] || '').split(',');
+      if (!o.includes(m.mode)) optProblems.push(`${m.target}:mode`);
+      for (const f of m.flags) if (!o.includes(f)) optProblems.push(`${m.target}:${f}`);
+    }
+    const expUsr = (pathMap.usrFiles || []).map((f) => f.inside).sort();
+    const usrOk = JSON.stringify(inside.usrFiles) === JSON.stringify(expUsr);
+    const rootOk = JSON.stringify(inside.rootEntries) === JSON.stringify(expectedRootEntries(cfg));
+    const targetsOk = JSON.stringify(inside.mounts) === JSON.stringify([...MOUNT_TARGETS].sort());
+    set('MOUNT_ALLOWLIST', targetsOk && !optProblems.length && usrOk && rootOk, `targets=${targetsOk} opts=${optProblems.join('|') || 'ok'} usr=${usrOk}(${(inside.usrFiles || []).length}/${expUsr.length}) root=${rootOk}:${(inside.rootEntries || []).join(',')}`);
     set('OUTPUT_CHANNELS_HIDDEN', inside.outputChannels.length > 0 && inside.outputChannels.every(([, v]) => hiddenCode(v)), JSON.stringify(inside.outputChannels), outputChannels.length > 0 && outputChannels.every((p) => existsSync(p)));
   }
   return { platformSupported: true, selfCheck: C, sandboxPolicyDigest: configDigest(cfg), termination: term, violations: o.violations };

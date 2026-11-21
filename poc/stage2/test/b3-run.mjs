@@ -2,7 +2,7 @@
 /** S2-B2 batch 3a: sandboxed Adapter runs + local attack tests on the REAL emulators. Runs only inside
  *  `firebase emulators:exec` (scripts/run-b3.mjs), as root on Linux. Everything here is a LOCAL, UNTRUSTED
  *  prototype: no signing, no trust root, no hosted runner → the best possible result is UNATTESTED. */
-import { mkdirSync, writeFileSync, readFileSync, mkdtempSync, rmSync, chmodSync, existsSync, appendFileSync } from 'node:fs';
+import { mkdirSync, writeFileSync, readFileSync, mkdtempSync, rmSync, chmodSync, existsSync, appendFileSync, realpathSync } from 'node:fs';
 import { execFileSync } from 'node:child_process';
 import { createHash, randomBytes } from 'node:crypto';
 import path from 'node:path';
@@ -14,11 +14,11 @@ import { loadFixtures, STAGE1_ROOT } from '../src/seed.mjs';
 import { makeMasker, findLeaks } from '../src/mask.mjs';
 import { fixtureNames } from '../src/world.mjs';
 import { createHarness } from '../src/harness.mjs';
-import { sandboxConfig, configDigest, POLICY_VERSION } from '../src/b3/isolation-policy.mjs';
-import { launchSandbox, cleanupSandboxDirs } from '../src/b3/sandbox.mjs';
+import { sandboxConfig, configDigest, POLICY_VERSION, pathMapDigest } from '../src/b3/isolation-policy.mjs';
+import { launchSandbox, cleanupSandboxDirs, resolvePathMap } from '../src/b3/sandbox.mjs';
 import { runSelfCheck } from '../src/b3/selfcheck-host.mjs';
 import { writePackage } from '../src/b3/package.mjs';
-import { verifyPackage, PAYLOAD } from '../src/b3/verifier.mjs';
+import { verifyPackage, PAYLOAD, CASE_ACTORS } from '../src/b3/verifier.mjs';
 import { stableJson, sha256Hex } from '../src/stable.mjs';
 import { executeCase } from '../../stage1/src/runner.mjs';
 import { createFixtureHash } from '../../stage1/src/common.mjs';
@@ -57,9 +57,16 @@ mkdirSync(runDir, { recursive: true });
 const entryDir = mkdtempSync('/tmp/cmn-e-'); chmodSync(entryDir, 0o755);
 const workDir = mkdtempSync('/tmp/cmn-r-');
 const outputChannel = path.join(workDir, 'GITHUB_OUTPUT'); writeFileSync(outputChannel, 'runner-private\n');
-const hostPaths = { evidence: [runDir], toolchain: [path.join(ROOT, 'src'), path.join(ROOT, 'sandbox-check')], git: [path.join(REPO, '.git')] };
+// B3A-N7 (stronger FS hiding): every one of these must exist on the host and be invisible inside
+const nodeInstallDir = path.dirname(path.dirname(realpathSync(process.execPath)));
+const hostPaths = {
+  evidence: [runDir, path.dirname(runDir)],
+  toolchain: [path.join(ROOT, 'src'), path.join(ROOT, 'sandbox-check'), path.join(ROOT, 'test'), path.join(ROOT, 'scripts'), path.join(ROOT, 'node_modules'), path.join(REPO, 'poc/stage1'), path.join(nodeInstallDir, 'lib'), '/etc'],
+  git: [path.join(REPO, '.git'), path.join(REPO, '.github')],
+};
 const outputChannels = [outputChannel, ...(process.env.GITHUB_OUTPUT ? [process.env.GITHUB_OUTPUT] : [])];
-const pathMap = { nodeDir: path.dirname(path.dirname(process.execPath)), adapterDir: path.join(ROOT, 'adapter-b3'), checkDir: path.join(ROOT, 'sandbox-check'), entryDir };
+// B3A-N7: node binary only; /usr = USR_BINARIES + ldd closure (copied); digest recorded in isolation.json + statement
+const pathMap = process.platform === 'linux' ? resolvePathMap({ nodeBinary: process.execPath, adapterDir: path.join(ROOT, 'adapter-b3'), checkDir: path.join(ROOT, 'sandbox-check'), entryDir }) : null;
 let runCounter = Number(BigInt('0x' + ownNonce.slice(0, 8)) % 100000n) * 1000;
 const isoSec = () => new Date().toISOString().replace(/\.\d{3}Z$/, 'Z');
 
@@ -79,8 +86,12 @@ async function attestedRun(label, { testId, entry = '/adapter/main.mjs', cfg = s
     : await runSelfCheck({ cfg, pathMap, hostPaths, outputChannels, workDir, startSentinel });
   rl('setup', 'isolation-self-check');
   const inputDir = path.join(workDir, `input-${runId}`); mkdirSync(inputDir, { recursive: true }); chmodSync(inputDir, 0o755);
-  writeFileSync(path.join(inputDir, 'case.json'), JSON.stringify({ testId, fixtures, tokens: Object.fromEntries(Object.entries(users).map(([a, u]) => [a, u.token])), attackHints }));
+  // B3A-N8: the Adapter receives ONLY the token of this case's actor (trusted CASE_ACTORS table), never the others
+  const caseActor = Object.hasOwn(CASE_ACTORS, testId) ? CASE_ACTORS[testId] : null;
+  if (!caseActor || !users[caseActor]?.token) throw new Error(`no trusted actor/token for ${testId}`);
+  writeFileSync(path.join(inputDir, 'case.json'), JSON.stringify({ testId, fixtures, tokens: { [caseActor]: users[caseActor].token }, attackHints }));
   chmodSync(path.join(inputDir, 'case.json'), 0o644);
+  const caseTokenActors = Object.keys(JSON.parse(readFileSync(path.join(inputDir, 'case.json'), 'utf8')).tokens);   // as written (N8)
   let sbx = null; let ready = false; let doneOk = false; let term = null; let nonceWrittenAt = null; let pre = null; let caseStartedAt = null; let caseEndedAt = null;
   const caseSpec = caseSpecs[testId];
   const sandboxAdapter = { mode: 'BACKEND_REAL', backend: 'firebase', execute: async () => {
@@ -113,7 +124,9 @@ async function attestedRun(label, { testId, entry = '/adapter/main.mjs', cfg = s
     targets: { caseSpecDigest: sha256Hex(stableJson(caseSpec)), oracleFileSha256: sha256Hex(oracleBytes), fixtureFileSha256: fileSha256, fixtureHash: createFixtureHash(fixtures), anchorDigest },
     environment, gitDirty,
   };
-  const isolation = { isolationPolicyVersion: POLICY_VERSION, platformSupported: iso.platformSupported, platformReason: iso.reason ?? null, sandboxPolicyDigest: iso.sandboxPolicyDigest, selfCheck: iso.selfCheck, selfCheckTermination: iso.termination ?? null,
+  const { pathMapDigest: pmd = null, ...pathMapRecord } = pathMap || {};
+  const isolation = { isolationPolicyVersion: POLICY_VERSION, platformSupported: iso.platformSupported, platformReason: iso.reason ?? null, sandboxPolicyDigest: iso.sandboxPolicyDigest,
+    pathMap: pathMap ? pathMapRecord : null, pathMapDigest: pmd, selfCheck: iso.selfCheck, selfCheckTermination: iso.termination ?? null,
     adapterTermination: term ? { namespaceTerminated: term.namespaceTerminated, remainingAdapterProcesses: term.remainingAdapterProcesses, exportAfterTermination: true } : null,
     adapterReady: ready, adapterDone: doneOk, controlViolations: sbx ? sbx.output().violations : [] };
   const files = {
@@ -130,7 +143,7 @@ async function attestedRun(label, { testId, entry = '/adapter/main.mjs', cfg = s
   writeFileSync(path.join(dir, 'job-outputs.json'), JSON.stringify({ runId, runAttempt, packageSha256: pkg.packageSha256, manifestSha256: pkg.manifestSha256, attestationNonce }, null, 1));
   writeFileSync(path.join(dir, 'statement.json'), stableJson(result.statement));
   writeFileSync(path.join(dir, 'verify.json'), JSON.stringify({ ...result, statement: undefined, stage1Runner: { status: stage1.status, attested: stage1.attested } }, null, 1));
-  return { label, testId, result, pkg, files, trusted, claim: adapterOutput, term, iso, stage1 };
+  return { label, testId, result, pkg, files, trusted, claim: adapterOutput, term, iso, stage1, caseTokenActors };
 }
 
 const results = []; const log = (ok, name, detail) => { results.push({ name, ok, detail }); console.log(`${ok ? 'OK  ' : 'FAIL'} ${name}${detail ? ' — ' + detail : ''}`); };
@@ -146,6 +159,9 @@ for (const t of ['POC-001', 'POC-002', 'POC-008', 'POC-009']) {
   const ok = t === 'POC-009' ? (x.result.result === 'BLOCKED' && stableJson(x.result.reasons) === stableJson(['BLOCKED_FIELDS_G1_G4'])) : isLocalOnly(x);
   log(ok, `HONEST ${t}`, `${R(x)} contract=${x.result.contract?.contractMatch} stage1=${x.stage1.status} selfCheck=${Object.values(x.iso.selfCheck || {}).filter((c) => c.ok && c.positiveControlOk !== false).length}/22`);
 }
+
+// B3A-N8: every case input held exactly one token — the case actor's (trusted CASE_ACTORS table)
+log(Object.values(honest).every((v) => stableJson(v.caseTokenActors) === stableJson([CASE_ACTORS[v.testId]])), 'N8 case.json holds only the case actor\'s token', Object.values(honest).map((v) => `${v.testId}:${v.caseTokenActors.join('+')}`).join(' '));
 
 // ---------------- sandboxed attacks (real sandbox, real emulator)
 const hostFile = path.join(ROOT, 'src/b3/verifier.mjs'); const hostFileSha = sha256Hex(readFileSync(hostFile));
@@ -193,13 +209,20 @@ const variants = {
   'duplicate check key': JSON.stringify(isoV).replace('"NO_CAPS":', '"NO_CAPS":{"ok":false,"observed":"x","positiveControlOk":null},"NO_CAPS":'),
   'one check ok=false': (() => { const v = structuredClone(isoV); v.selfCheck.NO_SUDO.ok = false; return JSON.stringify(v); })(),
   'claimed digest of other params': (() => { const v = structuredClone(isoV); v.sandboxPolicyDigest = configDigest(sandboxConfig({ uid: 0 })); return JSON.stringify(v); })(),
+  'N7 path map altered (digest not recomputed)': (() => { const v = structuredClone(isoV); v.pathMap.usrFiles.push({ inside: '/usr/bin/sudo', source: '/usr/bin/sudo', sha256: '0'.repeat(64) }); return JSON.stringify(v); })(),
+  'N7 path map without a required binary (digest recomputed)': (() => { const v = structuredClone(isoV); v.pathMap.usrFiles = v.pathMap.usrFiles.filter((f) => f.inside !== '/usr/bin/setpriv'); v.pathMapDigest = pathMapDigest(v.pathMap); return JSON.stringify(v); })(),
 };
-const expectCode = { 'missing check': 'ISOLATION_CHECK_MISSING', 'only one check': 'ISOLATION_CHECK_MISSING', 'unknown check': 'ISOLATION_CHECK_UNKNOWN', 'duplicate check key': 'ARTIFACT_JSON_INVALID', 'one check ok=false': 'ISOLATION_CHECK_FAILED', 'claimed digest of other params': 'SANDBOX_CONFIG_MISMATCH' };
+const expectCode = { 'N7 path map altered (digest not recomputed)': 'PATH_MAP_INVALID', 'N7 path map without a required binary (digest recomputed)': 'PATH_MAP_INVALID', 'missing check': 'ISOLATION_CHECK_MISSING', 'only one check': 'ISOLATION_CHECK_MISSING', 'unknown check': 'ISOLATION_CHECK_UNKNOWN', 'duplicate check key': 'ARTIFACT_JSON_INVALID', 'one check ok=false': 'ISOLATION_CHECK_FAILED', 'claimed digest of other params': 'SANDBOX_CONFIG_MISMATCH' };
 for (const [n, text] of Object.entries(variants)) {
   const p2 = writePackage({ ...H1.files, 'isolation.json': text });
   x = { result: verifyPackage(p2.packageBytes, { ...H1.trusted, packageSha256: p2.packageSha256, manifestSha256: p2.manifestSha256 }) };
   log(x.result.result === 'BLOCKED' && has(x, expectCode[n]), `A15 isolation evidence "${n}" (even with consistent digests) → BLOCKED ${expectCode[n]}`, R(x));
 }
+
+// B3A-N5: the honest package plus bytes after the end-of-archive marker (digests supplied consistently)
+{ const tail = Buffer.concat([H1.pkg.packageBytes, Buffer.from('appended')]);
+  x = { result: verifyPackage(tail, { ...H1.trusted, packageSha256: sha256Hex(tail) }) };
+  log(x.result.result === 'BLOCKED' && has(x, 'ARTIFACT_NONCANONICAL'), 'N5 bytes appended after the end-of-archive marker (consistent digest) → BLOCKED ARTIFACT_NONCANONICAL', R(x)); }
 
 // ---------------- masking scan of every artifact with every issued secret (R1-N7)
 const secrets = h.issuedSecrets();
