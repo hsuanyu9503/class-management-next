@@ -1,0 +1,588 @@
+{
+ "$schema": "https://json-schema.org/draft/2020-12/schema",
+ "$id": "urn:cmn:s2-attestation-statement:v1-draft",
+ "title": "S2-B2 batch 3 attestation statement (DRAFT v0.3, not implemented)",
+ "description": "Draft only (S2B2-B3-PLAN.md v0.2 sections 3.3, 3.4, 7). No code produces or verifies this yet. Layering (plan 7.5): (1) safe artifact parsing (7.4) incl. strict JSON without duplicate keys, (2) this schema = shape only, (3) semantic verification against trusted external inputs (7.2) and policies. Passing this schema NEVER means PASS. 'verdict' is written only by the Verifier; only PASS is signed; the statement does not carry a 'signed' flag.",
+ "type": "object",
+ "additionalProperties": false,
+ "required": [
+  "schemaVersion",
+  "testId",
+  "backend",
+  "toolchain",
+  "targets",
+  "run",
+  "package",
+  "environment",
+  "isolation",
+  "artifacts",
+  "reconciliation",
+  "observed",
+  "adapterClaimedCanonical",
+  "verdict"
+ ],
+ "$defs": {
+  "sha1Commit": {
+   "type": "string",
+   "pattern": "^[0-9a-f]{40}$"
+  },
+  "sha256": {
+   "type": "string",
+   "pattern": "^[0-9a-f]{64}$"
+  },
+  "utc": {
+   "type": "string",
+   "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$",
+   "description": "Validated with the strict whole-string + real-date rules of S2-B1 AUTHORIZATION 7.6, not only this pattern."
+  },
+  "fileDigest": {
+   "type": "object",
+   "additionalProperties": false,
+   "required": [
+    "path",
+    "sha256",
+    "bytes"
+   ],
+   "properties": {
+    "path": {
+     "$ref": "#/$defs/relPath"
+    },
+    "sha256": {
+     "$ref": "#/$defs/sha256"
+    },
+    "bytes": {
+     "type": "integer",
+     "minimum": 0,
+     "maximum": 16777216
+    }
+   }
+  },
+  "check": {
+   "type": "object",
+   "additionalProperties": false,
+   "required": [
+    "ok",
+    "observed",
+    "positiveControlOk"
+   ],
+   "properties": {
+    "ok": {
+     "type": "boolean"
+    },
+    "observed": {
+     "type": "string",
+     "maxLength": 200
+    },
+    "positiveControlOk": {
+     "type": [
+      "boolean",
+      "null"
+     ],
+     "description": "null only for checks that have no positive control in the policy."
+    }
+   }
+  },
+  "relPath": {
+   "type": "string",
+   "maxLength": 512,
+   "pattern": "^[A-Za-z0-9_-][A-Za-z0-9._-]{0,63}(/[A-Za-z0-9_-][A-Za-z0-9._-]{0,63}){0,7}$",
+   "description": "Relative, normalised path: every segment starts with [A-Za-z0-9_-] (so no '.', '..', hidden names, empty segments, leading '/', or backslashes). Symlinks, hardlinks, case/Unicode collisions and post-extraction escapes are rejected by the safe-parsing layer (plan 7.4), not by this pattern."
+  }
+ },
+ "properties": {
+  "schemaVersion": {
+   "const": "s2-attestation-v1"
+  },
+  "testId": {
+   "type": "string",
+   "pattern": "^POC-[0-9]{3}$"
+  },
+  "backend": {
+   "const": "firebase"
+  },
+  "toolchain": {
+   "type": "object",
+   "additionalProperties": false,
+   "required": [
+    "trustedToolchainCommit",
+    "adapterCommit",
+    "verifierCommit",
+    "observerCommit",
+    "signingPolicyBlob",
+    "isolationPolicyVersion",
+    "sandboxLauncherSha256",
+    "sandboxPolicyDigest"
+   ],
+   "properties": {
+    "trustedToolchainCommit": {
+     "$ref": "#/$defs/sha1Commit",
+     "description": "Must equal repository variable CMN_S2_TRUSTED_TOOLCHAIN_SHA and be an ACTIVE 'toolchain' approval in S2B2-TRUST-POLICY.json at signing time (ancestry of main is necessary, not sufficient)."
+    },
+    "adapterCommit": {
+     "$ref": "#/$defs/sha1Commit",
+     "description": "Code under test; bound separately; never changes the trusted components."
+    },
+    "verifierCommit": {
+     "$ref": "#/$defs/sha1Commit",
+     "description": "Must equal trustedToolchainCommit."
+    },
+    "observerCommit": {
+     "$ref": "#/$defs/sha1Commit",
+     "description": "Must equal trustedToolchainCommit."
+    },
+    "sandboxLauncherSha256": {
+     "$ref": "#/$defs/sha256",
+     "description": "SHA-256 of the launcher file; recomputed by the Verifier from trustedToolchainCommit."
+    },
+    "signingPolicyBlob": {
+     "$ref": "#/$defs/sha1Commit",
+     "description": "Git blob SHA of .github/workflows/attest.yml at the signer commit; must be an ACTIVE 'signing-policy' approval (plan 4, 7.3)."
+    },
+    "isolationPolicyVersion": {
+     "const": "s2-isolation-policy-v1"
+    },
+    "sandboxPolicyDigest": {
+     "$ref": "#/$defs/sha256",
+     "description": "SHA-256 of stableJson(effective sandbox configuration) incl. namespaces, uid/gid, capabilities, no_new_privs, rootfs, mount allowlist, /proc, /dev, entry socket, env allowlist, inherited fds, limits; must equal the value regenerated from the trusted policy (plan 3.3(a)). Same code with different launch parameters fails here."
+    }
+   }
+  },
+  "targets": {
+   "type": "object",
+   "additionalProperties": false,
+   "required": [
+    "caseSpecDigest",
+    "oracleFileSha256",
+    "fixtureFileSha256",
+    "fixtureHash",
+    "anchorDigest"
+   ],
+   "properties": {
+    "caseSpecDigest": {
+     "$ref": "#/$defs/sha256"
+    },
+    "oracleFileSha256": {
+     "$ref": "#/$defs/sha256"
+    },
+    "fixtureFileSha256": {
+     "$ref": "#/$defs/sha256"
+    },
+    "fixtureHash": {
+     "$ref": "#/$defs/sha256"
+    },
+    "anchorDigest": {
+     "$ref": "#/$defs/sha256",
+     "description": "Must equal the repository variable CMN_STAGE1_ANCHOR_SHA256."
+    }
+   }
+  },
+  "run": {
+   "type": "object",
+   "additionalProperties": false,
+   "required": [
+    "runId",
+    "runAttempt",
+    "attestationNonce",
+    "ownershipNonceSha256",
+    "nonceWrittenAt",
+    "startedAt",
+    "finishedAt"
+   ],
+   "properties": {
+    "runId": {
+     "type": "string",
+     "pattern": "^[0-9]{1,20}$",
+     "description": "Compared with the execution run the Verifier was triggered for, not read from the artifact alone."
+    },
+    "runAttempt": {
+     "type": "integer",
+     "minimum": 1
+    },
+    "attestationNonce": {
+     "type": "string",
+     "pattern": "^[0-9a-f]{64}$",
+     "description": "Generated at T0, written at T3 (plan section 5); passed to the Verifier as a job output and compared with the marker in state-post."
+    },
+    "ownershipNonceSha256": {
+     "$ref": "#/$defs/sha256",
+     "description": "Batch 1/2 ownership marker; a different value from attestationNonce."
+    },
+    "nonceWrittenAt": {
+     "$ref": "#/$defs/utc"
+    },
+    "startedAt": {
+     "$ref": "#/$defs/utc"
+    },
+    "finishedAt": {
+     "$ref": "#/$defs/utc"
+    }
+   }
+  },
+  "environment": {
+   "type": "object",
+   "additionalProperties": false,
+   "required": [
+    "osImage",
+    "node",
+    "java",
+    "firebaseTools",
+    "firestoreJarMd5",
+    "stage2LockfileSha256",
+    "runnerKind"
+   ],
+   "properties": {
+    "osImage": {
+     "type": "string"
+    },
+    "node": {
+     "type": "string"
+    },
+    "java": {
+     "type": "string"
+    },
+    "firebaseTools": {
+     "const": "15.35.0"
+    },
+    "firestoreJarMd5": {
+     "type": "string",
+     "pattern": "^[0-9a-f]{32}$"
+    },
+    "stage2LockfileSha256": {
+     "$ref": "#/$defs/sha256"
+    },
+    "runnerKind": {
+     "enum": [
+      "github-hosted",
+      "local-untrusted"
+     ],
+     "description": "local-untrusted can never yield PASS."
+    }
+   }
+  },
+  "isolation": {
+   "type": "object",
+   "additionalProperties": false,
+   "required": [
+    "platformSupported",
+    "selfCheck",
+    "termination"
+   ],
+   "properties": {
+    "platformSupported": {
+     "type": "boolean",
+     "description": "false → UNATTESTED (ISOLATION_UNVERIFIABLE)."
+    },
+    "selfCheck": {
+     "type": "object",
+     "additionalProperties": false,
+     "required": [
+      "NS_NET_DISTINCT",
+      "NS_PID_DISTINCT",
+      "NS_MNT_DISTINCT",
+      "NS_IPC_DISTINCT",
+      "NS_UTS_DISTINCT",
+      "NET_NO_INTERFACES",
+      "HOST_ENDPOINTS_BLOCKED",
+      "ENTRY_SOCKET_REACHABLE",
+      "NO_OTHER_SOCKETS",
+      "UID_NONROOT",
+      "NO_CAPS",
+      "NO_NEW_PRIVS",
+      "NO_SUDO",
+      "FS_EVIDENCE_HIDDEN",
+      "FS_TOOLCHAIN_HIDDEN",
+      "FS_GIT_HIDDEN",
+      "PROC_ISOLATED",
+      "DEV_ALLOWLIST",
+      "ENV_ALLOWLIST",
+      "FD_ALLOWLIST",
+      "MOUNT_ALLOWLIST",
+      "OUTPUT_CHANNELS_HIDDEN"
+     ],
+     "description": "Closed set of s2-isolation-policy-v1 check IDs: missing or unknown IDs fail this schema; duplicate keys are rejected by the strict parser (plan 7.4); any ok=false or positiveControlOk=false → BLOCKED (plan 3.3(c)).",
+     "properties": {
+      "NS_NET_DISTINCT": {
+       "$ref": "#/$defs/check"
+      },
+      "NS_PID_DISTINCT": {
+       "$ref": "#/$defs/check"
+      },
+      "NS_MNT_DISTINCT": {
+       "$ref": "#/$defs/check"
+      },
+      "NS_IPC_DISTINCT": {
+       "$ref": "#/$defs/check"
+      },
+      "NS_UTS_DISTINCT": {
+       "$ref": "#/$defs/check"
+      },
+      "NET_NO_INTERFACES": {
+       "$ref": "#/$defs/check"
+      },
+      "HOST_ENDPOINTS_BLOCKED": {
+       "$ref": "#/$defs/check"
+      },
+      "ENTRY_SOCKET_REACHABLE": {
+       "$ref": "#/$defs/check"
+      },
+      "NO_OTHER_SOCKETS": {
+       "$ref": "#/$defs/check"
+      },
+      "UID_NONROOT": {
+       "$ref": "#/$defs/check"
+      },
+      "NO_CAPS": {
+       "$ref": "#/$defs/check"
+      },
+      "NO_NEW_PRIVS": {
+       "$ref": "#/$defs/check"
+      },
+      "NO_SUDO": {
+       "$ref": "#/$defs/check"
+      },
+      "FS_EVIDENCE_HIDDEN": {
+       "$ref": "#/$defs/check"
+      },
+      "FS_TOOLCHAIN_HIDDEN": {
+       "$ref": "#/$defs/check"
+      },
+      "FS_GIT_HIDDEN": {
+       "$ref": "#/$defs/check"
+      },
+      "PROC_ISOLATED": {
+       "$ref": "#/$defs/check"
+      },
+      "DEV_ALLOWLIST": {
+       "$ref": "#/$defs/check"
+      },
+      "ENV_ALLOWLIST": {
+       "$ref": "#/$defs/check"
+      },
+      "FD_ALLOWLIST": {
+       "$ref": "#/$defs/check"
+      },
+      "MOUNT_ALLOWLIST": {
+       "$ref": "#/$defs/check"
+      },
+      "OUTPUT_CHANNELS_HIDDEN": {
+       "$ref": "#/$defs/check"
+      }
+     }
+    },
+    "termination": {
+     "type": "object",
+     "additionalProperties": false,
+     "required": [
+      "namespaceTerminated",
+      "remainingAdapterProcesses",
+      "exportAfterTermination"
+     ],
+     "properties": {
+      "namespaceTerminated": {
+       "type": "boolean"
+      },
+      "remainingAdapterProcesses": {
+       "type": "integer",
+       "minimum": 0
+      },
+      "exportAfterTermination": {
+       "type": "boolean"
+      }
+     }
+    }
+   }
+  },
+  "artifacts": {
+   "type": "object",
+   "additionalProperties": false,
+   "required": [
+    "traceFront",
+    "traceBack",
+    "statePre",
+    "statePost",
+    "evidenceFiles",
+    "runnerLog"
+   ],
+   "properties": {
+    "traceFront": {
+     "$ref": "#/$defs/fileDigest"
+    },
+    "traceBack": {
+     "$ref": "#/$defs/fileDigest"
+    },
+    "statePre": {
+     "$ref": "#/$defs/fileDigest"
+    },
+    "statePost": {
+     "$ref": "#/$defs/fileDigest"
+    },
+    "evidenceFiles": {
+     "type": "array",
+     "items": {
+      "$ref": "#/$defs/fileDigest"
+     }
+    },
+    "runnerLog": {
+     "$ref": "#/$defs/fileDigest"
+    }
+   },
+   "description": "Payload files only (plan 3.4): never the manifest itself, package.tar, statement.json or signing/delivery records."
+  },
+  "reconciliation": {
+   "type": "object",
+   "additionalProperties": false,
+   "required": [
+    "frontRequests",
+    "auditAdded",
+    "auditMatched",
+    "auditModifiedOrDeleted",
+    "nonceMarkerUnchanged",
+    "unexplainedChanges",
+    "unattributedBackendRequests",
+    "nonAuditBackendWrites",
+    "duplicateTraceIds",
+    "phaseViolations"
+   ],
+   "properties": {
+    "frontRequests": {
+     "type": "integer",
+     "minimum": 0
+    },
+    "auditAdded": {
+     "type": "integer",
+     "minimum": 0
+    },
+    "auditMatched": {
+     "type": "integer",
+     "minimum": 0
+    },
+    "auditModifiedOrDeleted": {
+     "type": "integer",
+     "minimum": 0
+    },
+    "nonceMarkerUnchanged": {
+     "type": "boolean"
+    },
+    "unexplainedChanges": {
+     "type": "integer",
+     "minimum": 0
+    },
+    "unattributedBackendRequests": {
+     "type": "integer",
+     "minimum": 0
+    },
+    "nonAuditBackendWrites": {
+     "type": "integer",
+     "minimum": 0
+    },
+    "duplicateTraceIds": {
+     "type": "integer",
+     "minimum": 0
+    },
+    "phaseViolations": {
+     "type": "integer",
+     "minimum": 0,
+     "description": "Back-proxy traffic outside the case phase, or Runner-channel traffic inside it (plan 6.3)."
+    }
+   }
+  },
+  "observed": {
+   "type": "object",
+   "additionalProperties": false,
+   "required": [
+    "canonical",
+    "canonicalDigest",
+    "blockedFields"
+   ],
+   "properties": {
+    "canonical": {
+     "type": [
+      "object",
+      "null"
+     ]
+    },
+    "canonicalDigest": {
+     "anyOf": [
+      {
+       "$ref": "#/$defs/sha256"
+      },
+      {
+       "type": "null"
+      }
+     ]
+    },
+    "blockedFields": {
+     "type": "array",
+     "items": {
+      "type": "string"
+     },
+     "description": "e.g. POC-009 applicability / pendingPeriods (G-1, G-4)."
+    }
+   }
+  },
+  "adapterClaimedCanonical": {
+   "type": [
+    "object",
+    "null"
+   ],
+   "description": "Recorded for comparison only."
+  },
+  "verdict": {
+   "type": "object",
+   "additionalProperties": false,
+   "required": [
+    "result",
+    "reasons",
+    "verifiedAt"
+   ],
+   "properties": {
+    "result": {
+     "enum": [
+      "PASS",
+      "FAIL",
+      "BLOCKED",
+      "UNATTESTED"
+     ]
+    },
+    "reasons": {
+     "type": "array",
+     "items": {
+      "type": "string",
+      "pattern": "^[A-Z][A-Z0-9_]{2,63}$"
+     }
+    },
+    "verifiedAt": {
+     "$ref": "#/$defs/utc"
+    }
+   },
+   "description": "Written only by the Verifier before signing; the statement never claims whether it is signed (plan 3.1). Signing status is in the external delivery.json and is proven only by the actual bundle."
+  },
+  "package": {
+   "type": "object",
+   "additionalProperties": false,
+   "required": [
+    "artifactId",
+    "packageSha256",
+    "manifestSha256",
+    "producerJob"
+   ],
+   "description": "Plan 3.4. Expected values come from the execution job's outputs, never from inside the package.",
+   "properties": {
+    "artifactId": {
+     "type": "string",
+     "pattern": "^[0-9]{1,20}$"
+    },
+    "packageSha256": {
+     "$ref": "#/$defs/sha256"
+    },
+    "manifestSha256": {
+     "$ref": "#/$defs/sha256"
+    },
+    "producerJob": {
+     "type": "string",
+     "pattern": "^[A-Za-z0-9_-]{1,64}$"
+    }
+   }
+  }
+ }
+}
