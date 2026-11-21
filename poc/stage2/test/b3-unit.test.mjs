@@ -228,3 +228,69 @@ test('B3A-N5 (P6): bytes appended after the tar end-of-archive marker are reject
   const p = writePackage({ 'a.json': '{}' });
   assert.equal(code(() => readPackageSafe(Buffer.concat([p.packageBytes, Buffer.from('trailing')]))), 'ARTIFACT_FORMAT');
 });
+
+// ======================================================================= F1 (B3A-R1-N1, NOTE-a, NOTE-b)
+import { VERIFIER_VERSION } from '../src/b3/verifier.mjs';
+
+test('NOTE-b: Verifier version is s2-verifier-b3a-1', () => {
+  assert.equal(VERIFIER_VERSION, 's2-verifier-b3a-1');
+  assert.equal(verifyMod().verifierVersion, 's2-verifier-b3a-1');
+});
+
+test('B3A-R1-N1: non-object top-level JSON is BLOCKED with a named reason and never throws', () => {
+  const firstLine = (name, line) => ({ [name]: [line, ...fixFiles[name].split('\n').slice(1)].join('\n') });
+  const someLine = (name, line) => { const l = fixFiles[name].split('\n'); l.splice(1, 0, line); return { [name]: l.join('\n') }; };
+  const cases = [
+    ...['null', '[]', '"x"', '0'].map((v) => [`isolation.json = ${v}`, { 'isolation.json': v }, 'ISOLATION_EVIDENCE_INVALID']),
+    ...['null', '[]'].map((v) => [`run.json = ${v}`, { 'run.json': v }, 'ARTIFACT_JSON_INVALID']),
+    ['state-pre.json = null', { 'state-pre.json': 'null' }, 'ARTIFACT_JSON_INVALID'],
+    ['state-post.json = []', { 'state-post.json': '[]' }, 'ARTIFACT_JSON_INVALID'],
+    ['trace-front.jsonl first line = null', firstLine('trace-front.jsonl', 'null'), 'ARTIFACT_JSON_INVALID'],
+    ['runner-log.jsonl a line = [1]', someLine('runner-log.jsonl', '[1]'), 'ARTIFACT_JSON_INVALID'],
+    ['trace-back.jsonl a line = "x"', someLine('trace-back.jsonl', '"x"'), 'ARTIFACT_JSON_INVALID'],
+    ['adapter-claim.json = []', { 'adapter-claim.json': '[]' }, 'ARTIFACT_JSON_INVALID'],
+  ];
+  for (const [n, mods, c] of cases) {
+    let r; assert.doesNotThrow(() => { r = verifyMod(mods); }, n);
+    assert.equal(r.result, 'BLOCKED', n); assert.deepEqual(codes(r), [c], n);
+    assert.equal(r.isolation, null, n);   // out.isolation is assigned only after the isolation shape check
+  }
+  // adapter-claim.json = null is allowed by design (no Adapter output) and is not a shape error
+  const nullClaim = verifyMod({ 'adapter-claim.json': 'null' });
+  assert.ok(!codes(nullClaim).includes('ARTIFACT_JSON_INVALID'), JSON.stringify(nullClaim.reasons));
+});
+
+test('B3A-R1-N1 / NOTE ⑨: trusted input null or not an object → BLOCKED TRUSTED_INPUT_MISSING, never throws', () => {
+  for (const t of [null, undefined, [], 'x', 0]) {
+    let r; assert.doesNotThrow(() => { r = verifyPackage(fixBytes, t); }, String(t));
+    assert.equal(r.result, 'BLOCKED'); assert.deepEqual(r.reasons, ['TRUSTED_INPUT_MISSING'], String(t));
+  }
+});
+
+test('B3A-R1-N1: an unexpected error is BLOCKED VERIFIER_INTERNAL_ERROR with the error class only (no message)', () => {
+  const trusted = { ...trustedBase, packageSha256: fixOut.packageSha256, manifestSha256: fixOut.manifestSha256 };
+  for (const bytes of [undefined, null, 42, {}]) {
+    let r; assert.doesNotThrow(() => { r = verifyPackage(bytes, trusted); }, String(bytes));
+    assert.equal(r.result, 'BLOCKED'); assert.equal(r.reasons.length, 1); assert.match(r.reasons[0], /^VERIFIER_INTERNAL_ERROR:(TypeError|RangeError|SyntaxError|ReferenceError|Error|NonError)$/);
+  }
+  // a crash deep inside (an audit record that is null) is contained too, and its message is not copied
+  const AUD = 'workspaces/WS-A17/auditLog/11111111-1111-4111-8111-111111111111';
+  const r = verifyMod({ 'state-post.json': addDoc(fixFiles['state-post.json'], AUD, null) });
+  assert.equal(r.result, 'BLOCKED'); assert.deepEqual(r.reasons, ['VERIFIER_INTERNAL_ERROR:TypeError']);
+});
+
+test('NOTE-a: reconcile never treats keys on the prototype chain of pre/post as existing documents', () => {
+  const AUDIT_KEY = 'workspaces/W/auditLog/a1'; const DOC = 'workspaces/W/classes/C/attendanceSessions/S/entries/E1';
+  const protoOf = (proto, own) => Object.assign(Object.create(proto), own);
+  // (1) audit record on pre's prototype: the post audit is still a NEW record and still reconciles
+  { const b = base(); b.pre = protoOf({ [AUDIT_KEY]: b.post[AUDIT_KEY] }, b.pre); const r = reconcile(b);
+    assert.deepEqual(r.problems, []); assert.equal(r.counts.auditAdded, 1); assert.equal(r.counts.auditMatched, 1); }
+  // (2) an own pre audit that survives only on post's prototype counts as deleted
+  { const b = base(); const old = { traceId: 'TR-0', decision: 'allow' }; b.pre['workspaces/W/auditLog/old'] = old; b.post = protoOf({ 'workspaces/W/auditLog/old': old }, b.post);
+    assert.ok(reconcile(b).problems.some((x) => x.startsWith('AUDIT_MODIFIED_OR_DELETED'))); }
+  // (3) the audited resource exists only on the prototype chain → resourceRef is not reconciled
+  { const b = base(); const d = b.pre[DOC]; delete b.pre[DOC]; delete b.post[DOC]; b.pre = protoOf({ [DOC]: d }, b.pre); b.post = protoOf({ [DOC]: d }, b.post);
+    const p = reconcile(b).problems; assert.ok(p.some((x) => x.startsWith('AUDIT_UNRECONCILED') && x.includes('resourceRef')), JSON.stringify(p)); }
+  // control: the same documents as own keys reconcile cleanly
+  assert.deepEqual(reconcile(base()).problems, []);
+});

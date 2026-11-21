@@ -118,3 +118,25 @@ A17（不安全封裝）與其他純函式規則在 `test/b3-unit.test.mjs`（8 
 - 審查者提供的 `S2B2-B3A-reviewer-probes.mjs` 沒有傳到 Claude 的環境；上表的探針依審查說明的 P1～P6 自行撰寫，需請審查者對照原探針確認涵蓋範圍。
 - `s2:b3` 26 項在修正後全部維持原判定（逐項比對見審查請求）。
 
+
+## 6. 後續修正 F1（B3A-R1-N1、NOTE-a、NOTE-b）
+
+依據：PR #7 合併 `15a7c51fe6341d79afdafc5aefb22501fe081377`（R1 增量複驗結論「可合併；N1～N4 已關閉」）。
+
+**Verifier 版本**（NOTE-b）：
+
+| 版本 | 對應程式 |
+|---|---|
+| `s2-verifier-b3a-0` | `211e11433bc3e005d3ef68383340e9b27e8183cf`（B3a 首版） |
+| `s2-verifier-b3a-1` | R1（`9a9450b`）加上本次 F1 修正 |
+
+版本號只出現在 Verifier 的輸出（`verify.json`）；statement schema 草案沒有 `verifierVersion` 欄位，所以 schema 不需更新。
+
+| ID | 問題 | 修正 | 影響 | 測試（`test/b3-unit.test.mjs`） |
+|---|---|---|---|---|
+| **B3A-R1-N1** | 最外層 JSON 不是物件時 Verifier 拋出例外；`isPlainObj(iso)` 在讀取 `iso.sandboxPolicyDigest` 之後才檢查 | 解析後、讀取任何欄位前檢查型別：`run`、`isolation`、`state-pre`、`state-post` 必須是純物件；`adapter-claim` 必須是純物件或 null（設計上允許：Adapter 沒有回傳輸出）；三個 JSONL 的每一行必須是純物件。不符 → `ARTIFACT_JSON_INVALID:<檔名>`（isolation → `ISOLATION_EVIDENCE_INVALID`）。`out.isolation` 改在檢查後賦值。`verifyPackage` 以 try/catch 包住，非預期錯誤 → `VERIFIER_INTERNAL_ERROR:<錯誤類別>`，只寫固定清單內的類別名稱，不寫訊息。`trusted` 不是物件 → `TRUSTED_INPUT_MISSING`（NOTE ⑨） | 只讓原本會拋出例外的輸入改為回傳 `BLOCKED`；合法封裝不受影響 | 「B3A-R1-N1: non-object top-level JSON…」：isolation 為 null／[]／"x"／0；run 為 null／[]；state-pre 為 null；state-post 為 []；trace-front 第一行 null；runner-log 某行 [1]；trace-back 某行 "x"；adapter-claim 為 []；adapter-claim 為 null 不算型別錯誤。「…trusted input null…」：null、undefined、[]、"x"、0。「…VERIFIER_INTERNAL_ERROR…」：位元組不是 Buffer；post 內稽核紀錄為 null |
+| **NOTE-a** | 原型鏈的縱深防禦缺少直接測試 | 直接呼叫 `reconcile()`，`pre`／`post` 用 `Object.create(...)` 帶原型 | 只增加測試 | 「NOTE-a: reconcile never treats keys on the prototype chain…」：原型上的稽核紀錄不算已存在；只存在於 post 原型上的舊稽核紀錄算刪除；只存在於原型鏈的被稽核文件 → `resourceRef` 不符；對照組為 own key |
+
+- 範圍：`PASS_ENABLED`、`passPossible` 仍為 false；沙箱設定與 `configDigest` 不變。
+- 審查者探針 `S2B2-B3A-R1-reviewer-probes.mjs`（X1～X10）沒有傳到 Claude 的環境，**未執行**。
+- B3A-N5～N8 與 NOTE-c 保留到 B3b 前。

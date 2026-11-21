@@ -749,3 +749,31 @@
 
 - 範圍：`PASS_ENABLED`、`passPossible` 仍為 false；沙箱設定與 `configDigest` 不變；受保護檔案與錨定不變。
 - 審查者的 `S2B2-B3A-reviewer-probes.mjs` 沒有傳到 Claude 的環境；探針依說明自行撰寫。
+
+### R1 增量複驗（ChatGPT）與合併
+
+| 項目 | 內容 |
+|---|---|
+| Reviewed Head | `9a9450b291a65e9fc6a37596bbbaccf165a825b7`（增量 Base `211e1143`） |
+| 結論 | **可合併**；B3A-N1～N4 已關閉 |
+| 新發現 | B3A-R1-N1（LOW）：Verifier 遇到非物件的最外層 JSON 會拋出例外（`iso` 為 null 時，型別檢查前就先讀取欄位） |
+| NOTE | NOTE-a：reconcile 的原型鏈縱深防禦測試；NOTE-b：Verifier 版本號未提升；NOTE-c：B3b 前處理 |
+| 合併 | 使用者確認 CI 後合併 PR #7，merge `15a7c51fe6341d79afdafc5aefb22501fe081377`（2026-11-21T10:07:53Z，由 hsuanyu9503 合併） |
+
+## S2-B2 第 3 批 B3a 後續修正 F1（B3A-R1-N1、NOTE-a、NOTE-b）
+
+- Base SHA：`15a7c51fe6341d79afdafc5aefb22501fe081377`（PR #7 合併）
+- Reviewed Head SHA：`[尚未審查]`；審查方式 INCREMENTAL
+- 風險等級（初評）：**L3**（Verifier 變更）
+- 範圍：一個小 commit。B3A-N5～N8 與 NOTE-c 不動，保留到 B3b 前。
+
+| ID | 處理 | 位置 |
+|---|---|---|
+| B3A-R1-N1 | 已修 | `src/b3/verifier.mjs`：最外層型別檢查在讀取任何欄位前；`out.isolation` 在檢查後才賦值；`verifyPackage` 不再拋出例外（`VERIFIER_INTERNAL_ERROR:<錯誤類別>`，不含訊息）；`trusted` 不是物件 → `TRUSTED_INPUT_MISSING`（NOTE ⑨） |
+| NOTE-a | 已加測試 | `test/b3-unit.test.mjs` 直接呼叫 `reconcile()`，`pre`／`post` 使用帶原型的物件 |
+| NOTE-b | 已修 | `VERIFIER_VERSION = 's2-verifier-b3a-1'`；statement schema 草案沒有 `verifierVersion` 欄位，不需更新 |
+| B3A-N5～N8、NOTE-c | 延後 | B3b 前處理 |
+
+- 範圍：`PASS_ENABLED`、`passPossible` 仍為 false；沙箱設定與 `configDigest` 不變；受保護檔案與錨定不變；未改 CI、workflow、repository variable、OIDC。
+- 審查者的 `S2B2-B3A-R1-reviewer-probes.mjs`（X1～X10）**沒有傳到 Claude 的環境**，所以 X1～X10 **未執行**；指令列出的非物件案例已自行寫成單元測試。
+- 使用者決策：`未核准`
