@@ -101,13 +101,37 @@ annotated tag 已解析到實際的 commit（`^{}`）。
 | **合併 PR-2 之前** | 檢查 41 個受保護檔案的清單（`node scripts/verify-anchor.mjs --print`），把 `CMN_STAGE1_ANCHOR_SHA256` 改為新的 digest（見 PR 說明），再 Re-run `baseline-anchor` | 在此之前，PR-2 的 `baseline-anchor` 必定失敗（設計如此） |
 | 合併後（M2） | push 會自動觸發 `attest.yml`，執行 POC-001 | 第一份 hosted runner 證據。兩個變數都還沒設定，所以結果是 `UNATTESTED`，原因為 `TRUST_ROOT_NOT_CONFIGURED`，不簽章 |
 | 檢視第一次執行之後 | 只改紀錄的 PR：加入 `toolchain = M2` 與 `signing-policy = M2 中 attest.yml 的 blob SHA`；重新核准錨定；設定 `CMN_S2_TRUSTED_TOOLCHAIN_SHA`、`CMN_S2_SIGNING_POLICY_BLOB` | 結果變為 `UNATTESTED`，原因為 `PASS_NOT_ENABLED`，仍然不簽章 |
-| hosted 證據審查後 | 另一個小 PR 打開 `PASS_ENABLED` | 這時才可能 `PASS` 並簽章 |
+| hosted 證據審查後 | 另一個小 PR 打開 `PASS_ENABLED` | 打開後會產生**新的工具鏈 commit**（M3），見下方 |
+| M3 合併後 | ChatGPT 與負責人**重新審查 M3** 這個工具鏈；以只改紀錄的 PR 加入 `toolchain = M3`（若 `attest.yml` 也有改變，一併加入新的 `signing-policy`）；必要時撤銷舊紀錄；重新核准錨定；把 `CMN_S2_TRUSTED_TOOLCHAIN_SHA`（必要時連同 `CMN_S2_SIGNING_POLICY_BLOB`）改為指向 M3 | 這時才可能 `PASS` 並簽章 |
+
+**注意：不能只修改 `main` 上的常數。**可信工具鏈變數若仍指向 `PASS_ENABLED=false` 的舊 commit，workflow 就會 checkout 舊程式，結果仍然是 `PASS_NOT_ENABLED`。反過來，未經審查的新 commit 也不能直接成為可信工具鏈。所以打開 PASS 必須走完上表最後兩列。本輪只寫清楚這個順序，不執行任何設定。
 
 blob SHA 的取得方式（在 M2 的 checkout 中執行）：
 
 ```bash
 git rev-parse M2:.github/workflows/attest.yml
 ```
+
+## 4.1 PR2-REV001（R1 審查，MEDIUM）：statement 的來源欄位
+
+**問題**：驗證 job 已經取得可信的 artifact ID 與 workflow blob，但 statement 仍沿用 B3a 的占位值：
+
+- `package.artifactId` 取自封裝內的 `run.artifactId`（固定是 `0`）；
+- `producerJob` 固定為 `local-b3a`；
+- `toolchain.signingPolicyBlob` 是 40 個零。
+
+**修正**：
+
+- **hosted 路徑**：`attest-verify.mjs` 把 `provenance` 當作可信輸入交給 Verifier：
+  - `artifactId`：執行 job 的 outputs；
+  - `producerJob`：固定為 workflow 版面上的 `attest-execute`；
+  - `signingPolicyBlob`：由實際執行的 workflow commit 解析出的 `attest.yml` blob。
+
+  Verifier 在序列化前就用這些值建構 statement。hosted 路徑沒有 provenance 時判 `BLOCKED PROVENANCE_MISSING`；provenance 不合法時（例如 blob 無法解析）判 `PROVENANCE_INVALID`，都不會使用占位值。
+- **本機原型**：沒有 artifact，也沒有簽章政策，所以如實寫 `artifactId: null`、`signingPolicyBlob: null`、`producerJob: "local-b3a"`。
+- **schema 草案**：這兩欄允許 null，但 `verdict.result = PASS` 時必須是字串。
+- **不再讀取封裝的自我宣稱**：封裝內的 `run.artifactId` 不再被讀取；Runner 也不再寫入它。
+- **digest 一致**：statement 只序列化一次（`stableJson`）。寫出的檔案、`verify.json` 的 `statementSha256`、`delivery.json` 的 `statementSha256`，以及未來簽章的 subject，都是同一份位元組。
 
 ## 5. 第三方驗證（**未以官方文件核對**；PASS 打開後才適用）
 

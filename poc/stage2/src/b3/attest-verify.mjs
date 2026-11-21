@@ -15,6 +15,8 @@ import { stableJson } from '../stable.mjs';
 
 const sha = (b) => createHash('sha256').update(b).digest('hex');
 export const DELIVERY_VERSION = 's2-delivery-v1';
+/** Fixed name of the job that produced the package in .github/workflows/attest.yml (statement package.producerJob). */
+export const PRODUCER_JOB = 'attest-execute';
 const CASES = new Set(['POC-001', 'POC-002', 'POC-008', 'POC-009']);
 
 /** @param io { env, listDownload(): [{name, isFile}], readDownload(name): Buffer, head: string,
@@ -47,6 +49,9 @@ export function runVerifyJob(io) {
       attestationNonce: env.EXP_ATTESTATION_NONCE, testId, trustedToolchainCommit: io.head, adapterCommit: io.head,
       caseSpec: Object.hasOwn(io.caseSpecs, testId) ? io.caseSpecs[testId] : undefined,
       runnerKind: hosted ? 'github-hosted' : 'local-untrusted', platformSupported, trustRoot: trust,
+      // PR2-REV001: provenance from the execute job's outputs (artifact ID), the fixed workflow layout (producer)
+      // and the blob of attest.yml in the commit whose workflow ran — never from the package
+      provenance: { artifactId: env.EXP_ARTIFACT_ID, producerJob: PRODUCER_JOB, signingPolicyBlob: io.workflowBlob },
     };
     verdict = verifyPackage(bytes, trusted);
   }
@@ -61,7 +66,7 @@ export function runVerifyJob(io) {
   const report = {
     verifierVersion: verdict.verifierVersion ?? null, result: verdict.result, reasons: verdict.reasons, detail: verdict.detail ?? null,
     reconciliation: verdict.reconciliation ?? null, observedCanonical: verdict.observedCanonical ?? null, contract: verdict.contract ?? null,
-    selection, runnerKind: hosted ? 'github-hosted' : 'local-untrusted', toolchainCommit: io.head,
+    selection, runnerKind: hosted ? 'github-hosted' : 'local-untrusted', toolchainCommit: io.head, statementSha256, provenance: verdict.provenance ?? null,
     trust: { ...trust, policySource: io.policy ? { commit: io.policy.commit, sha256: sha(io.policy.text), anchorDigest: io.policy.anchorDigest, anchoredByOwnerVariable: policyAnchored } : null, workflowBlob: io.workflowBlob, fetchedAt: now.toISOString().replace(/\.\d{3}Z$/, 'Z') },
     unsigned: true, notice: 'UNSIGNED DIAGNOSTIC — not an attestation.',
   };

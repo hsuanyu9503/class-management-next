@@ -72,6 +72,13 @@ function verifyPackageUnguarded(packageBytes, trusted) {
   if (shapeErrors.length) blocked(`ARTIFACT_JSON_INVALID:${shapeErrors.join('|')}`);
   if (reasons.length) return out;
   if (missingTrusted.length || typeof trusted.platformSupported !== 'boolean' || trusted.caseSpec.testId !== trusted.testId || !own(CASE_ACTORS, trusted.testId)) { blocked(`TRUSTED_INPUT_MISSING:${missingTrusted.join('|') || 'caseSpec/testId'}`); return out; }
+  // PR2-REV001: on a hosted runner the statement's provenance (artifact ID, producer job, signing-policy blob)
+  // must come from trusted inputs — never from the package and never from local placeholders
+  const prov = isPlainObj(trusted.provenance) ? trusted.provenance : null;
+  const provOk = !!prov && /^[0-9]{1,20}$/.test(prov.artifactId ?? '') && /^[A-Za-z0-9_-]{1,64}$/.test(prov.producerJob ?? '') && /^[0-9a-f]{40}$/.test(prov.signingPolicyBlob ?? '');
+  if (prov && !provOk) blocked('PROVENANCE_INVALID');
+  else if (!prov && trusted.runnerKind === 'github-hosted') blocked('PROVENANCE_MISSING');
+  out.provenance = provOk ? { artifactId: prov.artifactId, producerJob: prov.producerJob, signingPolicyBlob: prov.signingPolicyBlob } : null;
   // 3. run binding (§7.2)
   for (const k of ['runId', 'runAttempt', 'attestationNonce', 'testId', 'trustedToolchainCommit', 'adapterCommit']) if (run[k] !== trusted[k]) blocked(`RUN_BINDING_MISMATCH:${k}`);
   // 4. isolation policy (§3.3(c))
@@ -149,10 +156,11 @@ function buildStatement({ trusted, run, iso, pkg, out, claim }) {
   const fd = (n) => { const b = pkg.files.get(n); return { path: n, sha256: sha(b), bytes: b.length }; };
   return {
     schemaVersion: 's2-attestation-v1', testId: trusted.testId, backend: 'firebase',
-    toolchain: { trustedToolchainCommit: trusted.trustedToolchainCommit, adapterCommit: trusted.adapterCommit, verifierCommit: trusted.trustedToolchainCommit, observerCommit: trusted.trustedToolchainCommit, signingPolicyBlob: '0'.repeat(40), isolationPolicyVersion: POLICY_VERSION, sandboxLauncherSha256: run.sandboxLauncherSha256, sandboxPolicyDigest: iso.sandboxPolicyDigest },
+    toolchain: { trustedToolchainCommit: trusted.trustedToolchainCommit, adapterCommit: trusted.adapterCommit, verifierCommit: trusted.trustedToolchainCommit, observerCommit: trusted.trustedToolchainCommit, signingPolicyBlob: out.provenance ? out.provenance.signingPolicyBlob : null, isolationPolicyVersion: POLICY_VERSION, sandboxLauncherSha256: run.sandboxLauncherSha256, sandboxPolicyDigest: iso.sandboxPolicyDigest },
     targets: run.targets,
     run: { runId: trusted.runId, runAttempt: trusted.runAttempt, attestationNonce: trusted.attestationNonce, ownershipNonceSha256: run.ownershipNonceSha256, nonceWrittenAt: run.nonceWrittenAt, startedAt: run.startedAt, finishedAt: run.finishedAt },
-    package: { artifactId: run.artifactId, packageSha256: trusted.packageSha256, manifestSha256: trusted.manifestSha256, producerJob: 'local-b3a' },
+    // local prototype: no artifact and no signing policy exist → null (the schema forbids null for PASS); hosted: trusted provenance only
+    package: { artifactId: out.provenance ? out.provenance.artifactId : null, packageSha256: trusted.packageSha256, manifestSha256: trusted.manifestSha256, producerJob: out.provenance ? out.provenance.producerJob : 'local-b3a' },
     environment: run.environment,
     isolation: { platformSupported: iso.platformSupported === true, selfCheck: iso.selfCheck, termination: iso.adapterTermination, pathMapDigest: typeof iso.pathMapDigest === 'string' ? iso.pathMapDigest : null },
     artifacts: { traceFront: fd('trace-front.jsonl'), traceBack: fd('trace-back.jsonl'), statePre: fd('state-pre.json'), statePost: fd('state-post.json'), runnerLog: fd('runner-log.jsonl'), evidenceFiles: [fd('adapter-claim.json'), fd('isolation.json'), fd('run.json')] },

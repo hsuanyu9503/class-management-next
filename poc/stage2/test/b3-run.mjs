@@ -129,7 +129,7 @@ async function attestedRun(label, { testId, entry = '/adapter/main.mjs', cfg = s
   const run = {
     runId, runAttempt, attestationNonce, testId, trustedToolchainCommit: HEAD, adapterCommit: HEAD, adapterEntry: entry,
     adapterSandboxPolicyDigest: configDigest(cfg), sandboxLauncherSha256: launcherSha, nonceWrittenAt, caseStartedAt, caseEndedAt, startedAt, finishedAt,
-    ownershipMarkerPath: `${MARKER_COLLECTION}/${ownNonce}`, ownershipNonceSha256: sha256Hex(ownNonce), artifactId: '0',
+    ownershipMarkerPath: `${MARKER_COLLECTION}/${ownNonce}`, ownershipNonceSha256: sha256Hex(ownNonce),
     targets: { caseSpecDigest: sha256Hex(stableJson(caseSpec)), oracleFileSha256: sha256Hex(oracleBytes), fixtureFileSha256: fileSha256, fixtureHash: createFixtureHash(fixtures), anchorDigest },
     environment, gitDirty,
   };

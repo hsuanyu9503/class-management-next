@@ -649,3 +649,36 @@ test('B3b verify job: A14 artifact selection and run binding are enforced before
   // the verify job never executes anything: a package is only ever parsed (bytes that are not a package → BLOCKED)
   assert.equal(vj({ bytes: Buffer.from('#!/bin/sh\nexit 0\n'), env: vjEnv({ EXP_PACKAGE_SHA256: ch('sha256').update('#!/bin/sh\nexit 0\n').digest('hex') }) }).result, 'BLOCKED');
 });
+
+// ======================================================================= PR2-REV001: statement provenance from trusted inputs
+import { stableJson as sj } from '../src/stable.mjs';
+
+test('PR2-REV001: hosted statement carries the trusted artifact ID, producer job and workflow blob (never package claims or placeholders)', () => {
+  const a = vj({ env: vjEnv({ EXP_ARTIFACT_ID: '123456' }), workflowBlob: B1 }); const st = JSON.parse(a.statementText);
+  assert.equal(st.package.artifactId, '123456'); assert.equal(st.package.producerJob, 'attest-execute'); assert.equal(st.toolchain.signingPolicyBlob, B1);
+  assert.deepEqual(a.report.provenance, { artifactId: '123456', producerJob: 'attest-execute', signingPolicyBlob: B1 });
+  // other trusted values → other statement
+  const b = vj({ env: vjEnv({ EXP_ARTIFACT_ID: '777' }), workflowBlob: 'e'.repeat(40) }); const st2 = JSON.parse(b.statementText);
+  assert.equal(st2.package.artifactId, '777'); assert.equal(st2.toolchain.signingPolicyBlob, 'e'.repeat(40)); assert.notEqual(a.statementSha256, b.statementSha256);
+  assert.ok(!a.statementText.includes('0'.repeat(40)), 'no all-zero placeholder blob');
+  // a package that claims another artifact ID (run.json) cannot override the trusted one
+  const forgedRun = { ...fixRun, artifactId: '999999' };
+  const p = writePackage({ ...fixFiles, 'run.json': JSON.stringify(forgedRun) });
+  const c = vj({ env: vjEnv({ EXP_ARTIFACT_ID: '123456', EXP_PACKAGE_SHA256: p.packageSha256, EXP_MANIFEST_SHA256: p.manifestSha256 }), bytes: p.packageBytes });
+  assert.equal(JSON.parse(c.statementText).package.artifactId, '123456');
+});
+
+test('PR2-REV001: hosted without valid provenance → BLOCKED; local prototype states unknown provenance as null', () => {
+  const noBlob = vj({ workflowBlob: null }); assert.equal(noBlob.result, 'BLOCKED'); assert.ok(noBlob.report.reasons.includes('PROVENANCE_INVALID'), JSON.stringify(noBlob.report.reasons));
+  const hostedDirect = verifyMod({}, { runnerKind: 'github-hosted' }); assert.equal(hostedDirect.result, 'BLOCKED'); assert.ok(codes(hostedDirect).includes('PROVENANCE_MISSING'));
+  const badProv = verifyMod({}, { provenance: { artifactId: 'x', producerJob: 'attest-execute', signingPolicyBlob: B1 } }); assert.ok(codes(badProv).includes('PROVENANCE_INVALID'));
+  const local = verifyMod(); assert.equal(local.result, 'UNATTESTED'); assert.deepEqual(local.reasons, LOCAL_ONLY);
+  assert.equal(local.statement.package.artifactId, null); assert.equal(local.statement.toolchain.signingPolicyBlob, null); assert.equal(local.statement.package.producerJob, 'local-b3a');
+});
+
+test('PR2-REV001: the statement digest is computed over the exact bytes written (file, diagnostic, delivery, future signing subject)', () => {
+  const r = vj({ env: vjEnv({ EXP_ARTIFACT_ID: '123456' }) });
+  const digest = ch('sha256').update(r.statementText).digest('hex');
+  assert.equal(r.statementSha256, digest); assert.equal(r.delivery.statementSha256, digest); assert.equal(r.report.statementSha256, digest);
+  assert.equal(sj(JSON.parse(r.statementText)), r.statementText);   // canonical serialisation: re-serialising gives the same bytes
+});
