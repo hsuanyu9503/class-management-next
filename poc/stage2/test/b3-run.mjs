@@ -218,6 +218,16 @@ for (const [n, text] of Object.entries(variants)) {
   log(x.result.result === 'BLOCKED' && has(x, expectCode[n]), `A15 isolation evidence "${n}" (even with consistent digests) → BLOCKED ${expectCode[n]}`, R(x));
 }
 
+// PR1-REV001: the sealed evidence contradicts itself — the audit PATCH body says something else than the
+// exported audit record (package rebuilt and digests supplied consistently; tests the Verifier's own
+// reconciliation, NOT an untrusted Adapter changing the trusted Runner's digests)
+{ const lines = H1.files['trace-back.jsonl'].toString().split('\n').filter(Boolean).map((l) => JSON.parse(l));
+  const pi = lines.findIndex((e) => e.method === 'PATCH' && /\/auditLog\//.test(e.path));
+  lines[pi].requestBody = { fields: { decision: { stringValue: 'deny' }, reasonCode: { stringValue: 'FAKE_REASON' } } };
+  const p3 = writePackage({ ...H1.files, 'trace-back.jsonl': lines.map((e) => JSON.stringify(e)).join('\n') + '\n' });
+  x = { result: verifyPackage(p3.packageBytes, { ...H1.trusted, packageSha256: p3.packageSha256, manifestSha256: p3.manifestSha256 }) };
+  log(x.result.result === 'BLOCKED' && has(x, 'AUDIT_UNRECONCILED'), 'PR1-REV001 audit PATCH content contradicts the exported audit record (consistent digests) → BLOCKED AUDIT_UNRECONCILED', R(x)); }
+
 // B3A-N5: the honest package plus bytes after the end-of-archive marker (digests supplied consistently)
 { const tail = Buffer.concat([H1.pkg.packageBytes, Buffer.from('appended')]);
   x = { result: verifyPackage(tail, { ...H1.trusted, packageSha256: sha256Hex(tail) }) };

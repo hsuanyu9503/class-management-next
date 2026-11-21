@@ -90,11 +90,17 @@ test('Verifier: content binding and payload set are checked before anything else
 
 // ---- reconciliation on a synthetic world
 const T = '2026-11-21T00:00:10.000Z';
-const base = () => ({
+/** Firestore encoding of an audit record as the API's store writes it (strings and nulls only). */
+const encAudit = (o) => ({ fields: Object.fromEntries(Object.entries(o).map(([k, v]) => [k, v === null ? { nullValue: null } : { stringValue: v }])) });
+/** The synthetic audit PATCH writes WHATEVER post holds at reconcile time (getter), so tests that change the
+ *  post record keep testing their own rule; PR1-REV001 tests override requestBody / query explicitly. */
+const withAuditPatch = (b) => { const patch = b.back[1]; patch.query = [{ 'currentDocument.exists': 'false' }];
+  Object.defineProperty(patch, 'requestBody', { configurable: true, enumerable: true, get: () => encAudit(b.post['workspaces/W/auditLog/a1'] || {}) }); return b; };
+const base = () => withAuditPatch({
   front: [{ role: 'front', traceId: 'TR-1', at: T, status: 200, requestBody: { op: 'attendanceEntry.read', target: { attendanceEntryId: 'E1' }, claimedScope: { workspaceId: 'W', classId: 'C' } }, authorizationRef: { claimedAuthUid: 'U1' } }],
   back: [{ role: 'back', traceId: 'TR-1', at: T, method: 'GET', path: '/v1/projects/p/databases/(default)/documents/authBindings/U1' }, { role: 'back', traceId: 'TR-1', at: T, method: 'PATCH', status: 200, path: '/v1/projects/p/databases/(default)/documents/workspaces/W/auditLog/a1' }],
   pre: { 'authBindings/U1': { principalId: 'P1' }, 'workspaces/W/classes/C/attendanceSessions/S/entries/E1': { attendanceEntryId: 'E1', status: 'N' }, '_attestationRuns/1': { nonce: 'n' } },
-  post: { 'authBindings/U1': { principalId: 'P1' }, 'workspaces/W/classes/C/attendanceSessions/S/entries/E1': { attendanceEntryId: 'E1', status: 'N' }, '_attestationRuns/1': { nonce: 'n' }, 'workspaces/W/auditLog/a1': { traceId: 'TR-1', authUid: 'U1', principalId: 'P1', action: 'attendanceEntry.read', decision: 'allow', reasonCode: 'OK', resourceRef: 'workspaces/W/classes/C/attendanceSessions/S/entries/E1', workspaceId: 'W' } },
+  post: { 'authBindings/U1': { principalId: 'P1' }, 'workspaces/W/classes/C/attendanceSessions/S/entries/E1': { attendanceEntryId: 'E1', status: 'N' }, '_attestationRuns/1': { nonce: 'n' }, 'workspaces/W/auditLog/a1': { auditId: 'a1', at: T, policyVersion: 's2b1-v0.7', traceId: 'TR-1', authUid: 'U1', principalId: 'P1', action: 'attendanceEntry.read', decision: 'allow', reasonCode: 'OK', resourceRef: 'workspaces/W/classes/C/attendanceSessions/S/entries/E1', workspaceId: 'W' } },
   runnerLog: [], caseWindow: { start: Date.parse('2026-11-21T00:00:00Z'), end: Date.parse('2026-11-21T00:01:00Z') }, markerPath: '_attestationRuns/1', expectedMarker: { nonce: 'n' },
 });
 const probs = (mut) => { const b = base(); mut(b); return reconcile(b).problems.map((x) => x.split(':')[0]); };
@@ -405,4 +411,70 @@ test('B3A-N8: case input carries only the case actor\'s token', () => {
   }
   for (const t of ['POC-999', 'toString', '__proto__', null]) assert.throws(() => buildCaseInput({ testId: t, fixtures: {}, users, caseActors: CASE_ACTORS }), /no trusted actor/, String(t));
   assert.throws(() => buildCaseInput({ testId: 'POC-001', fixtures: {}, users: { 'ACTOR-OTHER': { token: 'x' } }, caseActors: CASE_ACTORS }), /no trusted actor/);
+});
+
+// ======================================================================= PR1-REV001: audit PATCH content ↔ exported record
+// These probes seal an INTERNALLY CONTRADICTORY package and supply its digests consistently: they test the
+// Verifier's own reconciliation, not an untrusted Adapter changing the trusted Runner's digests.
+import { MASK } from '../src/mask.mjs';
+import { queryOf } from '../src/trace-proxy.mjs';
+
+test('PR1-REV001 (reviewer probe): an audit PATCH body that contradicts the exported record → BLOCKED; control → UNATTESTED', () => {
+  const lines = fixFiles['trace-back.jsonl'].split('\n').filter(Boolean).map((l) => JSON.parse(l));
+  const i = lines.findIndex((e) => e.method === 'PATCH' && /\/auditLog\//.test(e.path));
+  assert.ok(i >= 0); assert.deepEqual(lines[i].query, [{ 'currentDocument.exists': 'false' }]);   // structured query recorded
+  const rebuild = (fn) => { const ls = structuredClone(lines); fn(ls[i]); return { 'trace-back.jsonl': ls.map((e) => JSON.stringify(e)).join('\n') + '\n' }; };
+  const control = verifyMod(rebuild(() => {}));
+  assert.equal(control.result, 'UNATTESTED'); assert.deepEqual(control.reasons, LOCAL_ONLY);
+  const probe = verifyMod(rebuild((e) => { e.requestBody = { fields: { decision: { stringValue: 'deny' }, reasonCode: { stringValue: 'FAKE_REASON' } } }; }));
+  assert.equal(probe.result, 'BLOCKED'); assert.ok(codes(probe).includes('AUDIT_UNRECONCILED'), JSON.stringify(probe.reasons));
+  const oneField = verifyMod(rebuild((e) => { e.requestBody.fields.decision = { stringValue: 'deny' }; }));
+  assert.equal(oneField.result, 'BLOCKED'); assert.ok(oneField.reasons.some((r) => r.includes('content differs') && r.includes('decision')), JSON.stringify(oneField.reasons));
+  const noQuery = verifyMod(rebuild((e) => { delete e.query; }));
+  assert.equal(noQuery.result, 'BLOCKED'); assert.ok(noQuery.reasons.some((r) => r.includes('not an observable create')));
+});
+
+test('PR1-REV001: audit write content is compared field by field, strictly decoded, and must be create-only', () => {
+  const A = 'workspaces/W/auditLog/a1';
+  const run = (fn) => { const b = base(); fn(b); return reconcile(b).problems; };
+  const setBody = (b, body) => Object.defineProperty(b.back[1], 'requestBody', { value: body, enumerable: true, configurable: true, writable: true });
+  const stored = () => base().post[A];
+  assert.deepEqual(run(() => {}), []);   // control (body = encoded post record, query create-only)
+  // every field: a different value in the write → BLOCKED, naming the field
+  for (const k of Object.keys(stored())) {
+    const pr = run((b) => { const d = { ...b.post[A], [k]: `${b.post[A][k]}-X` }; setBody(b, encAudit(d)); });
+    assert.ok(pr.some((x) => x.startsWith('AUDIT_UNRECONCILED') && x.includes('content differs') && x.includes(k)), `${k}: ${pr}`);
+  }
+  // optional field present on one side only
+  assert.ok(run((b) => { setBody(b, encAudit({ ...b.post[A], outcome: 'BACKEND_UNAVAILABLE' })); }).some((x) => x.includes('outcome')));
+  assert.ok(run((b) => { const d = { ...b.post[A] }; delete d.workspaceId; setBody(b, encAudit(d)); }).some((x) => x.includes('workspaceId')));
+  // missing required fields, unknown fields, wrong value types, wrong body shape
+  for (const k of ['auditId', 'at', 'authUid', 'principalId', 'action', 'resourceRef', 'decision', 'reasonCode', 'policyVersion', 'traceId']) {
+    assert.ok(run((b) => { const e = encAudit(b.post[A]); delete e.fields[k]; setBody(b, e); }).some((x) => x.includes(`missingField:${k}`)), k);
+  }
+  const shapes = {
+    'unknown field': (e) => { e.fields.extra = { stringValue: 'x' }; },
+    'integerValue': (e) => { e.fields.decision = { integerValue: '1' }; },
+    'mapValue': (e) => { e.fields.decision = { mapValue: { fields: {} } }; },
+    'two encodings': (e) => { e.fields.decision = { stringValue: 'allow', nullValue: null }; },
+    'stringValue not a string': (e) => { e.fields.decision = { stringValue: 1 }; },
+    'bare string': (e) => { e.fields.decision = 'allow'; },
+  };
+  for (const [n, fn] of Object.entries(shapes)) assert.ok(run((b) => { const e = encAudit(b.post[A]); fn(e); setBody(b, e); }).some((x) => x.startsWith('AUDIT_UNRECONCILED') && x.includes('audit write body')), n);
+  for (const [n, body] of [['no body', null], ['array', []], ['extra top-level key', { ...encAudit(stored()), updateMask: { fieldPaths: ['decision'] } }], ['fields not an object', { fields: [] }]]) {
+    assert.ok(run((b) => setBody(b, body)).some((x) => x.includes('bodyShape')), n);
+  }
+  // auditId must match the document path, traceId the trace, policyVersion the API's
+  assert.ok(run((b) => { b.post[A].auditId = 'other'; }).some((x) => x.includes('auditIdPath')));
+  assert.ok(run((b) => { b.post[A].policyVersion = 's2b1-v0.6'; }).some((x) => x.includes('policyVersion')));
+  // create-only semantics
+  const q = { 'missing (unobservable)': undefined, empty: [], 'exists=true': [{ 'currentDocument.exists': 'true' }], 'updateMask added': [{ 'currentDocument.exists': 'false' }, { 'updateMask.fieldPaths': 'decision' }], 'duplicate': [{ 'currentDocument.exists': 'false' }, { 'currentDocument.exists': 'false' }], 'not structured': 'currentDocument.exists=false' };
+  for (const [n, v] of Object.entries(q)) assert.ok(run((b) => { b.back[1].query = v; }).some((x) => x.includes('not an observable create')), n);
+  // masking projection: masked identically on both sides → equal; masked on one side only → differs
+  assert.deepEqual(run((b) => { b.post[A].authUid = MASK; const e = encAudit(b.post[A]); e.fields.authUid = MASK; setBody(b, e); }).filter((x) => x.includes('content differs')), []);
+  assert.ok(run((b) => { const e = encAudit(b.post[A]); e.fields.authUid = MASK; setBody(b, e); }).some((x) => x.includes('content differs') && x.includes('authUid')));
+  // the proxy's structured query
+  assert.deepEqual(queryOf('/v1/x/auditLog/a?currentDocument.exists=false'), [{ 'currentDocument.exists': 'false' }]);
+  assert.deepEqual(queryOf('/v1/x?a=1&a=2&b='), [{ a: '1' }, { a: '2' }, { b: '' }]);
+  assert.deepEqual(queryOf('/v1/read'), []);
 });

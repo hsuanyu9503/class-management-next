@@ -34,6 +34,11 @@ function readBody(req) {
  *  entry). On the front proxy, GET /__entry_probe is answered locally (204) and never forwarded, so the
  *  isolation self-check can prove the entry is reachable without creating API traffic or audit records. */
 export const ENTRY_PROBE_PATH = '/__entry_probe';
+/** PR1-REV001: the query string, kept STRUCTURED (one single-key object per parameter, in order, duplicates
+ *  kept) so preconditions such as currentDocument.exists=false are observable; the masker then applies the
+ *  same key-based and value-based masking as everywhere else. */
+export const queryOf = (url) => [...new URLSearchParams(String(url).includes('?') ? String(url).slice(String(url).indexOf('?') + 1) : '')].map(([k, v]) => ({ [k]: v }));
+
 export function createTraceProxy({ role, route, masker, file = null, port, host = '127.0.0.1', socketPath = null }) {
   const entries = [];
   let seq = 0;
@@ -64,7 +69,7 @@ export function createTraceProxy({ role, route, masker, file = null, port, host 
       if (!res.headersSent) res.writeHead(502, { 'content-type': 'application/json' });
       res.end(resText);
     } finally {
-      record({ role, seq: ++seq, traceId, at: new Date(started).toISOString(), durationMs: Date.now() - started, method: req.method, path: req.url.split('?')[0], authorizationRef: maskAuthorization(req.headers.authorization), requestBody: role === 'front' ? traceableRequestBody(parseStrict(reqText)) : parseJson(reqText), status, responseBody: parseJson(resText) });
+      record({ role, seq: ++seq, traceId, at: new Date(started).toISOString(), durationMs: Date.now() - started, method: req.method, path: req.url.split('?')[0], query: queryOf(req.url), authorizationRef: maskAuthorization(req.headers.authorization), requestBody: role === 'front' ? traceableRequestBody(parseStrict(reqText)) : parseJson(reqText), status, responseBody: parseJson(resText) });
     }
   });
   return {

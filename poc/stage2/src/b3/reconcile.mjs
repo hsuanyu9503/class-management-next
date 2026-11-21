@@ -3,11 +3,16 @@
  *   - front entries have unique traceIds; each front request that reached the API has EXACTLY one new audit
  *     record with the same traceId whose authUid / principal / action / resource / decision / reason match
  *     that request; audit records never change once written;
- *   - every back-proxy request carries a front traceId; the only backend writes are that trace's audit write;
+ *   - every back-proxy request carries a front traceId; the only backend writes are that trace's audit write,
+ *     and every new audit document is exactly that PATCH — same trace, same path, status 200 (B3A-N6) — a
+ *     create-only write whose decoded fields equal the exported record field by field (PR1-REV001);
+ *   - resourceRef is the full path of the unique target document; null fields follow the API's order;
+ *     claimedScope agrees with the decision (B3A-N6);
  *   - front/back traffic happens only inside the case window; the Runner does nothing inside it;
  *   - the attestation marker is unchanged; nothing else changes. */
 import { stableJson } from '../stable.mjs';
-import { OPERATIONS } from '../authz.mjs';
+import { OPERATIONS, POLICY_VERSION as AUTHZ_POLICY_VERSION } from '../authz.mjs';
+import { MASK } from '../mask.mjs';
 
 const AUDIT_PATH = /^(workspaces\/[^/]+\/auditLog|auditLogUnscoped)\/[^/]+$/;
 const isAudit = (p) => AUDIT_PATH.test(p);
@@ -15,6 +20,31 @@ const docPathOf = (backPath) => backPath.replace(/^.*\/documents\/?/, '');
 const READ_ONLY_POST = [/:runQuery$/, /:listCollectionIds$/, /\/accounts:lookup$/];
 const isObj = (v) => v !== null && typeof v === 'object' && !Array.isArray(v);
 const CLASS_SCOPE_RE = /^workspaces\/([^/]+)\/classes\/([^/]+)\//;
+/** PR1-REV001: fields an audit document may hold (the API's writeAudit) and the ones it always holds. */
+const AUDIT_FIELDS = new Set(['auditId', 'at', 'authUid', 'principalId', 'action', 'resourceRef', 'decision', 'reasonCode', 'policyVersion', 'traceId', 'outcome', 'workspaceId']);
+const AUDIT_REQUIRED = ['auditId', 'at', 'authUid', 'principalId', 'action', 'resourceRef', 'decision', 'reasonCode', 'policyVersion', 'traceId'];
+/** Strict decoding of the audit PATCH body: exactly { fields }, only AUDIT_FIELDS, each value exactly one of
+ *  { stringValue: string } | { nullValue: null }. Masking projection: the trace is masked in its Firestore
+ *  encoding, the exported state after decoding, by the SAME masker — so a field whose encoding is exactly the
+ *  mask string decodes to that mask string and is compared like any other value (never skipped).
+ *  Returns { doc } or { error }. */
+function decodeAuditWrite(body) {
+  if (!isObj(body) || Object.keys(body).length !== 1 || !Object.hasOwn(body, 'fields') || !isObj(body.fields)) return { error: 'bodyShape' };
+  const doc = {};
+  for (const [k, v] of Object.entries(body.fields)) {
+    if (!AUDIT_FIELDS.has(k)) return { error: `unknownField:${k}` };
+    if (v === MASK) { doc[k] = MASK; continue; }
+    if (!isObj(v) || Object.keys(v).length !== 1) return { error: `valueShape:${k}` };
+    if (Object.hasOwn(v, 'stringValue') && typeof v.stringValue === 'string') doc[k] = v.stringValue;
+    else if (Object.hasOwn(v, 'nullValue') && v.nullValue === null) doc[k] = null;
+    else return { error: `valueType:${k}` };
+  }
+  for (const k of AUDIT_REQUIRED) if (!Object.hasOwn(doc, k)) return { error: `missingField:${k}` };
+  return { doc };
+}
+/** PR1-REV001: the write must be a CREATE: exactly one query parameter currentDocument.exists=false
+ *  (no updateMask / mask / other parameters). A trace without a structured query cannot show it → refused. */
+const isCreateOnly = (query) => Array.isArray(query) && query.length === 1 && isObj(query[0]) && Object.keys(query[0]).length === 1 && query[0]['currentDocument.exists'] === 'false';
 /** B3A-N6: the documents the API's target lookup can return for (op, target) — a collection-group query on
  *  def.collection with def.idField == id — recomputed from the exported pre-state (trusted toolchain). */
 function targetCandidates(pre, op, target) {
@@ -83,7 +113,7 @@ export function reconcile({ front, back, pre, post, runnerLog, caseWindow, marke
     const isRead = b.method === 'GET' || (b.method === 'POST' && READ_ONLY_POST.some((re) => re.test(b.path)));
     if (isRead) continue;
     const dp = docPathOf(b.path);
-    if (b.method === 'PATCH' && isAudit(dp)) { if (!auditWrites.has(b.traceId)) auditWrites.set(b.traceId, []); auditWrites.get(b.traceId).push({ path: dp, status: b.status }); }
+    if (b.method === 'PATCH' && isAudit(dp)) { if (!auditWrites.has(b.traceId)) auditWrites.set(b.traceId, []); auditWrites.get(b.traceId).push({ path: dp, status: b.status, query: b.query, body: b.requestBody }); }
     else nonAuditBackendWrites += 1;
   }
   for (const [tid, ws] of auditWrites) if (ws.length !== 1) p('AUDIT_UNRECONCILED', `${ws.length} audit writes for ${tid}`);
@@ -91,7 +121,18 @@ export function reconcile({ front, back, pre, post, runnerLog, caseWindow, marke
   for (const [tid, list] of auditsByTrace) {
     if (list.length !== 1) continue;
     const ws = auditWrites.get(tid) || [];
-    if (ws.length !== 1 || ws[0].path !== list[0].path || ws[0].status !== 200) p('AUDIT_UNRECONCILED', `${tid} audit write not bound to its PATCH`);
+    if (ws.length !== 1 || ws[0].path !== list[0].path || ws[0].status !== 200) { p('AUDIT_UNRECONCILED', `${tid} audit write not bound to its PATCH`); continue; }
+    // PR1-REV001: what the PATCH wrote must BE the new audit document (create-only, same content, field by field)
+    if (!isCreateOnly(ws[0].query)) p('AUDIT_UNRECONCILED', `${tid} audit write is not an observable create (currentDocument.exists=false)`);
+    const dec = decodeAuditWrite(ws[0].body);
+    if (dec.error) { p('AUDIT_UNRECONCILED', `${tid} audit write body ${dec.error}`); continue; }
+    const stored = post[list[0].path]; const why = [];
+    if (!isObj(stored)) why.push('stored');
+    else for (const k of new Set([...Object.keys(dec.doc), ...Object.keys(stored)])) if (Object.hasOwn(dec.doc, k) !== Object.hasOwn(stored, k) || stableJson(dec.doc[k]) !== stableJson(stored[k])) why.push(k);
+    if (dec.doc.auditId !== list[0].path.split('/').pop()) why.push('auditIdPath');
+    if (dec.doc.traceId !== tid) why.push('traceIdTrace');
+    if (dec.doc.policyVersion !== AUTHZ_POLICY_VERSION) why.push('policyVersion');
+    if (why.length) p('AUDIT_UNRECONCILED', `${tid} audit write content differs from the exported record: ${why.join(',')}`);
   }
   if (unattributedBackendRequests) p('UNATTRIBUTED_BACKEND_TRAFFIC', String(unattributedBackendRequests));
   if (nonAuditBackendWrites) p('NON_AUDIT_BACKEND_WRITE', String(nonAuditBackendWrites));
