@@ -9,11 +9,13 @@ import { appendFileSync, writeFileSync, mkdirSync } from 'node:fs';
 import path from 'node:path';
 import { assertLoopbackUrl } from './local-guard.mjs';
 import { maskAuthorization } from './mask.mjs';
+import { traceableRequestBody } from './api/request-shape.mjs';
 
 export const TRACE_HEADER = 'x-cmn-trace-id';
 export const TRACE_ID_RE = /^TR-[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
 const MAX_BODY = 1024 * 1024;
 
+const parseStrict = (t) => { try { return JSON.parse(t); } catch { return undefined; } };
 const parseJson = (t) => { if (!t) return null; try { return JSON.parse(t); } catch { return { nonJsonBodyLength: t.length }; } };
 function readBody(req) {
   return new Promise((resolve, reject) => {
@@ -57,7 +59,7 @@ export function createTraceProxy({ role, route, masker, file = null, port, host 
       if (!res.headersSent) res.writeHead(502, { 'content-type': 'application/json' });
       res.end(resText);
     } finally {
-      record({ role, seq: ++seq, traceId, at: new Date(started).toISOString(), durationMs: Date.now() - started, method: req.method, path: req.url.split('?')[0], authorization: maskAuthorization(req.headers.authorization), requestBody: parseJson(reqText), status, responseBody: parseJson(resText) });
+      record({ role, seq: ++seq, traceId, at: new Date(started).toISOString(), durationMs: Date.now() - started, method: req.method, path: req.url.split('?')[0], authorizationRef: maskAuthorization(req.headers.authorization), requestBody: role === 'front' ? traceableRequestBody(parseStrict(reqText)) : parseJson(reqText), status, responseBody: parseJson(resText) });
     }
   });
   return {

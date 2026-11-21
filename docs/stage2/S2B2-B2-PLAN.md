@@ -3,6 +3,7 @@
 > **狀態：實作與本機執行紀錄。結果一律是 `UNATTESTED` 或 `BLOCKED`，沒有任何正式 `PASS`。**
 > 基準：`main` = `e98c46b05fe2a127f0356e66777c4484ec768ceb`（PR #4 合併；最終 Reviewed Head `ee756da8920080d4874e1f71915b97f27431576a`，兩者沒有檔案差異）。合併後同 SHA 的 CI [run 44854491499](https://github.com/hsuanyu9503/class-management-next/actions/runs/44854491499) 成功。
 > 本批**不**實作 Verifier、簽章、信任根（D-17）或 `S2B2-ATTESTATION.md` §9 的隔離。本機代理與 Observer 雛形**不是**安全隔離。
+> R1（回應 PR #5 審查 S2B2-B2-REV001～003）：場次子文件逐筆檢查 scope、巢狀陣列白名單投影、請求欄位白名單與 trace 遮罩強化（§4.4）。
 > 相關：[Adapter 計畫](S2B2-ADAPTER-PLAN.md)｜[認證設計](S2B2-ATTESTATION.md)｜[授權](S2B1-AUTHORIZATION.md)｜[資料模型](S2B1-DATA-MODEL.md)｜[存取矩陣](S2B1-ACCESS-MATRIX.md)
 
 ## 1. 範圍
@@ -47,6 +48,11 @@ Firestore client 規則維持拒絕一切（`firestore.rules` 未修改）；所
   - 核對事項可讀；
   - 適用提示請求被拒，原因是 `CAPABILITY_NOT_GRANTED`。
 - 本批**不能**觀察的：`applicability` 與 `pendingPeriods`（G-1、G-4）。這兩欄在 Observer 的結果中**留空**，不以 fixture 的 `expectedApplicability`／`remainingPeriodsToCheck` 代入。
+- **正式解除 BLOCKED 的條件**（全部成立才可重跑）：
+  1. 負責人決定 G-1 的選項，且 S2-B1（或新增的 Stage 2 測試 principal）的修訂經審查；不得在載入測資時默默加 capability；
+  2. 負責人決定 G-4，且可信節次日曆測資經審查（不修改 Stage 1 鎖定 fixtures）；
+  3. 實作適用判斷並通過審查，Observer 從 trace 與狀態計算 `applicability`／`pendingPeriods`；
+  4. 即使如此，結果最多仍是 `UNATTESTED`，直到 D-17 與 §9 隔離完成。
 
 ## 3. 規格缺口與阻擋（需要負責人決策）
 
@@ -86,6 +92,7 @@ Observer ◀── 遮罩後的 front／back trace＋前後狀態匯出（owner 
 | §5／§6.2 步驟 5 | 有效 capability ＝ membership 上的 ∩ `rolePreset@rolePresetVersion` 預設值 ∩ class 型 ∩ 已啟用；未知 preset 或版本 → membership 無效 |
 | §6.2 步驟 6 | 操作所需 capability 必須在有效集合中；未啟用的 capability（D-09）對所有人拒絕 |
 | §6.6 | 授權失敗一律 `403 {code: FORBIDDEN, traceId}`；不存在與無權限的回應形狀相同；授權前的格式錯誤也是 `FORBIDDEN` |
+| 資料模型 §4、I-02（R1） | 授權通過後、輸出前，**每一筆**參與回應的子文件與巢狀資料都再檢查（§4.4）；任一不符 → 整個請求 `FORBIDDEN`，不回部分資料 |
 
 拒絕原因碼只寫入 `auditLog`，不出現在回應中。
 
@@ -107,12 +114,27 @@ Observer ◀── 遮罩後的 front／back trace＋前後狀態匯出（owner 
 
 Observer 以 `traceId` 對應兩者。測試 trace **不能**取代 `auditLog`：每個案例都檢查 `auditLog` 恰好有一筆對應紀錄，缺少即判為問題。
 
+### 4.4 回應完整性與請求白名單（R1：S2B2-B2-REV001～003）
+
+`poc/stage2/src/api/response-shape.mjs`、`src/api/request-shape.mjs`：
+
+| 審查項 | 原因 | 修正 |
+|---|---|---|
+| REV001（HIGH） | `attendanceSession.read`／`attendanceSummary.read` 只檢查父場次，子文件 entries 直接投影或計數 | 輸出或計數**之前**逐筆檢查：路徑必須在授權場次的 `entries/` 下；`workspaceId`、`classId` 等於路徑；`sessionId` 等於父場次；`attendanceEntryId` 等於文件 ID；四者缺少或不符 → `SCOPE_INTEGRITY_ERROR`。其他必要欄位缺少、`status` 不是 P／R／N／U、型別錯誤 → `DATA_INTEGRITY_ERROR`。任一筆不符即整個請求 `403 FORBIDDEN`，`auditLog` 記 `deny`＋原因碼，不回任何 entries 或 counts |
+| REV002（MEDIUM） | front trace 記錄完整請求 body；遞迴遮罩沒有涵蓋 `authorization` 鍵；API 接受額外欄位 | API：請求 body 只能是 `{op, target, claimedScope}`，`target`／`claimedScope` 只能是字串平面物件，否則授權前 `FORBIDDEN`（`REQUEST_SHAPE_INVALID`）。front trace：只記錄白名單欄位；不符時只記標記（不記值、不記鍵名）。遮罩：`authorization`、`cookie`、`x-api-key`、`token` 等鍵不分大小寫與分隔符號；字串中的 `Bearer …` 與 JWT 形狀一律遮罩。代理自己的標頭紀錄改名為 `authorizationRef`，保留 `tokenSha256` 與未驗證的 `claimedAuthUid` |
+| REV003（MEDIUM） | `rosterSnapshot` 原樣輸出 | `rosterSnapshot`、`coverageSegments`、核對事項 `evidence` 逐筆驗證型別與必要欄位，只輸出白名單欄位；額外欄位（姓名、email、備註、巢狀資料）一律不送出；非陣列、元素不是物件、缺少必要欄位或型別錯誤 → `DATA_INTEGRITY_ERROR`、整個請求 `FORBIDDEN`。點名、請假摘要、核對事項本身也改為「必要欄位＋白名單」投影 |
+
+`DATA_INTEGRITY_ERROR` 是本批新增的稽核原因碼（只在 `auditLog`），對外仍是 `FORBIDDEN`。
+
 ## 5. 證據與遮罩
 
-每次執行在 `poc/stage2/evidence/runs/s2b2-b2/<runId>/`（已列入 `.gitignore`）產生：
+每次執行在 `poc/stage2/evidence/runs/s2b2-b2/<runId>/`（已列入 `.gitignore`）產生（R1 起，每個負向、對照與變異情境都另存原始 trace、狀態與結果，並附 `artifact-manifest.json`）：
 
 - 每案：`trace-front.jsonl`、`trace-back.jsonl`、`state-pre.json`、`state-post.json`、`observation.json`（含 case spec digest、狀態雜湊、檔案雜湊、Adapter 宣稱、Observer 結果、判定）；
-- `run-summary.json`：`gitCommit`、`gitDirty`、fixture 與 oracle 檔案 SHA-256、Node／firebase-tools 版本、逐案結果、負向與變異控制、遮罩檢查、清理結果。
+- 每個負向／對照情境：`negatives/NN-<名稱>/trace-front.jsonl`、`trace-back.jsonl`、`state-post.json`（含 `auditLog`）、`result.json`；
+- 每個變異情境：`cases/MUT-…/`，結構與正式案例相同；
+- `run-summary.json`：`gitCommit`、`gitDirty`、fixture 與 oracle 檔案 SHA-256、Node／firebase-tools 版本、逐案結果、負向與變異控制、遮罩檢查、清理結果；
+- `artifact-manifest.json`：執行目錄中每個檔案的路徑、大小與 SHA-256。
 
 遮罩（`src/mask.mjs`）在寫入前進行：
 
@@ -189,9 +211,31 @@ Observer 以 `traceId` 對應兩者。測試 trace **不能**取代 `auditLog`�
 | 39 | capability not held (SC01 teacher reads leave applicability) | 拒絕 `CAPABILITY_NOT_GRANTED` | 403／FORBIDDEN／CAPABILITY_NOT_GRANTED | 通過 | 符合 |
 | 40 | unknown operation | 拒絕 `UNKNOWN_OPERATION` | 403／FORBIDDEN／UNKNOWN_OPERATION | 不適用 | 符合 |
 | 41 | malformed target id | 拒絕 `TARGET_INVALID` | 403／FORBIDDEN／TARGET_INVALID | 不適用 | 符合 |
-| 42 | membership validFrom = today (half-open boundary, allowed) | 允許 | 200／OK／OK | 通過 | 符合 |
-| 43 | membership with no end date (null) allowed | 允許 | 200／OK／OK | 通過 | 符合 |
-| 44 | backend unreachable (closed port) → UNAVAILABLE, no data | `UNAVAILABLE`，無資料 | 503／UNAVAILABLE／— | — | 符合 |
+| 42 | request body with an unknown top-level field (REV002) | 拒絕 `REQUEST_SHAPE_INVALID` | 403／FORBIDDEN／REQUEST_SHAPE_INVALID | 不適用 | 符合 |
+| 43 | REV001 session: entry workspaceId differs from path | 拒絕 `SCOPE_INTEGRITY_ERROR` | 403／FORBIDDEN／SCOPE_INTEGRITY_ERROR | 通過 | 符合 |
+| 44 | REV001 session: entry classId differs from path | 拒絕 `SCOPE_INTEGRITY_ERROR` | 403／FORBIDDEN／SCOPE_INTEGRITY_ERROR | 通過 | 符合 |
+| 45 | REV001 session: entry sessionId differs from parent | 拒絕 `SCOPE_INTEGRITY_ERROR` | 403／FORBIDDEN／SCOPE_INTEGRITY_ERROR | 通過 | 符合 |
+| 46 | REV001 session: entry attendanceEntryId differs from doc id | 拒絕 `SCOPE_INTEGRITY_ERROR` | 403／FORBIDDEN／SCOPE_INTEGRITY_ERROR | 通過 | 符合 |
+| 47 | REV001 session: entry classId missing | 拒絕 `SCOPE_INTEGRITY_ERROR` | 403／FORBIDDEN／SCOPE_INTEGRITY_ERROR | 通過 | 符合 |
+| 48 | REV001 session: reviewer reproduction: entry labelled WS-B/C-B/S-B/E-B with a foreign studentId | 拒絕 `SCOPE_INTEGRITY_ERROR` | 403／FORBIDDEN／SCOPE_INTEGRITY_ERROR | 通過 | 符合 |
+| 49 | REV001 session: entry status not P/R/N/U | 拒絕 `DATA_INTEGRITY_ERROR` | 403／FORBIDDEN／DATA_INTEGRITY_ERROR | 通過 | 符合 |
+| 50 | REV001 session: entry studentId missing | 拒絕 `DATA_INTEGRITY_ERROR` | 403／FORBIDDEN／DATA_INTEGRITY_ERROR | 通過 | 符合 |
+| 51 | REV001 summary: entry workspaceId differs from path | 拒絕 `SCOPE_INTEGRITY_ERROR` | 403／FORBIDDEN／SCOPE_INTEGRITY_ERROR | 通過 | 符合 |
+| 52 | REV001 summary: entry classId differs from path | 拒絕 `SCOPE_INTEGRITY_ERROR` | 403／FORBIDDEN／SCOPE_INTEGRITY_ERROR | 通過 | 符合 |
+| 53 | REV001 summary: entry sessionId differs from parent | 拒絕 `SCOPE_INTEGRITY_ERROR` | 403／FORBIDDEN／SCOPE_INTEGRITY_ERROR | 通過 | 符合 |
+| 54 | REV001 summary: entry attendanceEntryId differs from doc id | 拒絕 `SCOPE_INTEGRITY_ERROR` | 403／FORBIDDEN／SCOPE_INTEGRITY_ERROR | 通過 | 符合 |
+| 55 | REV001 summary: entry classId missing | 拒絕 `SCOPE_INTEGRITY_ERROR` | 403／FORBIDDEN／SCOPE_INTEGRITY_ERROR | 通過 | 符合 |
+| 56 | REV001 summary: reviewer reproduction: entry labelled WS-B/C-B/S-B/E-B with a foreign studentId | 拒絕 `SCOPE_INTEGRITY_ERROR` | 403／FORBIDDEN／SCOPE_INTEGRITY_ERROR | 通過 | 符合 |
+| 57 | REV001 summary: entry status not P/R/N/U | 拒絕 `DATA_INTEGRITY_ERROR` | 403／FORBIDDEN／DATA_INTEGRITY_ERROR | 通過 | 符合 |
+| 58 | REV001 summary: entry studentId missing | 拒絕 `DATA_INTEGRITY_ERROR` | 403／FORBIDDEN／DATA_INTEGRITY_ERROR | 通過 | 符合 |
+| 59 | REV003 session: rosterSnapshot item missing seatNo | 拒絕 `DATA_INTEGRITY_ERROR` | 403／FORBIDDEN／DATA_INTEGRITY_ERROR | 通過 | 符合 |
+| 60 | REV003 session: rosterSnapshot not an array | 拒絕 `DATA_INTEGRITY_ERROR` | 403／FORBIDDEN／DATA_INTEGRITY_ERROR | 通過 | 符合 |
+| 61 | REV003 session: rosterSnapshot item not an object | 拒絕 `DATA_INTEGRITY_ERROR` | 403／FORBIDDEN／DATA_INTEGRITY_ERROR | 通過 | 符合 |
+| 62 | membership validFrom = today (half-open boundary, allowed) | 允許 | 200／OK／OK | 通過 | 符合 |
+| 63 | membership with no end date (null) allowed | 允許 | 200／OK／OK | 通過 | 符合 |
+| 64 | REV003: rosterSnapshot extra fields never reach the client (raw HTTP response, direct to API) | 允許；原始回應不含額外欄位 | 200／OK／OK | 通過 | 符合 |
+| 65 | REV003: leave coverageSegments / extra leave fields never reach the client (raw HTTP response) | 允許；原始回應不含額外欄位 | 200／OK／OK | 通過 | 符合 |
+| 66 | backend unreachable (closed port) → UNAVAILABLE, no data | `UNAVAILABLE`，無資料 | 503／UNAVAILABLE／— | — | 符合 |
 
 另外，Emulator 停止後的真實斷線：`scripts/run-cases.mjs` 在 `emulators:exec` 結束、連接埠確認關閉後啟動 API，回應 `503 UNAVAILABLE`，只有 `code`／`traceId`。
 
@@ -213,7 +257,8 @@ Observer 以 `traceId` 對應兩者。測試 trace **不能**取代 `auditLog`�
 
 ### 7.4 遮罩與清理
 
-- 遮罩：掃描全部 trace、狀態匯出與觀察檔，沒有 token、密碼、原始 `Authorization` 標頭或 fixture 虛構姓名。檢查集包含一組刻意在請求中夾帶 `password`、`displayName`、`email` 的請求。
+- 遮罩：掃描執行目錄中全部 trace、狀態匯出、觀察與結果檔（R1 為 317 個），沒有 token、密碼、原始 `Authorization` 標頭、JWT 形狀字串或 fixture 虛構姓名。
+- REV002 專項：以虛構 token 送出未知頂層欄位、巢狀與陣列中的 `authorization`／`AUTHORIZATION`、`claimedScope` 夾帶 `x-api-key`、`target` 值是 JWT、整個 body 是陣列等 7 種請求。結果：API 全部 `FORBIDDEN`；**實際寫出的** front trace 檔中找不到任何虛構 token 或 JWT 形狀字串。
 - 清理：確認 nonce 標記後清除；結束時 0 個根集合、0 個帳號。
 
 ### 7.5 前批回歸
@@ -222,6 +267,7 @@ Observer 以 `traceId` 對應兩者。測試 trace **不能**取代 `auditLog`�
 
 ## 8. 未驗證與限制
 
+- 假 HTTP 伺服器的單元測試（`nondestructive.test.mjs`、`batch2-unit.test.mjs` 的 store 回歸）在拒絕本機連線的環境無法執行；R1 新增的 REV001～003 單元測試不需要本機連線。
 - **沒有認證**：沒有 Verifier、簽章、信任根（D-17）、§9 隔離。Adapter、Observer、API 在同一個使用者與機器上執行；本機任何程序都可以繞過代理直接存取 Emulator。
 - Emulator token 沒有簽章（G-6）。
 - CI 不執行本批（Q1 未決，維持現況，**不**代表已選定 Q1）。
@@ -235,3 +281,4 @@ Observer 以 `traceId` 對應兩者。測試 trace **不能**取代 `auditLog`�
 - Q1（CI）、Q2／D-17（信任根）、Q3（官方文件）：未決。
 - D-01～D-17：維持預設。本批沒有為完成案例核准任何權限、放寬角色或啟用敏感 grant。
 - 新增：G-1、G-2、G-3、G-4（§3）。
+- R1 新增的 `DATA_INTEGRITY_ERROR` 稽核原因碼與「請求 body 白名單」屬於實作層的拒絕規則，不改變任何授權結果；是否寫入 S2-B1 規格，由審查與負責人決定。

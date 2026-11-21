@@ -222,3 +222,59 @@ test('store.listMemberships returns membership documents (not {path,data} wrappe
     assert.deepEqual(await st.listMemberships('W1', 'P-T'), [{ membershipId: 'M1', principalId: 'P-T' }]);
   } finally { await new Promise((r) => srv.close(r)); }
 });
+
+// ---------------------------------------------------------------- S2B2-B2-REV001 / REV003 (no HTTP)
+const { buildData, IntegrityError } = await import('../src/api/response-shape.mjs');
+const { checkRequestShape, traceableRequestBody } = await import('../src/api/request-shape.mjs');
+const SES_PATH = 'workspaces/WS-A/classes/C-A/attendanceSessions/S-A';
+const goodEntry = (id, over = {}) => ({ path: `${SES_PATH}/entries/${id}`, data: { workspaceId: 'WS-A', classId: 'C-A', sessionId: 'S-A', attendanceEntryId: id, enrollmentId: `EN-${id}`, studentId: `ST-${id}`, status: 'P', scope: 'daily', version: 1, ...over } });
+const sessionAz = (roster = [{ enrollmentId: 'EN-E-A', studentId: 'ST-E-A', seatNo: 1 }]) => ({ scope: { workspaceId: 'WS-A', classId: 'C-A' }, target: { path: SES_PATH, data: { workspaceId: 'WS-A', classId: 'C-A', sessionId: 'S-A', date: '2026-11-17', kind: 'daily', rosterSnapshot: roster } } });
+const listStore = (children) => ({ listCollection: async (p) => { assert.equal(p, `${SES_PATH}/entries`); return children; } });
+async function reason(p) { try { await p; return 'NO_ERROR'; } catch (e) { assert.ok(e instanceof IntegrityError, String(e)); return e.reasonCode; } }
+
+test('REV001: every entry of an authorized session is checked before projection or counting (both endpoints)', async () => {
+  const ok = await buildData('attendanceSession.read', sessionAz(), listStore([goodEntry('E-A'), goodEntry('E-B', { status: 'U' })]));
+  assert.deepEqual(ok.entries.map((e) => e.attendanceEntryId), ['E-A', 'E-B']);
+  assert.deepEqual((await buildData('attendanceSummary.read', sessionAz(), listStore([goodEntry('E-A'), goodEntry('E-B', { status: 'U' })]))).counts, { P: 1, R: 0, N: 0, U: 1, total: 2, registered: 1, arrived: 1 });
+  // reviewer's reproduction: child under WS-A/C-A/S-A but labelled WS-B/C-B/S-B/E-B with a foreign studentId
+  const foreign = { path: `${SES_PATH}/entries/E-A`, data: { ...goodEntry('E-A').data, workspaceId: 'WS-B', classId: 'C-B', sessionId: 'S-B', attendanceEntryId: 'E-B', studentId: 'ST-FOREIGN' } };
+  const variants = {
+    'workspaceId differs': goodEntry('E-X', { workspaceId: 'WS-B' }), 'classId differs': goodEntry('E-X', { classId: 'C-B' }), 'sessionId differs': goodEntry('E-X', { sessionId: 'S-B' }),
+    'entry id differs from doc id': goodEntry('E-X', { attendanceEntryId: 'E-Y' }), 'missing workspaceId': goodEntry('E-X', { workspaceId: undefined }), 'missing classId': goodEntry('E-X', { classId: null }),
+    'missing sessionId': goodEntry('E-X', { sessionId: '' }), 'missing attendanceEntryId': goodEntry('E-X', { attendanceEntryId: undefined }), 'path outside session': { ...goodEntry('E-X'), path: 'workspaces/WS-A/classes/C-A/attendanceSessions/S-B/entries/E-X' }, reviewer: foreign,
+  };
+  for (const op of ['attendanceSession.read', 'attendanceSummary.read']) {
+    for (const [name, bad] of Object.entries(variants)) assert.equal(await reason(buildData(op, sessionAz(), listStore([goodEntry('E-A'), bad]))), 'SCOPE_INTEGRITY_ERROR', `${op}: ${name}`);
+    for (const [name, over] of Object.entries({ 'unknown status': { status: 'X' }, 'missing studentId': { studentId: undefined }, 'version not integer': { version: '1' } })) assert.equal(await reason(buildData(op, sessionAz(), listStore([goodEntry('E-A', over)]))), 'DATA_INTEGRITY_ERROR', `${op}: ${name}`);
+  }
+});
+
+test('REV003: rosterSnapshot / coverageSegments / evidence are validated and projected to the allow-list', async () => {
+  const roster = [{ enrollmentId: 'EN-1', studentId: 'ST-1', seatNo: 1, displayName: 'UNEXPECTED_NAME', email: 'x@example.invalid', note: 'free text', nested: { a: { displayName: 'UNEXPECTED_NAME' } } }];
+  const r = await buildData('attendanceSession.read', sessionAz(roster), listStore([goodEntry('E-A')]));
+  assert.deepEqual(r.rosterSnapshot, [{ enrollmentId: 'EN-1', studentId: 'ST-1', seatNo: 1 }]);
+  assert.ok(!JSON.stringify(r).includes('UNEXPECTED_NAME') && !JSON.stringify(r).includes('example.invalid') && !JSON.stringify(r).includes('free text'));
+  for (const [name, bad] of Object.entries({ 'not an array': { enrollmentId: 'EN-1' }, null: null, 'item is a string': ['EN-1'], 'item is an array': [['EN-1', 'ST-1', 1]], 'missing seatNo': [{ enrollmentId: 'EN-1', studentId: 'ST-1' }], 'seatNo not integer': [{ enrollmentId: 'EN-1', studentId: 'ST-1', seatNo: '1' }], 'empty studentId': [{ enrollmentId: 'EN-1', studentId: '', seatNo: 1 }] })) {
+    assert.equal(await reason(buildData('attendanceSession.read', sessionAz(bad), listStore([goodEntry('E-A')]))), 'DATA_INTEGRITY_ERROR', name);
+  }
+  const lv = { leaveRecordId: 'L', studentId: 'S', enrollmentId: 'E', leaveTypeId: 'SICK', recordEffect: 'active', teacherConfirmation: 'pending', administrativeApproval: 'x', version: 5, reasonNote: 'SENSITIVE', coverageSegments: [{ segmentId: 'G', startLocalDate: '2026-11-16', endLocalDateExclusive: '2026-11-17', dayPart: 'AM', periodRefs: [1, 2], timeZone: 'Asia/Taipei', note: 'UNEXPECTED_NAME' }] };
+  const lr = await buildData('leaveRecord.read', { scope: { workspaceId: 'W', classId: 'C' }, target: { data: lv } }, {});
+  assert.ok(!JSON.stringify(lr).includes('SENSITIVE') && !JSON.stringify(lr).includes('UNEXPECTED_NAME'));
+  assert.equal(await reason(buildData('leaveRecord.read', { scope: {}, target: { data: { ...lv, coverageSegments: [{ segmentId: 'G' }] } } }, {})), 'DATA_INTEGRITY_ERROR');
+  const is = { issueId: 'I', progress: 'p', checkConclusion: 'c', question: 'q', evidenceStale: false, evidence: [{ sourceType: 'LeaveRecord', sourceId: 'L', sourceVersion: 5, extra: 'UNEXPECTED_NAME' }] };
+  assert.deepEqual((await buildData('trackingIssue.read', { scope: { workspaceId: 'W', classId: 'C' }, target: { data: is } }, {})).evidence, [{ sourceType: 'LeaveRecord', sourceId: 'L', sourceVersion: 5 }]);
+});
+
+test('REV002: request body allow-list; trace keeps only allow-listed fields; credentials masked at any depth', () => {
+  const FAKE_JWT = 'eyJhbGciOiJub25lIn0.eyJzdWIiOiJGQUtFLVJFVjAwMiJ9.';
+  assert.ok(checkRequestShape({ op: 'x', target: { sessionId: 'S' }, claimedScope: { workspaceId: 'W', classId: 'C' } }));
+  for (const bad of [{ op: 'x', target: { sessionId: 'S' }, authorization: `Bearer ${FAKE_JWT}` }, { op: 'x', target: { sessionId: 'S', note: 'n' } }, { op: 'x', target: { sessionId: { nested: FAKE_JWT } } },
+    { op: 'x', target: { sessionId: 'S' }, claimedScope: { workspaceId: 'W', classId: 'C', Authorization: FAKE_JWT } }, [{ op: 'x' }], null, 'str', { op: 'x', target: ['S'] }]) {
+    assert.equal(checkRequestShape(bad), false, JSON.stringify(bad));
+    assert.ok(!JSON.stringify(traceableRequestBody(bad)).includes('FAKE') && !JSON.stringify(traceableRequestBody(bad)).includes('eyJ'), JSON.stringify(bad));
+  }
+  const m = makeMasker([]);
+  const masked = JSON.stringify(m.maskValue({ Authorization: `Bearer ${FAKE_JWT}`, nested: { AUTHORIZATION: FAKE_JWT, 'proxy-authorization': 'x', list: [`Bearer ${FAKE_JWT}`, { x_api_key: 'k' }] }, text: `see bearer ${FAKE_JWT} here`, bare: FAKE_JWT, Token: 'abc', Cookie: 'c' }));
+  assert.ok(!masked.includes(FAKE_JWT) && !masked.includes('eyJ') && !/bearer [^\[]/i.test(masked), masked);
+  assert.ok(findLeaks(`{"x":"${FAKE_JWT}"}`).includes('jwt-shaped-string'));
+});

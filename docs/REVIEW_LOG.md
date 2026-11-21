@@ -494,6 +494,24 @@
 - 不修改：Stage 1 鎖定檔、fixtures、`P0_PINNED`、安全斷言、外部錨定、`.github/workflows/`、根目錄 `package.json`、`tests/`、`firestore.rules`、`S2B1-*` 規格、`S2B2-ATTESTATION.md`。
 - 結果：POC-001、002、008 `UNATTESTED`＋觀察值符合契約；POC-009 `BLOCKED`（G-1、G-4）。**沒有 PASS**。
 - 新增規格缺口：G-1～G-4（`S2B2-B2-PLAN.md` §3），未自行選擇選項。
-- ChatGPT 結論：`未審查`
+- Reviewed Head SHA（R1）：`37546804c61c9c0ce081fa5db415b89269e4e163`
+- ChatGPT 結論（R1）：**CHANGES REQUESTED**（S2B2-B2-REV001 HIGH；REV002、REV003 MEDIUM）
 - 使用者決策：`未核准`
 
+### R1 審查摘要（ChatGPT）
+
+- 四案例 trace／state 16 個檔案雜湊與 summary 一致；Observer 重播結果與附件相同（使用作者的 trace／state，不是新的 Emulator 執行）。
+- 審查者 Node 測試 57 項中 53 通過、4 項失敗；4 項都涉及本機 HTTP（`fetch failed`），屬環境限制，**不列為通過**，也不據此判定產品回歸。
+- 真實 Emulator 結果是作者本機證據，未獨立重跑；R1 交付的 tar 只含四個正式案例。
+
+### R1 回應（Claude，新 Head 見 PR #5）
+
+| 編號 | 等級 | 處理 | 證據 |
+|---|---|---|---|
+| S2B2-B2-REV001 | HIGH | **已修正**：`src/api/response-shape.mjs` `checkEntry()`；兩個聚合端點在輸出或計數前逐筆檢查子文件的路徑、`workspaceId`、`classId`、`sessionId`、`attendanceEntryId` 與必要欄位；任一不符整個請求 `FORBIDDEN`，`auditLog` 記 `deny`／`SCOPE_INTEGRITY_ERROR`（型別或值錯誤為 `DATA_INTEGRITY_ERROR`） | 單元：兩端點 × 10 種 scope 不符＋3 種資料錯誤（含審查者重現）；Emulator HTTP：兩端點 × 8 情境，每項先跑允許的對照組，再驗 403、回應只有 `code`／`traceId`、不含 `ST-FOREIGN`、稽核原因碼 |
+| S2B2-B2-REV002 | MEDIUM | **已修正**：API 請求 body 白名單（`REQUEST_SHAPE_INVALID`）；front trace 只記錄白名單欄位；遮罩涵蓋任何大小寫與分隔符號的 `authorization` 等鍵，以及字串中的 `Bearer …`、JWT 形狀 | 單元：未知欄位、巢狀、陣列、大小寫變體；Emulator：7 種夾帶虛構 token 的請求全部 `FORBIDDEN`，**實際寫出的** front trace 檔不含任何虛構 token 或 JWT 形狀字串；全執行目錄遮罩掃描 0 洩漏 |
+| S2B2-B2-REV003 | MEDIUM | **已修正**：`rosterSnapshot`、`coverageSegments`、核對事項 `evidence` 逐筆驗證並只輸出白名單欄位；非陣列、非物件、缺欄或型別錯誤 → `DATA_INTEGRITY_ERROR` | 單元：額外姓名／email／備註／巢狀資料不輸出；7 種形狀錯誤被拒；Emulator：**直接對 API** 取得原始 HTTP 回應，額外欄位不出現；3 種名單形狀錯誤 `FORBIDDEN` |
+
+- 變異檢查：把 REV001／003 的檢查改回原樣，新單元測試 2 項失敗；把 REV002 的遮罩改回原樣，1 項失敗。
+- 證據：每個負向、對照與變異情境的原始 trace、狀態（含 `auditLog`）與結果另存，並附 `artifact-manifest.json`。
+- 範圍未擴大：沒有新增 capability、沒有修改契約、fixtures、oracle、S2-B1 規格或 CI；POC-009 維持 `BLOCKED`；72 筆後端計畫維持 `NOT_RUN`。

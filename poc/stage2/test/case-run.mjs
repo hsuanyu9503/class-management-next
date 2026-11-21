@@ -92,6 +92,26 @@ const SESSION = { op: 'attendanceSession.read', target: { sessionId: 'AS-A17-202
 const A17_ENTRY = { op: 'attendanceEntry.read', target: { attendanceEntryId: 'AE-EN-A17-1151-0001' }, claimedScope: A };
 const SC01_ENTRY = { op: 'attendanceEntry.read', target: { attendanceEntryId: 'AT-20261116-07' }, claimedScope: S };
 const MEM_A = 'workspaces/WS-A17/memberships/MEM-ACTOR-TEACHER';
+const SUMMARY = { ...SESSION, op: 'attendanceSummary.read' };
+const SES_PATH = 'workspaces/WS-A17/classes/CLASS-606-A17/attendanceSessions/AS-A17-20261117-DAILY';
+const E1 = `${SES_PATH}/entries/AE-EN-A17-1151-0001`;
+/** S2B2-B2-REV001 / REV003: corrupted child or nested data must deny the WHOLE request (both endpoints). */
+const INTEGRITY = [];
+for (const [label, rq] of [['session', SESSION], ['summary', SUMMARY]]) {
+  const add = (name, mutate, reason) => INTEGRITY.push({ name: `REV001 ${label}: ${name}`, baseline: { actor: 'ACTOR-TEACHER', req: rq }, req: rq, mutate, reason, mustNotContain: ['ST-FOREIGN'] });
+  add('entry workspaceId differs from path', async () => h.patchDoc(E1, { workspaceId: 'WS-SC01' }), 'SCOPE_INTEGRITY_ERROR');
+  add('entry classId differs from path', async () => h.patchDoc(E1, { classId: 'CLASS-606-SC01' }), 'SCOPE_INTEGRITY_ERROR');
+  add('entry sessionId differs from parent', async () => h.patchDoc(E1, { sessionId: 'AS-SC01-20261116-DAILY' }), 'SCOPE_INTEGRITY_ERROR');
+  add('entry attendanceEntryId differs from doc id', async () => h.patchDoc(E1, { attendanceEntryId: 'AE-OTHER' }), 'SCOPE_INTEGRITY_ERROR');
+  add('entry classId missing', async () => h.deleteField(E1, 'classId'), 'SCOPE_INTEGRITY_ERROR');
+  add('reviewer reproduction: entry labelled WS-B/C-B/S-B/E-B with a foreign studentId', async () => h.patchDoc(E1, { workspaceId: 'WS-B', classId: 'C-B', sessionId: 'S-B', attendanceEntryId: 'E-B', studentId: 'ST-FOREIGN' }), 'SCOPE_INTEGRITY_ERROR');
+  add('entry status not P/R/N/U', async () => h.patchDoc(E1, { status: 'X' }), 'DATA_INTEGRITY_ERROR');
+  add('entry studentId missing', async () => h.deleteField(E1, 'studentId'), 'DATA_INTEGRITY_ERROR');
+}
+for (const [name, roster] of [['rosterSnapshot item missing seatNo', [{ enrollmentId: 'EN-A17-1151-0001', studentId: 'ST-A17-0001' }]], ['rosterSnapshot not an array', { enrollmentId: 'EN-A17-1151-0001' }], ['rosterSnapshot item not an object', ['EN-A17-1151-0001']]]) {
+  INTEGRITY.push({ name: `REV003 session: ${name}`, baseline: { actor: 'ACTOR-TEACHER', req: SESSION }, req: SESSION, mutate: async () => h.patchDoc(SES_PATH, { rosterSnapshot: roster }), reason: 'DATA_INTEGRITY_ERROR' });
+}
+const EXTRA = { displayName: 'UNEXPECTED_NAME', email: 'unexpected@example.invalid', note: 'UNEXPECTED_NOTE', nested: { deep: { displayName: 'UNEXPECTED_NAME' } } };
 const b64 = (o) => Buffer.from(JSON.stringify(o)).toString('base64url');
 const forge = (token, { header, payload }) => { const [hh, pp] = token.split('.'); const H = JSON.parse(Buffer.from(hh, 'base64url')); const P = JSON.parse(Buffer.from(pp, 'base64url')); return `${b64({ ...H, ...header })}.${b64({ ...P, ...(typeof payload === 'function' ? payload(P) : payload) })}.`; };
 const todayTaipei = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Taipei', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date());
@@ -143,23 +163,40 @@ const NEG = [
   { name: 'capability not held (SC01 teacher reads leave applicability)', baseline: { actor: 'ACTOR-SC01-TEACHER', req: SC01_ENTRY }, actor: 'ACTOR-SC01-TEACHER', req: { op: 'leaveApplicability.read', target: { leaveRecordId: 'LV-007' }, claimedScope: S }, reason: 'CAPABILITY_NOT_GRANTED' },
   { name: 'unknown operation', baseline: null, req: { op: 'attendance.write', target: {}, claimedScope: A }, reason: 'UNKNOWN_OPERATION' },
   { name: 'malformed target id', baseline: null, req: { ...SESSION, target: { sessionId: '../../authBindings' } }, reason: 'TARGET_INVALID' },
+  { name: 'request body with an unknown top-level field (REV002)', baseline: null, req: { ...SESSION, note: 'x' }, reason: 'REQUEST_SHAPE_INVALID' },
+  ...INTEGRITY,
 ];
 const POS = [
   { name: 'membership validFrom = today (half-open boundary, allowed)', mutate: memPatch({ validFrom: todayTaipei }) },
   { name: 'membership with no end date (null) allowed', mutate: memPatch({ validToExclusive: null }) },
+  { name: 'REV003: rosterSnapshot extra fields never reach the client (raw HTTP response, direct to API)', direct: true,
+    mutate: async () => { const ses = await h.getDoc(SES_PATH); await h.patchDoc(SES_PATH, { rosterSnapshot: ses.rosterSnapshot.map((r) => ({ ...r, ...EXTRA })) }); },
+    rawCheck: (text, body) => !/UNEXPECTED_|example\.invalid/.test(text) && body.data.rosterSnapshot.length === 15 && body.data.rosterSnapshot.every((r) => stableJson(Object.keys(r).sort()) === stableJson(['enrollmentId', 'seatNo', 'studentId'])) },
+  { name: 'REV003: leave coverageSegments / extra leave fields never reach the client (raw HTTP response)', direct: true, actor: 'ACTOR-SC01-TEACHER', req: { op: 'leaveRecord.read', target: { leaveRecordId: 'LV-007' }, claimedScope: S },
+    mutate: async () => { const p = 'workspaces/WS-SC01/classes/CLASS-606-SC01/leaveRecords/LV-007'; const lv = await h.getDoc(p); await h.patchDoc(p, { ...EXTRA, reasonNote: 'UNEXPECTED_SENSITIVE', coverageSegments: lv.coverageSegments.map((g) => ({ ...g, ...EXTRA })) }); },
+    rawCheck: (text, body) => !/UNEXPECTED_|example\.invalid/.test(text) && body.data.coverageSegments.length === 1 },
 ];
 
 async function apiCall(frontOrigin, token, req) {
   const r = await fetch(`${frontOrigin}/v1/read`, { method: 'POST', headers: { 'content-type': 'application/json', ...(token ? { authorization: `Bearer ${token}` } : {}) }, body: JSON.stringify(req), redirect: 'error', signal: AbortSignal.timeout(10000) });
   return { status: r.status, body: await r.json().catch(() => null) };
 }
-async function auditFor(traceId) { const st = await h.exportState(); return Object.entries(st.docs).filter(([p, d]) => /(auditLog|auditLogUnscoped)\//.test(p) && d.traceId === traceId).map(([, d]) => d); }
+async function apiCallRaw(origin, token, req) {
+  const r = await fetch(`${origin}/v1/read`, { method: 'POST', headers: { 'content-type': 'application/json', ...(token ? { authorization: `Bearer ${token}` } : {}) }, body: JSON.stringify(req), redirect: 'error', signal: AbortSignal.timeout(10000) });
+  const text = await r.text(); let body = null; try { body = JSON.parse(text); } catch { /* */ }
+  return { status: r.status, text, body };
+}
+let lastState = null;
+async function auditFor(traceId) { const st = await h.exportState(); lastState = st; return Object.entries(st.docs).filter(([p, d]) => /(auditLog|auditLogUnscoped)\//.test(p) && d.traceId === traceId).map(([, d]) => d); }
+const slug = (s) => s.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 60);
 
 const negResults = [];
+let negIdx = 0;
 for (const s of [...NEG.map((x) => ({ ...x, expectAllow: false })), ...POS.map((x) => ({ ...x, expectAllow: true }))]) {
   const users = await h.seedWorld();
   const ctx = { users };
-  const stack = await h.startStack({});
+  const nDir = `negatives/${String(++negIdx).padStart(2, '0')}-${slug(s.name)}`;
+  const stack = await h.startStack({ frontFile: path.join(runDir, `${nDir}/trace-front.jsonl`), backFile: path.join(runDir, `${nDir}/trace-back.jsonl`) });
   const actor = s.actor || T; const req = s.req || SESSION;
   const base = s.baseline === null ? null : (s.baseline || { actor, req });
   const rec = { name: s.name, expect: s.expectAllow ? 'allow' : `deny:${s.reason}` };
@@ -167,14 +204,23 @@ for (const s of [...NEG.map((x) => ({ ...x, expectAllow: false })), ...POS.map((
     if (base) { const b = await apiCall(stack.frontOrigin, users[base.actor].token, base.req); rec.baselineStatus = b.status; rec.baselineOk = b.status === 200 && b.body?.code === 'OK'; } else rec.baselineOk = 'not-applicable';
     if (s.mutate) await s.mutate(ctx);
     const tok = s.token ? s.token(ctx) : users[actor].token;
-    const r = await apiCall(stack.frontOrigin, tok, req);
+    let r;
+    if (s.direct) { r = await apiCallRaw(`http://127.0.0.1:${PORTS.api}`, tok, req); rec.direct = true; rec.rawCheckOk = r.status === 200 && !!r.body && s.rawCheck(r.text, r.body); }
+    else { r = await apiCallRaw(stack.frontOrigin, tok, req); }
+    if (s.mustNotContain) rec.mustNotContainOk = s.mustNotContain.every((x) => !r.text.includes(x));
     const audits = await auditFor(r.body?.traceId);
     rec.status = r.status; rec.code = r.body?.code; rec.responseKeys = Object.keys(r.body || {}).sort(); rec.auditReason = audits[0]?.reasonCode ?? null; rec.auditDecision = audits[0]?.decision ?? null; rec.auditCount = audits.length;
-    if (s.expectAllow) rec.ok = rec.status === 200 && rec.code === 'OK' && rec.auditDecision === 'allow' && rec.auditCount === 1;
+    if (s.expectAllow) rec.ok = rec.status === 200 && rec.code === 'OK' && rec.auditDecision === 'allow' && rec.auditCount === 1 && (s.direct ? rec.rawCheckOk === true : true);
     else rec.ok = rec.baselineOk !== false && rec.status === 403 && rec.code === 'FORBIDDEN' && stableJson(rec.responseKeys) === stableJson(['code', 'traceId']) && rec.auditReason === s.reason && rec.auditDecision === 'deny' && rec.auditCount === 1;
+    if (s.mustNotContain) rec.ok = rec.ok && rec.mustNotContainOk === true;
     if (s.afterControl) { const fresh = await h.signIn(users[actor]); const r2 = await apiCall(stack.frontOrigin, fresh, req); rec.afterControl = { name: s.afterControl, status: r2.status, code: r2.body?.code }; rec.ok = rec.ok && r2.status === 200 && r2.body?.code === 'OK'; }
   } catch (e) { rec.ok = false; rec.error = String(e.message || e); }
   await stack.stop();
+  rec.evidenceDir = nDir;
+  for (const f of ['trace-front.jsonl', 'trace-back.jsonl']) digests[`${nDir}/${f}`] = sha256Hex(readFileSync(path.join(runDir, nDir, f), 'utf8'));
+  if (lastState) writeArtifact(`${nDir}/state-post.json`, JSON.stringify(lastState.docs, null, 1));
+  writeArtifact(`${nDir}/result.json`, JSON.stringify(rec, null, 1));
+  lastState = null;
   negResults.push(rec);
   console.log(`${rec.ok ? 'OK  ' : 'FAIL'} NEGATIVE/CONTROL ${s.name} → ${rec.status} ${rec.code} reason=${rec.auditReason} baseline=${rec.baselineOk}`);
 }
@@ -230,10 +276,28 @@ const allFiles = Object.keys(digests);
   for (const u of Object.values(users)) secrets.push(u.token, u.password);
   const stack = await h.startStack({ frontFile: path.join(runDir, 'masking/trace-front.jsonl'), backFile: path.join(runDir, 'masking/trace-back.jsonl') });
   mkdirSync(path.join(runDir, 'masking'), { recursive: true });
-  for (const [a, u] of Object.entries(users)) await apiCall(stack.frontOrigin, u.token, { ...SESSION, note: { password: u.password, displayName: names[0], email: u.email } });
+  const FAKE = ['eyJhbGciOiJub25lIiwidHlwIjoiSldUIn0.eyJzdWIiOiJGQUtFLVJFVjAwMi1BIn0.', 'eyJhbGciOiJub25lIiwidHlwIjoiSldUIn0.eyJzdWIiOiJGQUtFLVJFVjAwMi1CIn0.', 'FAKE-OPAQUE-REV002-CREDENTIAL-0123456789'];
+  secrets.push(...FAKE);
+  const bodies = [
+    { ...SESSION, note: { password: users[T].password, displayName: names[0], email: users[T].email } },
+    { ...SESSION, authorization: `Bearer ${FAKE[0]}` },
+    { ...SESSION, Authorization: FAKE[1], extra: [{ AUTHORIZATION: `bearer ${FAKE[2]}` }, [FAKE[0]]] },
+    { ...SESSION, claimedScope: { ...A, 'x-api-key': FAKE[2] } },
+    { ...SESSION, target: { sessionId: FAKE[0] } },
+    [{ authorization: `Bearer ${FAKE[1]}` }],
+    { op: SESSION.op, target: { sessionId: SESSION.target.sessionId, token: FAKE[2] }, claimedScope: A },
+  ];
+  const maskingResponses = [];
+  for (const u of Object.values(users)) maskingResponses.push(await apiCall(stack.frontOrigin, u.token, SESSION));     // allowed + denied paths
+  for (const b of bodies) maskingResponses.push(await apiCall(stack.frontOrigin, users[T].token, b));
   await stack.stop();
+  var rev002Denied = maskingResponses.slice(3).every((r) => r.status === 403 && r.body?.code === 'FORBIDDEN');
+  const frontText = readFileSync(path.join(runDir, 'masking/trace-front.jsonl'), 'utf8');
+  var rev002TraceClean = FAKE.every((f) => !frontText.includes(f) && !frontText.includes(f.slice(0, 40))) && !/eyJ[A-Za-z0-9_-]{4,}\.[A-Za-z0-9_-]{4,}\./.test(frontText);
+  console.log(`${rev002Denied && rev002TraceClean ? 'OK  ' : 'FAIL'} REV002 unknown / nested / array / mixed-case credential fields: refused by the API and absent from the written front trace file`);
   allFiles.push('masking/trace-front.jsonl', 'masking/trace-back.jsonl');
 }
+for (const k of Object.keys(digests)) if (!allFiles.includes(k)) allFiles.push(k);
 for (const rel of allFiles) { const text = readFileSync(path.join(runDir, rel), 'utf8'); const leaks = findLeaks(text, { names, secrets }); if (leaks.length) leakReport.push({ file: rel, leaks }); }
 console.log(`${leakReport.length === 0 ? 'OK  ' : 'FAIL'} MASKING no token / password / Authorization header / fictional name in ${allFiles.length} artifact files`);
 
@@ -257,9 +321,17 @@ const summary = {
   artifactDigests: digests,
 };
 const casesOk = caseResults.every((r) => r.verdict.contractMatch === EXPECTED_MATCH[r.testId]);
-const allOk = casesOk && negResults.every((r) => r.ok) && mutants.every((m) => m.caught) && leakReport.length === 0 && cleanupOk;
+summary.rev002 = { deniedAllShapeViolations: rev002Denied, writtenTraceClean: rev002TraceClean };
+const allOk = casesOk && negResults.every((r) => r.ok) && mutants.every((m) => m.caught) && leakReport.length === 0 && cleanupOk && rev002Denied && rev002TraceClean;
 summary.harnessOk = allOk;
 writeFileSync(path.join(runDir, 'run-summary.json'), JSON.stringify(summary, null, 1));
+{ // artifact manifest: every file in the run directory with size and SHA-256 (manifest itself excluded)
+  const { readdirSync, statSync } = await import('node:fs');
+  const files = [];
+  const walk = (d) => { for (const n of readdirSync(path.join(runDir, d)).sort()) { const rel = d ? `${d}/${n}` : n; if (statSync(path.join(runDir, rel)).isDirectory()) walk(rel); else if (rel !== 'artifact-manifest.json') { const b = readFileSync(path.join(runDir, rel)); files.push({ path: rel, bytes: b.length, sha256: sha256Hex(b) }); } } };
+  walk('');
+  writeFileSync(path.join(runDir, 'artifact-manifest.json'), JSON.stringify({ runId, gitCommit, gitDirty, files }, null, 1));
+}
 writeFileSync(path.join(ROOT, 'evidence', 'runs', 's2b2-b2-latest.json'), JSON.stringify({ runDir: path.relative(ROOT, runDir), ...summary }, null, 1));
 console.log(`S2B2_B2_RUN ${runId} harnessOk=${allOk} cases=${caseResults.map((r) => `${r.testId}:${r.verdict.contractMatch}`).join(',')} negatives=${negResults.filter((r) => r.ok).length}/${negResults.length} mutations=${mutants.filter((m) => m.caught).length}/${mutants.length}`);
 process.exit(allOk ? 0 : 1);

@@ -20,39 +20,12 @@ import { verifyEmulatorIdToken } from './token.mjs';
 import { createStore, BackendUnavailable } from './store.mjs';
 import { TRACE_HEADER, TRACE_ID_RE } from '../trace-proxy.mjs';
 import { assertLoopbackUrl } from '../local-guard.mjs';
+import { buildData, IntegrityError } from './response-shape.mjs';
+
+export { checkRequestShape } from './request-shape.mjs';
+import { checkRequestShape } from './request-shape.mjs';
 
 export const UNSCOPED_AUDIT_COLLECTION = 'auditLogUnscoped';   // gap G-2: denials whose workspace is unknown
-const ENTRY_FIELDS = ['attendanceEntryId', 'sessionId', 'enrollmentId', 'studentId', 'status', 'scope', 'version'];
-const LEAVE_FIELDS = ['leaveRecordId', 'studentId', 'enrollmentId', 'leaveTypeId', 'coverageSegments', 'recordEffect', 'teacherConfirmation', 'administrativeApproval', 'version', 'lastRevisionAt'];
-const ISSUE_FIELDS = ['issueId', 'progress', 'checkConclusion', 'question', 'evidence', 'evidenceStale'];
-const pick = (o, keys) => Object.fromEntries(keys.filter((k) => k in o).map((k) => [k, o[k]]));
-
-function countsOf(entries) {
-  const c = { P: 0, R: 0, N: 0, U: 0 };
-  for (const e of entries) { if (!(e.status in c)) throw new Error(`unknown attendance status ${e.status}`); c[e.status] += 1; }
-  return { ...c, total: c.P + c.R + c.N + c.U, registered: c.P + c.R + c.N, arrived: c.P + c.R };
-}
-
-/** Builds the response data for an ALLOWED request. Reads only below the authorized target path. */
-async function buildData(op, az, store) {
-  const t = az.target;
-  switch (op) {
-    case 'attendanceSession.read': {
-      const entries = (await store.listCollection(`${t.path}/entries`)).map((e) => pick(e.data, ENTRY_FIELDS));
-      return { sessionId: t.data.sessionId, workspaceId: az.scope.workspaceId, classId: az.scope.classId, date: t.data.date, kind: t.data.kind, rosterSnapshot: t.data.rosterSnapshot, entries };
-    }
-    case 'attendanceSummary.read': {
-      const entries = (await store.listCollection(`${t.path}/entries`)).map((e) => e.data);
-      return { sessionId: t.data.sessionId, workspaceId: az.scope.workspaceId, classId: az.scope.classId, entryCount: entries.length, counts: countsOf(entries) };
-    }
-    case 'attendanceEntry.read': return { ...pick(t.data, ENTRY_FIELDS), workspaceId: az.scope.workspaceId, classId: az.scope.classId };
-    case 'leaveRecord.read': return { ...pick(t.data, LEAVE_FIELDS), workspaceId: az.scope.workspaceId, classId: az.scope.classId };
-    case 'trackingIssue.read': return { ...pick(t.data, ISSUE_FIELDS), workspaceId: az.scope.workspaceId, classId: az.scope.classId };
-    case 'leaveApplicability.read': return null;   // gap G-4: no trusted period calendar in this batch
-    default: return null;
-  }
-}
-
 /** @param deps.backendOrigin loopback origin for Firestore + Auth (normally the back trace proxy)
  *  @param deps.authorizeFn   injectable ONLY so mutation tests can prove the Observer catches a broken API */
 export function createApi({ port, host = '127.0.0.1', projectId, backendOrigin, emulatorMode, now = () => Date.now(), authorizeFn = authorize }) {
@@ -86,11 +59,19 @@ export function createApi({ port, host = '127.0.0.1', projectId, backendOrigin, 
       const v = m ? await verifyEmulatorIdToken(m[1], { projectId, nowSec: Math.floor(nowMs / 1000), lookup: lookupVia(traceId) }) : { ok: false, reason: 'TOKEN_MISSING' };
       if (!v.ok) { if (v.reason === 'AUTH_UNAVAILABLE') throw new BackendUnavailable('auth'); audit.reasonCode = v.reason; return await finish(403, { code: 'FORBIDDEN' }); }
       audit.authUid = v.claims.authUid;
-      // §6.1 steps 2–3, §6.2 steps 5–6 (pre-authorization format problems are FORBIDDEN, §6.6)
+      // Unknown / nested request fields: refused before authorization (format errors are FORBIDDEN, §6.6)
+      if (!checkRequestShape(body)) { audit.reasonCode = 'REQUEST_SHAPE_INVALID'; return await finish(403, { code: 'FORBIDDEN' }); }
+      // §6.1 steps 2–3, §6.2 steps 5–6
       const az = await authorizeFn({ op: body?.op, claims: v.claims, target: body?.target, claimedScope: body?.claimedScope, nowMs, store });
       audit = { ...audit, principalId: az.principalId ?? null, resourceRef: az.resource ?? null, decision: az.decision, reasonCode: az.reasonCode, workspaceId: az.scope?.workspaceId ?? null };
       if (az.decision !== 'allow') return await finish(403, { code: 'FORBIDDEN' });
-      const data = await buildData(body.op, az, store);
+      let data;
+      try { data = await buildData(body.op, az, store); } catch (e) {
+        if (!(e instanceof IntegrityError)) throw e;
+        // REV001/REV003: inconsistent or malformed data anywhere in the response → whole request denied
+        audit = { ...audit, decision: 'deny', reasonCode: e.reasonCode, outcome: e.detail.slice(0, 200) };
+        return await finish(403, { code: 'FORBIDDEN' });
+      }
       if (data === null) { audit.outcome = 'NOT_IMPLEMENTED_NO_TRUSTED_CALENDAR'; return await finish(503, { code: 'UNAVAILABLE' }); }
       return await finish(200, { code: 'OK', data });
     } catch (e) {

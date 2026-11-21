@@ -39,7 +39,7 @@ export function joinRequests(front, post) {
   const audits = auditByTrace(post);
   return front.filter((e) => e.role === 'front').map((e) => {
     const a = audits.get(e.traceId) || [];
-    return { traceId: e.traceId, op: e.requestBody?.op ?? null, target: e.requestBody?.target ?? null, claimedScope: e.requestBody?.claimedScope ?? null, status: e.status, body: e.responseBody, audit: a.length === 1 ? a[0] : null, auditCount: a.length, claimedAuthUid: e.authorization?.claimedAuthUid ?? null };
+    return { traceId: e.traceId, op: e.requestBody?.op ?? null, target: e.requestBody?.target ?? null, claimedScope: e.requestBody?.claimedScope ?? null, status: e.status, body: e.responseBody, audit: a.length === 1 ? a[0] : null, auditCount: a.length, claimedAuthUid: e.authorizationRef?.claimedAuthUid ?? null };
   });
 }
 

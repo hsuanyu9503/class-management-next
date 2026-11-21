@@ -84,6 +84,7 @@ npm run s2:cases         # 第 2 批：四個案例＋負向／變異控制（UN
 | `test/negative-controls/` | 規則放寬負向控制（不用於正常執行） |
 | `scripts/run-smoke.mjs` | 冒煙與全部負向控制的總控入口 |
 | **第 2 批** | |
+| `src/api/response-shape.mjs`、`src/api/request-shape.mjs` | R1：子文件 scope 逐筆檢查與巢狀欄位白名單投影；請求 body 白名單與 trace 可記錄欄位 |
 | `src/api/server.mjs`、`src/api/token.mjs`、`src/api/store.mjs` | 本機受控讀取 API（只綁定 loopback、只支援 Emulator 模式）、token claim 檢查、權威文件讀取與 `auditLog` 寫入 |
 | `src/authz.mjs`、`src/time-validate.mjs` | 分支 C 授權（S2-B1 §6.1–6.2、§5）與嚴格時間驗證 |
 | `src/trace-proxy.mjs`、`src/mask.mjs` | front／back 記錄代理與寫入前遮罩 |

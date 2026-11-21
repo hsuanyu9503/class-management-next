@@ -10,7 +10,13 @@ import { createHash } from 'node:crypto';
 
 export const MASK = '[MASKED]';
 export const MASK_NAME = '[MASKED_NAME]';
-const SECRET_KEYS = new Set(['password', 'idtoken', 'refreshtoken', 'displayname', 'email', 'oobcode', 'passwordhash', 'salt', 'rawpassword', 'newpassword', 'accesstoken', 'customtoken', 'reasonnote']);
+const SECRET_KEYS = new Set(['password', 'idtoken', 'refreshtoken', 'displayname', 'email', 'oobcode', 'passwordhash', 'salt', 'rawpassword', 'newpassword', 'accesstoken', 'customtoken', 'reasonnote',
+  // S2B2-B2-REV002: credential-bearing keys under any casing / separator (normalised: lower-case, no '-', '_')
+  'authorization', 'proxyauthorization', 'cookie', 'setcookie', 'xapikey', 'apikey', 'token', 'idtokenhint', 'bearer', 'secret', 'clientsecret', 'privatekey', 'credential', 'credentials', 'sessiontoken']);
+const normKey = (k) => k.toLowerCase().replace(/[-_\s]/g, '');
+// Value-based backstop: bearer credentials and JWT-shaped strings anywhere (arrays, nested objects, free text).
+const BEARER_RE = /bearer\s+[A-Za-z0-9._~+/=-]+/gi;
+const JWT_RE = /eyJ[A-Za-z0-9_-]{4,}\.[A-Za-z0-9_-]{4,}\.[A-Za-z0-9_-]*/g;
 const EMAIL_RE = /[^\s"@]+@[^\s"@]+\.[^\s"@]+/g;
 
 export const sha256 = (s) => createHash('sha256').update(s).digest('hex');
@@ -32,12 +38,12 @@ export function makeMasker(names = []) {
   const nameList = [...new Set(names.filter((n) => typeof n === 'string' && n.length > 0))];
   const maskString = (s) => {
     if (nameList.some((n) => s.includes(n))) return MASK_NAME;
-    return s.replace(EMAIL_RE, MASK);
+    return s.replace(BEARER_RE, MASK).replace(JWT_RE, MASK).replace(EMAIL_RE, MASK);
   };
   const walk = (v) => {
     if (typeof v === 'string') return maskString(v);
     if (Array.isArray(v)) return v.map(walk);
-    if (v && typeof v === 'object') return Object.fromEntries(Object.entries(v).map(([k, x]) => [k, SECRET_KEYS.has(k.toLowerCase()) ? MASK : walk(x)]));
+    if (v && typeof v === 'object') return Object.fromEntries(Object.entries(v).map(([k, x]) => [k, SECRET_KEYS.has(normKey(k)) ? MASK : walk(x)]));
     return v;
   };
   return { maskValue: walk, maskString };
@@ -49,5 +55,6 @@ export function findLeaks(text, { names = [], secrets = [] } = {}) {
   for (const n of names) if (n && text.includes(n)) leaks.push(`name:${n}`);
   for (const s of secrets) if (s && text.includes(s)) leaks.push(`secret:${s.slice(0, 6)}…`);
   if (/"authorization"\s*:\s*"Bearer /i.test(text)) leaks.push('raw-authorization-header');
+  if (/eyJ[A-Za-z0-9_-]{4,}\.[A-Za-z0-9_-]{4,}\./.test(text)) leaks.push('jwt-shaped-string');
   return leaks;
 }
