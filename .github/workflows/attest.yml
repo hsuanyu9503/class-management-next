@@ -1,0 +1,155 @@
+name: S2 attestation (B3b)
+
+# S2-B2 第 3 批 B3b（docs/stage2/S2B2-B3-PLAN.md v0.3 §3.1、§9.4 選項 b；負責人 2026-11-21 決定）。
+# - 只在 main 上執行：push 到 main，或負責人手動觸發。絕不使用 pull_request／pull_request_target。
+# - 執行 job（沙箱、Emulator、Adapter）只有 contents: read，沒有 id-token。
+# - 驗證 job 只 checkout 可信工具鏈並以 Verifier 判定；只有判定為 PASS 才進入簽章步驟。
+# - PASS_ENABLED=false（verifier.mjs）：在負責人完成批准紀錄、錨定與兩個 repository variable，
+#   而且另一個 PR 打開 PASS 之前，結果最多 UNATTESTED，簽章步驟不會執行。
+# - 每個官方 action 以完整 commit SHA 固定（tag → SHA 見 docs/stage2/S2B2-B3B-REPORT.md）。
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      testId:
+        description: 要執行的案例（push 時固定為 POC-001）
+        type: choice
+        options: [POC-001, POC-002, POC-008, POC-009]
+        default: POC-001
+
+permissions: {}
+
+concurrency:
+  group: s2-attest
+  cancel-in-progress: false
+
+jobs:
+  execute:
+    # 手動觸發也可能選到其他分支：只在 main 執行（verify 依賴 execute，因此一併略過）
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 40
+    permissions:
+      contents: read
+    env:
+      TEST_ID: ${{ inputs.testId || 'POC-001' }}
+    outputs:
+      testId: ${{ steps.out.outputs.testId }}
+      attestationNonce: ${{ steps.out.outputs.attestationNonce }}
+      packageSha256: ${{ steps.out.outputs.packageSha256 }}
+      manifestSha256: ${{ steps.out.outputs.manifestSha256 }}
+      platformSupported: ${{ steps.out.outputs.platformSupported }}
+      toolchainCommit: ${{ steps.out.outputs.toolchainCommit }}
+      artifactId: ${{ steps.up.outputs.artifact-id }}
+    steps:
+      - name: Checkout 可信工具鏈（未設定變數時用本 commit → 結果必為 UNATTESTED）
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ vars.CMN_S2_TRUSTED_TOOLCHAIN_SHA || github.sha }}
+          persist-credentials: false
+      - name: Node.js 22
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: '22'
+      - name: Java 21（runner image 內建）
+        run: |
+          if [ -n "${JAVA_HOME_21_X64:-}" ]; then echo "$JAVA_HOME_21_X64/bin" >> "$GITHUB_PATH"; fi
+      - name: 安裝 Stage 2 依賴（鎖檔）
+        working-directory: poc/stage2
+        run: npm ci --no-audit --no-fund
+      - name: 執行並封存單一案例（root：命名空間與掛載；Adapter 以 uid 65534 執行）
+        working-directory: poc/stage2
+        env:
+          B3_SINGLE_CASE: ${{ env.TEST_ID }}
+          B3_OUT_DIR: ${{ runner.temp }}/s2-out
+        run: sudo -E env "PATH=$PATH" HOME=/root node scripts/run-attest-execute.mjs
+      - name: 收回檔案擁有權
+        if: always()
+        run: sudo chown -R "$(id -u):$(id -g)" "$GITHUB_WORKSPACE" "$RUNNER_TEMP" || true
+      - name: 交出 job outputs（Adapter 的命名空間已終止之後）
+        id: out
+        working-directory: poc/stage2
+        env:
+          B3_SINGLE_CASE: ${{ env.TEST_ID }}
+          B3_OUT_DIR: ${{ runner.temp }}/s2-out
+        run: node scripts/attest-outputs.mjs
+      - name: 上傳封裝檔（單一原始檔，保存 30 天）
+        id: up
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          path: ${{ runner.temp }}/s2-out/package-${{ env.TEST_ID }}.tar
+          archive: false
+          retention-days: 30
+          if-no-files-found: error
+          overwrite: false
+
+  verify:
+    needs: execute
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    permissions:
+      contents: read
+      id-token: write
+      attestations: write
+    steps:
+      - name: Checkout 可信工具鏈（與執行 job 相同；不 checkout Adapter 或 artifact 的任何內容）
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ vars.CMN_S2_TRUSTED_TOOLCHAIN_SHA || github.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Checkout 目前的 main（只讀批准紀錄；由可信工具鏈核對錨定）
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: main
+          path: policy-main
+          persist-credentials: false
+      - name: Node.js 22
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: '22'
+      - name: 依 artifact ID 下載封裝檔（只接受本次執行、本次 ID）
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          artifact-ids: ${{ needs.execute.outputs.artifactId }}
+          path: ${{ runner.temp }}/s2-dl
+      - name: Verifier 判定（只做安全解析，不執行封裝內任何內容）
+        id: v
+        env:
+          PACKAGE_DIR: ${{ runner.temp }}/s2-dl
+          OUT_DIR: ${{ runner.temp }}/s2-verify
+          POLICY_DIR: ${{ github.workspace }}/policy-main
+          WORKFLOW_SHA: ${{ github.workflow_sha }}
+          EXP_TEST_ID: ${{ needs.execute.outputs.testId }}
+          EXP_ARTIFACT_ID: ${{ needs.execute.outputs.artifactId }}
+          EXP_PACKAGE_SHA256: ${{ needs.execute.outputs.packageSha256 }}
+          EXP_MANIFEST_SHA256: ${{ needs.execute.outputs.manifestSha256 }}
+          EXP_ATTESTATION_NONCE: ${{ needs.execute.outputs.attestationNonce }}
+          EXP_PLATFORM_SUPPORTED: ${{ needs.execute.outputs.platformSupported }}
+          EXP_TOOLCHAIN_COMMIT: ${{ needs.execute.outputs.toolchainCommit }}
+          CMN_STAGE1_ANCHOR_SHA256: ${{ vars.CMN_STAGE1_ANCHOR_SHA256 }}
+          CMN_S2_TRUSTED_TOOLCHAIN_SHA: ${{ vars.CMN_S2_TRUSTED_TOOLCHAIN_SHA }}
+          CMN_S2_SIGNING_POLICY_BLOB: ${{ vars.CMN_S2_SIGNING_POLICY_BLOB }}
+        run: node poc/stage2/scripts/attest-verify.mjs
+      - name: 簽章（只有 PASS；subject = statement.json）
+        id: sign
+        if: steps.v.outputs.result == 'PASS'
+        uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
+        with:
+          subject-path: ${{ runner.temp }}/s2-verify/statement.json
+      - name: 交付紀錄（不是證據）
+        if: always() && steps.v.outcome == 'success'
+        env:
+          OUT_DIR: ${{ runner.temp }}/s2-verify
+          SIGN_OUTCOME: ${{ steps.sign.outcome }}
+          ATTESTATION_ID: ${{ steps.sign.outputs.attestation-id }}
+        run: node poc/stage2/scripts/attest-delivery.mjs
+      - name: 上傳 statement 與未簽章診斷（保存 30 天）
+        if: always() && steps.v.outcome == 'success'
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: s2-verify-${{ needs.execute.outputs.testId }}
+          path: ${{ runner.temp }}/s2-verify
+          retention-days: 30
+          if-no-files-found: error

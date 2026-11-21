@@ -886,3 +886,20 @@
   - 缺少的 NOTE ①～⑦ 與 X1～X10 沒有執行。
 - 使用者決策：`待決`（PR #9 驗收與合併）
 
+### PR #9 合併（2026-11-21）
+
+- 負責人回覆「合併 pr-9 接著開始 PR-2（B3b）」。Claude 依明確批准合併 PR #9：merge `bda85b23d3238e9652aca61f0627adf7a1482636`（Head `544f40fa`，與 R2 Reviewed Head `8ab69e1d` 相比只多文件；同 Head CI run 44909529711 success）。
+
+## S2-B2 第 3 批 B3b｜受控執行 workflow 與信任根閘門（PR-2）
+
+- Base SHA：`bda85b23d3238e9652aca61f0627adf7a1482636`（PR #9 合併）
+- Reviewed Head SHA：`[尚未審查]`
+- 風險等級（初評）：**L3**：新增具 `id-token: write`／`attestations: write` 的 workflow；修改受保護檔案與錨定清單；Verifier 判定。
+- 負責人決定（2026-11-21）：
+  - action 以官方 tag 解析出的完整 SHA 固定（同意 Claude 以 `git ls-remote` 唯讀查詢官方 tag）；
+  - PR-2 維持 `PASS_ENABLED=false`；
+  - 執行 job 以 sudo 執行 Runner。
+- 內容：`S2B2-B3B-REPORT.md`。受保護檔案 29 → 41 個，錨定 digest 改變，**負責人必須在合併前重新核准** `CMN_STAGE1_ANCHOR_SHA256`。
+- 與計畫的差異：批准紀錄先不放任何紀錄；`adapterCommit` 等於工具鏈；每次一個案例；不在 `main` 提交摘要。詳見報告 §3。
+- 使用者決策：`未核准`
+

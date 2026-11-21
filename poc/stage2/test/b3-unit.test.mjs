@@ -258,9 +258,9 @@ test('B3A-N5: every non-canonical serialisation of a valid payload is refused (h
 // ======================================================================= F1 (B3A-R1-N1, NOTE-a, NOTE-b)
 import { VERIFIER_VERSION } from '../src/b3/verifier.mjs';
 
-test('NOTE-b: Verifier version is s2-verifier-b3a-2 (PR-1)', () => {
-  assert.equal(VERIFIER_VERSION, 's2-verifier-b3a-2');
-  assert.equal(verifyMod().verifierVersion, 's2-verifier-b3a-2');
+test('NOTE-b: Verifier version is s2-verifier-b3b-0 (PR-2)', () => {
+  assert.equal(VERIFIER_VERSION, 's2-verifier-b3b-0');
+  assert.equal(verifyMod().verifierVersion, 's2-verifier-b3b-0');
 });
 
 test('B3A-R1-N1: non-object top-level JSON is BLOCKED with a named reason and never throws', () => {
@@ -550,4 +550,102 @@ test('PR1-R1-REV001: the JSONL the trace proxy actually writes holds none of the
     for (const { px } of proxies) if (!px.closed) await Promise.race([px.close(), new Promise((r) => setTimeout(r, 2000))]);
     upstream.closeAllConnections?.(); await new Promise((r) => upstream.close(r)); rms(dir, { recursive: true, force: true });
   }
+});
+
+// ======================================================================= PR-2 (B3b): trust root, PASS gate, verify job
+import { parseTrustPolicy, evaluateTrust, TRUST_POLICY_VERSION } from '../src/b3/trust-policy.mjs';
+import { runVerifyJob } from '../src/b3/attest-verify.mjs';
+import { PASS_ENABLED } from '../src/b3/verifier.mjs';
+import { createHash as ch } from 'node:crypto';
+
+const C1 = 'c'.repeat(40); const B1 = 'b'.repeat(40);
+const rec = (o = {}) => ({ approvalId: 'T-001', kind: 'toolchain', sha: C1, approvedAt: '2026-11-21T00:00:00Z', approvedBy: 'owner', reviewRef: 'PR #X', status: 'active', validFrom: '2026-11-21T00:00:00Z', validTo: null, ...o });
+const policyText = (records) => JSON.stringify({ policyVersion: TRUST_POLICY_VERSION, description: 'x', freshnessHours: 24, records });
+const FULL = [rec(), rec({ approvalId: 'S-001', kind: 'signing-policy', sha: B1 })];
+const NOW = Date.parse('2026-11-22T00:00:00Z');
+
+test('B3b trust policy: strict record format; the committed record has no approvals', () => {
+  const committed = parseTrustPolicy(rf(f2p(new URL('../../../docs/stage2/S2B2-TRUST-POLICY.json', import.meta.url)), 'utf8'));
+  assert.deepEqual(committed.records, []);
+  assert.doesNotThrow(() => parseTrustPolicy(policyText(FULL)));
+  const bad = {
+    'duplicate approvalId': [rec(), rec()], 'short sha': [rec({ sha: 'abc' })], 'unknown kind': [rec({ kind: 'adapter' })], 'unknown key': [rec({ extra: 1 })],
+    'revoked without validTo': [rec({ status: 'revoked' })], 'active with validTo': [rec({ validTo: '2026-11-22T00:00:00Z' })], 'bad time': [rec({ approvedAt: '2026-11-21' })],
+    'no approvedBy': [rec({ approvedBy: '' })], 'invalidateIssued not boolean': [rec({ invalidateIssued: 'yes' })],
+  };
+  for (const [n, r] of Object.entries(bad)) assert.throws(() => parseTrustPolicy(policyText(r)), /TRUST_POLICY_INVALID/, n);
+  assert.throws(() => parseTrustPolicy('{"__proto__":{},"policyVersion":"s2-trust-policy-v1"}'), /TRUST_POLICY_INVALID/);
+  assert.throws(() => parseTrustPolicy(JSON.stringify({ policyVersion: 'v0', freshnessHours: 24, records: [] })), /TRUST_POLICY_INVALID/);
+});
+
+test('B3b trust policy: both pointers must name ACTIVE records and match what actually ran', () => {
+  const ev = (o = {}) => evaluateTrust({ policyText: policyText(FULL), toolchainVar: C1, signingPolicyVar: B1, toolchainCommit: C1, workflowBlob: B1, nowMs: NOW, ...o });
+  const ok = ev(); assert.equal(ok.configured, true); assert.deepEqual(ok.reasons, []); assert.equal(ok.toolchainApproval, 'T-001'); assert.equal(ok.signingPolicyApproval, 'S-001');
+  const cases = {
+    'variables unset': [{ toolchainVar: '', signingPolicyVar: '' }, ['TRUSTED_TOOLCHAIN_NOT_SET', 'SIGNING_POLICY_NOT_SET']],
+    'another commit ran': [{ toolchainCommit: 'd'.repeat(40) }, ['TOOLCHAIN_COMMIT_MISMATCH']],
+    'unapproved workflow blob ran (A18)': [{ workflowBlob: 'e'.repeat(40) }, ['SIGNING_POLICY_BLOB_MISMATCH']],
+    'toolchain not in record': [{ policyText: policyText([FULL[1]]) }, ['TOOLCHAIN_NOT_APPROVED']],
+    'toolchain revoked': [{ policyText: policyText([rec({ status: 'revoked', validTo: '2026-11-21T12:00:00Z' }), FULL[1]]) }, ['TOOLCHAIN_NOT_APPROVED']],
+    'record valid only in the future': [{ policyText: policyText([rec({ validFrom: '2026-12-01T00:00:00Z' }), FULL[1]]) }, ['TOOLCHAIN_NOT_APPROVED']],
+    'signing policy approved as toolchain kind only': [{ policyText: policyText([FULL[0], rec({ approvalId: 'S-002', sha: B1 })]) }, ['SIGNING_POLICY_NOT_APPROVED']],
+    'malformed record': [{ policyText: '{' }, ['TRUST_POLICY_INVALID']],
+    'empty (committed) record': [{ policyText: policyText([]) }, ['TOOLCHAIN_NOT_APPROVED', 'SIGNING_POLICY_NOT_APPROVED']],
+  };
+  for (const [n, [o, want]] of Object.entries(cases)) { const r = ev(o); assert.equal(r.configured, false, n); for (const w of want) assert.ok(r.reasons.includes(w), `${n}: ${r.reasons}`); }
+});
+
+// verify job on the committed honest fixture (local evidence replayed with the hosted decision logic)
+const vjEnv = (o = {}) => ({ GITHUB_ACTIONS: 'true', RUNNER_ENVIRONMENT: 'github-hosted', GITHUB_RUN_ID: fixRun.runId, GITHUB_RUN_ATTEMPT: String(fixRun.runAttempt),
+  EXP_TEST_ID: 'POC-001', EXP_ARTIFACT_ID: '123456', EXP_PACKAGE_SHA256: fixOut.packageSha256, EXP_MANIFEST_SHA256: fixOut.manifestSha256, EXP_ATTESTATION_NONCE: fixRun.attestationNonce,
+  EXP_PLATFORM_SUPPORTED: 'true', EXP_TOOLCHAIN_COMMIT: fixRun.trustedToolchainCommit, CMN_STAGE1_ANCHOR_SHA256: 'a'.repeat(64), ...o });
+const HEAD_F = fixRun.trustedToolchainCommit;
+const vj = ({ env = vjEnv(), entries = [{ name: 'package-POC-001.tar', isFile: true }], bytes = fixBytes, policy = { text: policyText([]), commit: 'f'.repeat(40), anchorDigest: 'a'.repeat(64) }, workflowBlob = B1, head = HEAD_F } = {}) =>
+  runVerifyJob({ env, head, workflowBlob, policy, caseSpecs: { 'POC-001': caseSpec001 }, listDownload: () => entries, readDownload: () => bytes, now: () => new Date(NOW) });
+
+test('B3b verify job: hosted runner without a configured trust root → UNATTESTED TRUST_ROOT_NOT_CONFIGURED; local → unchanged', () => {
+  assert.equal(PASS_ENABLED, false);
+  const hostedNoTrust = vj(); assert.equal(hostedNoTrust.result, 'UNATTESTED'); assert.deepEqual(hostedNoTrust.report.reasons, ['TRUST_ROOT_NOT_CONFIGURED']);
+  assert.ok(hostedNoTrust.report.trust.reasons.includes('TRUSTED_TOOLCHAIN_NOT_SET'));
+  const local = vj({ env: vjEnv({ GITHUB_ACTIONS: undefined, RUNNER_ENVIRONMENT: undefined }) });
+  assert.equal(local.result, 'UNATTESTED'); assert.deepEqual(local.report.reasons, LOCAL_ONLY);
+  // statement / delivery / diagnostic
+  assert.equal(hostedNoTrust.statementSha256, ch('sha256').update(hostedNoTrust.statementText).digest('hex'));
+  assert.equal(hostedNoTrust.delivery.signing, 'NOT_ATTEMPTED_NOT_PASS'); assert.equal(hostedNoTrust.report.unsigned, true);
+  assert.equal(JSON.parse(hostedNoTrust.statementText).verdict.result, 'UNATTESTED');
+});
+
+test('B3b verify job: even a FULLY configured trust root cannot PASS while PASS_ENABLED is false', () => {
+  const full = vj({ env: vjEnv({ CMN_S2_TRUSTED_TOOLCHAIN_SHA: HEAD_F, CMN_S2_SIGNING_POLICY_BLOB: B1 }), policy: { text: policyText([rec({ sha: HEAD_F }), FULL[1]]), commit: 'f'.repeat(40), anchorDigest: 'a'.repeat(64) } });
+  assert.equal(full.report.trust.configured, true, JSON.stringify(full.report.trust.reasons));
+  assert.equal(full.result, 'UNATTESTED'); assert.deepEqual(full.report.reasons, ['PASS_NOT_ENABLED']); assert.equal(full.delivery.signing, 'NOT_ATTEMPTED_NOT_PASS');
+  // the same configuration read from a main that is NOT the owner-anchored one is not trusted (§4.5)
+  const unanchored = vj({ env: vjEnv({ CMN_S2_TRUSTED_TOOLCHAIN_SHA: HEAD_F, CMN_S2_SIGNING_POLICY_BLOB: B1, CMN_STAGE1_ANCHOR_SHA256: '9'.repeat(64) }), policy: { text: policyText([rec({ sha: HEAD_F }), FULL[1]]), commit: 'f'.repeat(40), anchorDigest: 'a'.repeat(64) } });
+  assert.equal(unanchored.report.trust.configured, false); assert.ok(unanchored.report.trust.reasons.includes('TRUST_POLICY_NOT_ANCHORED')); assert.deepEqual(unanchored.report.reasons, ['TRUST_ROOT_NOT_CONFIGURED']);
+  const noPolicy = vj({ policy: null }); assert.ok(noPolicy.report.trust.reasons.includes('TRUST_POLICY_NOT_ANCHORED'));
+});
+
+test('B3b verify job: A14 artifact selection and run binding are enforced before anything is believed', () => {
+  const sel = {
+    'two files': { entries: [{ name: 'package-POC-001.tar', isFile: true }, { name: 'extra.tar', isFile: true }] },
+    'wrong file name': { entries: [{ name: 'package-POC-002.tar', isFile: true }] },
+    'not a regular file': { entries: [{ name: 'package-POC-001.tar', isFile: false }] },
+    'nothing downloaded': { entries: [] },
+    'artifact id missing': { env: vjEnv({ EXP_ARTIFACT_ID: '' }) },
+    'artifact id not numeric': { env: vjEnv({ EXP_ARTIFACT_ID: '12;rm' }) },
+  };
+  for (const [n, o] of Object.entries(sel)) { const r = vj(o); assert.equal(r.result, 'BLOCKED', n); assert.deepEqual(r.report.reasons, ['ARTIFACT_SELECTION_MISMATCH'], n); assert.equal(r.statementText, null, n); }
+  assert.deepEqual(vj({ env: vjEnv({ EXP_TOOLCHAIN_COMMIT: 'd'.repeat(40) }) }).report.reasons, ['TOOLCHAIN_COMMIT_MISMATCH']);
+  assert.deepEqual(vj({ env: vjEnv({ EXP_TEST_ID: 'POC-999' }) }).report.reasons, ['TRUSTED_INPUT_MISSING']);
+  const codesOf = (r) => r.report.reasons.map((x) => x.split(':')[0]);
+  // replay: the package of this run checked against another run id / attempt / nonce (A6 with trusted job values)
+  assert.ok(codesOf(vj({ env: vjEnv({ GITHUB_RUN_ID: '999' }) })).includes('RUN_BINDING_MISMATCH'));
+  assert.ok(codesOf(vj({ env: vjEnv({ GITHUB_RUN_ATTEMPT: '2' }) })).includes('RUN_BINDING_MISMATCH'));
+  assert.ok(codesOf(vj({ env: vjEnv({ EXP_ATTESTATION_NONCE: '0'.repeat(64) }) })).includes('RUN_BINDING_MISMATCH'));
+  // package digest from the execute job's outputs (A13)
+  assert.deepEqual(vj({ env: vjEnv({ EXP_PACKAGE_SHA256: '0'.repeat(64) }) }).report.reasons, ['PACKAGE_DIGEST_MISMATCH']);
+  // platformSupported must come from the execute job's output
+  assert.ok(codesOf(vj({ env: vjEnv({ EXP_PLATFORM_SUPPORTED: '' }) })).includes('TRUSTED_INPUT_MISSING'));
+  // the verify job never executes anything: a package is only ever parsed (bytes that are not a package → BLOCKED)
+  assert.equal(vj({ bytes: Buffer.from('#!/bin/sh\nexit 0\n'), env: vjEnv({ EXP_PACKAGE_SHA256: ch('sha256').update('#!/bin/sh\nexit 0\n').digest('hex') }) }).result, 'BLOCKED');
 });
