@@ -594,3 +594,21 @@
 
 - 使用者決策：`待驗收與合併決策`
 
+## S2-B2 第 2 批｜合併
+
+- 使用者合併 PR #5：Merge SHA `40c09a3fb92b0c699a2b00dda1da5b2a32b468a4`；最後 PR Head `85a0bb4b40d9cf2ff030c1d95f70513cad9a57fd`（相對最後程式審查 Head `d2dafe16` 只有文件）。
+- 合併不代表 D-01～D-17、G-1～G-4、Q1～Q3 已核准；N5～N7 與其他待辦仍開啟。
+
+## S2-B2 第 3 批｜準備與決策包
+
+- Base SHA：`40c09a3fb92b0c699a2b00dda1da5b2a32b468a4`
+- Reviewed Head SHA：`[尚未審查]`
+- 風險等級（初評）：**L2**，信任邊界與信任根設計採 **L3 深度**。理由：只有文件與 schema 草案，沒有程式、workflow 或設定變更；但內容決定後續認證的信任根與權限。最終等級由負責人決定。
+- 範圍：
+  - 新增 `docs/stage2/S2B2-B3-PLAN.md`、`docs/stage2/S2B2-B3-attestation-statement.draft.json`；
+  - 更新 `docs/HANDOFF.md`、`docs/REVIEW_LOG.md`。
+- 不修改：程式、測試、workflow、repository 設定、外部錨定、Stage 1 鎖定檔、`S2B2-ATTESTATION.md`。nonce 的一致流程只是提案（計畫 §5）。
+- 待決：`S2B2-B3-PLAN.md` §13 Q-A～Q-F。官方 GitHub 文件無法連線，平台能力全部未驗證。
+- ChatGPT 結論：`未審查`
+- 使用者決策：`未核准`
+
