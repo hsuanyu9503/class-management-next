@@ -15,7 +15,7 @@ import { verdict as contractVerdict, BLOCKED_FIELDS } from '../verdict.mjs';
 import { stableJson } from '../stable.mjs';
 
 export const PASS_ENABLED = false;
-export const VERIFIER_VERSION = 's2-verifier-b3a-0';
+export const VERIFIER_VERSION = 's2-verifier-b3a-1';   // -0 = 211e114; -1 = R1 (9a9450b) + follow-up F1
 /** Trusted case → actor table (from the locked matrix preconditions); not taken from Adapter code. */
 export const CASE_ACTORS = Object.freeze({ 'POC-001': 'ACTOR-TEACHER', 'POC-002': 'ACTOR-OTHER', 'POC-008': 'ACTOR-TEACHER', 'POC-009': 'ACTOR-SC01-TEACHER' });
 export const PAYLOAD = Object.freeze(['adapter-claim.json', 'isolation.json', 'run.json', 'runner-log.jsonl', 'state-post.json', 'state-pre.json', 'trace-back.jsonl', 'trace-front.jsonl']);
@@ -24,9 +24,23 @@ const jsonl = (b) => b.toString('utf8').split('\n').filter(Boolean).map((l) => p
 
 /** @param trusted {packageSha256, manifestSha256, runId, runAttempt, attestationNonce, testId,
  *   trustedToolchainCommit, adapterCommit, caseSpec, runnerKind} — all from trusted channels. */
+/** Error classes the Verifier may name in a reason; anything else is reported as 'Error'. The message is never
+ *  copied into the result, because it may quote package content (B3A-R1-N1). */
+const ERROR_CLASSES = new Map([[TypeError, 'TypeError'], [RangeError, 'RangeError'], [SyntaxError, 'SyntaxError'], [ReferenceError, 'ReferenceError']]);
+const errorClass = (e) => { for (const [C, n] of ERROR_CLASSES) if (e instanceof C) return n; return e instanceof Error ? 'Error' : 'NonError'; };
+const emptyResult = () => ({ verifierVersion: VERIFIER_VERSION, result: 'BLOCKED', reasons: [], reconciliation: null, observedCanonical: null, isolation: null });
+
+/** Never throws (B3A-R1-N1): an unexpected error is BLOCKED VERIFIER_INTERNAL_ERROR:<error class>. */
 export function verifyPackage(packageBytes, trusted) {
-  const reasons = []; const blocked = (r) => reasons.push(r);
-  const out = { verifierVersion: VERIFIER_VERSION, result: 'BLOCKED', reasons, reconciliation: null, observedCanonical: null, isolation: null };
+  try { return verifyPackageUnguarded(packageBytes, trusted); } catch (e) {
+    const out = emptyResult(); out.reasons.push(`VERIFIER_INTERNAL_ERROR:${errorClass(e)}`); return out;
+  }
+}
+
+function verifyPackageUnguarded(packageBytes, trusted) {
+  const out = emptyResult(); const { reasons } = out; const blocked = (r) => reasons.push(r);
+  // NOTE ⑨: a missing trusted record is reported, never dereferenced
+  if (!isPlainObj(trusted)) { blocked('TRUSTED_INPUT_MISSING'); return out; }
   // B3A-N4: platformSupported is a TRUSTED input (Runner memory, like job outputs), never read back from the package
   const REQUIRED = ['packageSha256', 'manifestSha256', 'runId', 'runAttempt', 'attestationNonce', 'testId', 'trustedToolchainCommit', 'adapterCommit', 'caseSpec', 'runnerKind', 'platformSupported'];
   const missingTrusted = REQUIRED.filter((k) => trusted?.[k] === undefined || trusted?.[k] === null);
@@ -45,13 +59,22 @@ export function verifyPackage(packageBytes, trusted) {
     pre = parseStrictJson(f('state-pre.json').toString('utf8')); post = parseStrictJson(f('state-post.json').toString('utf8'));
     front = jsonl(f('trace-front.jsonl')); back = jsonl(f('trace-back.jsonl')); rlog = jsonl(f('runner-log.jsonl'));
   } catch (e) { blocked(e instanceof PackageError ? e.code : 'ARTIFACT_JSON_INVALID'); return out; }
+  // B3A-R1-N1: top-level shapes are checked before any field is read. adapter-claim.json may be null by design
+  // (the Adapter never returned an output); every JSONL line must be a plain object.
+  const shapeErrors = [
+    ['run.json', isPlainObj(run)], ['adapter-claim.json', claim === null || isPlainObj(claim)],
+    ['state-pre.json', isPlainObj(pre)], ['state-post.json', isPlainObj(post)],
+    ['trace-front.jsonl', front.every(isPlainObj)], ['trace-back.jsonl', back.every(isPlainObj)], ['runner-log.jsonl', rlog.every(isPlainObj)],
+  ].filter(([, ok]) => !ok).map(([n]) => n);
+  if (!isPlainObj(iso)) blocked('ISOLATION_EVIDENCE_INVALID');
+  if (shapeErrors.length) blocked(`ARTIFACT_JSON_INVALID:${shapeErrors.join('|')}`);
+  if (reasons.length) return out;
   if (missingTrusted.length || typeof trusted.platformSupported !== 'boolean' || trusted.caseSpec.testId !== trusted.testId || !own(CASE_ACTORS, trusted.testId)) { blocked(`TRUSTED_INPUT_MISSING:${missingTrusted.join('|') || 'caseSpec/testId'}`); return out; }
   // 3. run binding (§7.2)
   for (const k of ['runId', 'runAttempt', 'attestationNonce', 'testId', 'trustedToolchainCommit', 'adapterCommit']) if (run[k] !== trusted[k]) blocked(`RUN_BINDING_MISMATCH:${k}`);
   // 4. isolation policy (§3.3(c))
   const expectedDigest = configDigest(sandboxConfig());
-  out.isolation = { platformSupported: trusted.platformSupported, sandboxPolicyDigest: iso.sandboxPolicyDigest };
-  if (!isPlainObj(iso)) { blocked('ISOLATION_EVIDENCE_INVALID'); return out; }
+  out.isolation = { platformSupported: trusted.platformSupported, sandboxPolicyDigest: iso.sandboxPolicyDigest };   // iso checked above
   const unverifiable = trusted.platformSupported === false;
   if (iso.isolationPolicyVersion !== POLICY_VERSION) blocked('ISOLATION_POLICY_UNKNOWN');
   if (iso.platformSupported !== trusted.platformSupported) blocked('ISOLATION_PLATFORM_MISMATCH');
