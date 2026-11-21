@@ -278,3 +278,63 @@ test('REV002: request body allow-list; trace keeps only allow-listed fields; cre
   assert.ok(!masked.includes(FAKE_JWT) && !masked.includes('eyJ') && !/bearer [^\[]/i.test(masked), masked);
   assert.ok(findLeaks(`{"x":"${FAKE_JWT}"}`).includes('jwt-shaped-string'));
 });
+
+// ---------------------------------------------------------------- R2: R1-N1 … R1-N4 (no network)
+test('R1-N1: session date must be a real YYYY-MM-DD and kind daily/period, else the whole request is denied', async () => {
+  const az = (patch) => { const a = sessionAz(); Object.assign(a.target.data, patch); if (patch.__del) { delete a.target.data[patch.__del]; delete a.target.data.__del; } return a; };
+  const st = listStore([goodEntry('E-A')]);
+  assert.equal((await buildData('attendanceSession.read', az({ kind: 'period' }), st)).kind, 'period');
+  for (const [name, patch] of Object.entries({
+    'date object': { date: { y: 2026 } }, 'date array': { date: ['2026-11-17'] }, 'date 2026-02-30': { date: '2026-02-30' }, 'date with time': { date: '2026-11-17T00:00:00Z' }, 'date number': { date: 20261117 }, 'date missing': { __del: 'date' },
+    'kind array': { kind: ['daily'] }, 'kind unknown': { kind: 'weekly' }, 'kind upper-case': { kind: 'DAILY' }, 'kind missing': { __del: 'kind' },
+  })) assert.equal(await reason(buildData('attendanceSession.read', az(patch), st)), 'DATA_INTEGRITY_ERROR', name);
+  // attendanceSummary.read outputs neither date nor kind (documented); its entries are still checked (REV001)
+  assert.equal((await buildData('attendanceSummary.read', az({ kind: 'weekly' }), st)).date, undefined);
+});
+
+test('R1-N2: trace keeps only known op names, known id fields and id-shaped, non-credential values', () => {
+  const secretsIn = ['sk-live-FAKE0123456789abcdef', 'ghp_FAKE0123456789abcdefABCDEF', 'password=FAKE-pw-123', 'x'.repeat(60000), 'eyJhbGciOi.FAKE'];
+  const ok = traceableRequestBody({ op: 'attendanceSession.read', target: { sessionId: 'AS-A17-20261117-DAILY' }, claimedScope: { workspaceId: 'WS-A17', classId: 'CLASS-606-A17' } });
+  assert.deepEqual(ok, { op: 'attendanceSession.read', target: { sessionId: 'AS-A17-20261117-DAILY' }, claimedScope: { workspaceId: 'WS-A17', classId: 'CLASS-606-A17' } });
+  for (const sec of secretsIn) {
+    for (const body of [
+      { op: 'attendanceSession.read', target: { sessionId: sec }, claimedScope: { workspaceId: 'WS-A17', classId: 'CLASS-606-A17' } },
+      { op: sec, target: { sessionId: 'S' } },
+      { op: 'attendanceSession.read', target: { sessionId: 'S' }, claimedScope: { workspaceId: sec, classId: 'C' } },
+      { op: 'attendanceSession.read', target: { [sec.slice(0, 40)]: 'S' } },
+    ]) { const t = JSON.stringify(traceableRequestBody(body)); assert.ok(!t.includes(sec.slice(0, 12)) && t.length < 400, `${sec.slice(0, 12)} leaked: ${t.slice(0, 120)}`); }
+  }
+  for (const proto of ['toString', '__proto__', 'constructor', 'hasOwnProperty']) assert.deepEqual(traceableRequestBody({ op: proto, target: { sessionId: 'S' } }).op, { valueRecorded: false }, proto);
+});
+
+test('R1-N3: attendanceEntry.read requires attendanceSessions/{sessionId}/entries/{id} and a matching sessionId', async () => {
+  const E = { attendanceEntryId: 'E1', sessionId: 'S-A', enrollmentId: 'EN', studentId: 'ST', status: 'N', scope: 'daily', version: 4, workspaceId: 'W', classId: 'C' };
+  const azE = (path, data = E) => ({ scope: { workspaceId: 'W', classId: 'C' }, target: { path, data } });
+  assert.equal((await buildData('attendanceEntry.read', azE('workspaces/W/classes/C/attendanceSessions/S-A/entries/E1'), {})).status, 'N');
+  assert.equal(await reason(buildData('attendanceEntry.read', azE('workspaces/W/classes/C/attendanceSessions/S-B/entries/E1'), {})), 'SCOPE_INTEGRITY_ERROR', 'sessionId differs from path');
+  assert.equal(await reason(buildData('attendanceEntry.read', azE('workspaces/W/classes/C/otherParent/S-A/entries/E1'), {})), 'SCOPE_INTEGRITY_ERROR', 'parent is not attendanceSessions');
+  assert.equal(await reason(buildData('attendanceEntry.read', azE('workspaces/W/classes/C/x/y/attendanceSessions/S-A/entries/E1'), {})), 'SCOPE_INTEGRITY_ERROR', 'nested deeper');
+  assert.equal(await reason(buildData('attendanceEntry.read', azE('workspaces/W/classes/C/attendanceSessions/S-A/entries/E1', { ...E, sessionId: undefined }), {})), 'SCOPE_INTEGRITY_ERROR', 'sessionId missing');
+});
+
+test('R1-N4: a listing with nextPageToken fails closed (no partial entries / counts) — fetch stubbed, no network', async () => {
+  const { createStore } = await import('../src/api/store.mjs');
+  const orig = globalThis.fetch;
+  const docs = [goodEntry('E-A'), goodEntry('E-B')].map((c) => ({ name: `projects/demo-cmn-s2b2/databases/(default)/documents/${c.path}`, fields: Object.fromEntries(Object.entries(c.data).map(([k, v]) => [k, typeof v === 'number' ? { integerValue: String(v) } : { stringValue: v }])) }));
+  let page = { documents: docs, nextPageToken: 'MORE' };
+  globalThis.fetch = async () => new Response(JSON.stringify(page), { status: 200, headers: { 'content-type': 'application/json' } });
+  try {
+    const st = createStore({ origin: 'http://127.0.0.1:1', projectId: 'demo-cmn-s2b2' });
+    for (const op of ['attendanceSession.read', 'attendanceSummary.read']) {
+      try { await buildData(op, sessionAz(), st); assert.fail('must throw'); } catch (e) { assert.ok(e instanceof IntegrityError, String(e)); assert.equal(e.reasonCode, 'DATA_INTEGRITY_ERROR'); assert.match(e.detail, /^LIST_TRUNCATED/); }
+    }
+    page = { documents: docs };          // control: a complete listing is accepted
+    assert.equal((await buildData('attendanceSummary.read', sessionAz(), st)).counts.total, 2);
+  } finally { globalThis.fetch = orig; }
+});
+
+test('R1-N2: credential-prefixed values are masked in any trace (e.g. a backend query carrying the target id)', () => {
+  const m = makeMasker([]);
+  const t = JSON.stringify(m.maskValue({ structuredQuery: { where: { fieldFilter: { value: { stringValue: 'sk-live-FAKE0123456789' } } } }, ids: ['ghp_FAKE0123456789', 'AE-EN-A17-1151-0001'] }));
+  assert.ok(!t.includes('sk-live-FAKE') && !t.includes('ghp_FAKE') && t.includes('AE-EN-A17-1151-0001'), t);
+});

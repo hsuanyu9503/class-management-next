@@ -111,6 +111,14 @@ for (const [label, rq] of [['session', SESSION], ['summary', SUMMARY]]) {
 for (const [name, roster] of [['rosterSnapshot item missing seatNo', [{ enrollmentId: 'EN-A17-1151-0001', studentId: 'ST-A17-0001' }]], ['rosterSnapshot not an array', { enrollmentId: 'EN-A17-1151-0001' }], ['rosterSnapshot item not an object', ['EN-A17-1151-0001']]]) {
   INTEGRITY.push({ name: `REV003 session: ${name}`, baseline: { actor: 'ACTOR-TEACHER', req: SESSION }, req: SESSION, mutate: async () => h.patchDoc(SES_PATH, { rosterSnapshot: roster }), reason: 'DATA_INTEGRITY_ERROR' });
 }
+// R1-N1: session date / kind; R1-N3: attendanceEntry.read path ↔ sessionId
+for (const [name, mutate] of [['session date 2026-02-30', async () => h.patchDoc(SES_PATH, { date: '2026-02-30' })], ['session kind not daily/period', async () => h.patchDoc(SES_PATH, { kind: 'weekly' })], ['session date missing', async () => h.deleteField(SES_PATH, 'date')]]) {
+  INTEGRITY.push({ name: `R1-N1 session: ${name}`, baseline: { actor: 'ACTOR-TEACHER', req: SESSION }, req: SESSION, mutate, reason: 'DATA_INTEGRITY_ERROR' });
+}
+INTEGRITY.push({ name: 'R1-N3 entry.read: entry sessionId differs from its path session', baseline: { actor: 'ACTOR-TEACHER', req: A17_ENTRY }, req: A17_ENTRY, mutate: async () => h.patchDoc(E1, { sessionId: 'AS-OTHER-SESSION' }), reason: 'SCOPE_INTEGRITY_ERROR' });
+INTEGRITY.push({ name: 'R1-N3 entry.read: entry stored under a non-attendanceSessions parent', baseline: { actor: 'ACTOR-TEACHER', req: A17_ENTRY },
+  req: { op: 'attendanceEntry.read', target: { attendanceEntryId: 'AE-STRAY-0001' }, claimedScope: A },
+  mutate: async () => { const e = await h.getDoc(E1); await h.putDoc('workspaces/WS-A17/classes/CLASS-606-A17/otherParent/AS-A17-20261117-DAILY/entries/AE-STRAY-0001', { ...e, attendanceEntryId: 'AE-STRAY-0001' }); }, reason: 'SCOPE_INTEGRITY_ERROR' });
 const EXTRA = { displayName: 'UNEXPECTED_NAME', email: 'unexpected@example.invalid', note: 'UNEXPECTED_NOTE', nested: { deep: { displayName: 'UNEXPECTED_NAME' } } };
 const b64 = (o) => Buffer.from(JSON.stringify(o)).toString('base64url');
 const forge = (token, { header, payload }) => { const [hh, pp] = token.split('.'); const H = JSON.parse(Buffer.from(hh, 'base64url')); const P = JSON.parse(Buffer.from(pp, 'base64url')); return `${b64({ ...H, ...header })}.${b64({ ...P, ...(typeof payload === 'function' ? payload(P) : payload) })}.`; };
@@ -276,7 +284,7 @@ const allFiles = Object.keys(digests);
   for (const u of Object.values(users)) secrets.push(u.token, u.password);
   const stack = await h.startStack({ frontFile: path.join(runDir, 'masking/trace-front.jsonl'), backFile: path.join(runDir, 'masking/trace-back.jsonl') });
   mkdirSync(path.join(runDir, 'masking'), { recursive: true });
-  const FAKE = ['eyJhbGciOiJub25lIiwidHlwIjoiSldUIn0.eyJzdWIiOiJGQUtFLVJFVjAwMi1BIn0.', 'eyJhbGciOiJub25lIiwidHlwIjoiSldUIn0.eyJzdWIiOiJGQUtFLVJFVjAwMi1CIn0.', 'FAKE-OPAQUE-REV002-CREDENTIAL-0123456789'];
+  const FAKE = ['eyJhbGciOiJub25lIiwidHlwIjoiSldUIn0.eyJzdWIiOiJGQUtFLVJFVjAwMi1BIn0.', 'eyJhbGciOiJub25lIiwidHlwIjoiSldUIn0.eyJzdWIiOiJGQUtFLVJFVjAwMi1CIn0.', 'FAKE-OPAQUE-REV002-CREDENTIAL-0123456789', 'sk-live-FAKER1N2opaque0123456789abcdef', 'ghp_FAKER1N2opaque0123456789ABCDEFabcd'];
   secrets.push(...FAKE);
   const bodies = [
     { ...SESSION, note: { password: users[T].password, displayName: names[0], email: users[T].email } },
@@ -286,6 +294,9 @@ const allFiles = Object.keys(digests);
     { ...SESSION, target: { sessionId: FAKE[0] } },
     [{ authorization: `Bearer ${FAKE[1]}` }],
     { op: SESSION.op, target: { sessionId: SESSION.target.sessionId, token: FAKE[2] }, claimedScope: A },
+    // R1-N2: well-shaped bodies whose VALUES are opaque credentials (ID_RE-shaped)
+    { op: SESSION.op, target: { sessionId: FAKE[3] }, claimedScope: A },
+    { op: FAKE[4], target: { sessionId: SESSION.target.sessionId }, claimedScope: A },
   ];
   const maskingResponses = [];
   for (const u of Object.values(users)) maskingResponses.push(await apiCall(stack.frontOrigin, u.token, SESSION));     // allowed + denied paths
@@ -293,7 +304,7 @@ const allFiles = Object.keys(digests);
   await stack.stop();
   var rev002Denied = maskingResponses.slice(3).every((r) => r.status === 403 && r.body?.code === 'FORBIDDEN');
   const frontText = readFileSync(path.join(runDir, 'masking/trace-front.jsonl'), 'utf8');
-  var rev002TraceClean = FAKE.every((f) => !frontText.includes(f) && !frontText.includes(f.slice(0, 40))) && !/eyJ[A-Za-z0-9_-]{4,}\.[A-Za-z0-9_-]{4,}\./.test(frontText);
+  var rev002TraceClean = FAKE.every((f) => !frontText.includes(f) && !frontText.includes(f.slice(0, 16))) && !/eyJ[A-Za-z0-9_-]{4,}\.[A-Za-z0-9_-]{4,}\./.test(frontText);
   console.log(`${rev002Denied && rev002TraceClean ? 'OK  ' : 'FAIL'} REV002 unknown / nested / array / mixed-case credential fields: refused by the API and absent from the written front trace file`);
   allFiles.push('masking/trace-front.jsonl', 'masking/trace-back.jsonl');
 }

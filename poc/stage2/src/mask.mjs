@@ -17,6 +17,10 @@ const normKey = (k) => k.toLowerCase().replace(/[-_\s]/g, '');
 // Value-based backstop: bearer credentials and JWT-shaped strings anywhere (arrays, nested objects, free text).
 const BEARER_RE = /bearer\s+[A-Za-z0-9._~+/=-]+/gi;
 const JWT_RE = /eyJ[A-Za-z0-9_-]{4,}\.[A-Za-z0-9_-]{4,}\.[A-Za-z0-9_-]*/g;
+/** Credential-looking prefixes that are also ID-shaped (e.g. sk-live-…, ghp_…), masked as whole values in
+ *  every trace (R1-N2). Residual risk: an opaque credential without a known prefix that looks like an ID
+ *  cannot be told apart from an ID. */
+export const CREDENTIAL_PREFIX_RE = /^(sk[-_]|pk[-_]|rk[-_]|ghp_|gho_|ghu_|ghs_|ghr_|github_pat_|xox[abprs]-|AKIA|ASIA|AIza|ya29|eyJ|glpat-|npm_)/i;
 const EMAIL_RE = /[^\s"@]+@[^\s"@]+\.[^\s"@]+/g;
 
 export const sha256 = (s) => createHash('sha256').update(s).digest('hex');
@@ -38,6 +42,7 @@ export function makeMasker(names = []) {
   const nameList = [...new Set(names.filter((n) => typeof n === 'string' && n.length > 0))];
   const maskString = (s) => {
     if (nameList.some((n) => s.includes(n))) return MASK_NAME;
+    if (CREDENTIAL_PREFIX_RE.test(s)) return MASK;
     return s.replace(BEARER_RE, MASK).replace(JWT_RE, MASK).replace(EMAIL_RE, MASK);
   };
   const walk = (v) => {

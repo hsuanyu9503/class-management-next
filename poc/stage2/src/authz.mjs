@@ -45,7 +45,7 @@ export const OPERATIONS = Object.freeze({
 });
 
 const MEMBERSHIP_REQUIRED = ['membershipId', 'version', 'principalId', 'workspaceId', 'scopeType', 'classId', 'rolePreset', 'rolePresetVersion', 'capabilities', 'status', 'validFrom'];
-const ID_RE = /^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$/;
+export const ID_RE = /^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$/;
 const CLASS_PATH_RE = /^workspaces\/([^/]+)\/classes\/([^/]+)\/(?:.+\/)?([^/]+)\/([^/]+)$/;
 
 const deny = (reasonCode, extra = {}) => ({ decision: 'deny', reasonCode, ...extra });

@@ -9,6 +9,12 @@
  *     sent; a missing required field or a wrong type rejects the request with DATA_INTEGRITY_ERROR.
  *  Callers turn an IntegrityError into a 403 FORBIDDEN and an auditLog deny with the reason code. */
 
+import { parseLocalDate } from '../time-validate.mjs';
+
+/** S2-B1 DATA-MODEL §3.5: attendanceSessions.kind is `daily`／`period`. */
+export const SESSION_KINDS = Object.freeze(new Set(['daily', 'period']));
+const ENTRY_PATH_RE = /^workspaces\/[^/]+\/classes\/[^/]+\/attendanceSessions\/([^/]+)\/entries\/([^/]+)$/;
+
 export class IntegrityError extends Error {
   constructor(reasonCode, detail) { super(`${reasonCode}: ${detail}`); this.name = 'IntegrityError'; this.reasonCode = reasonCode; this.detail = detail; }
 }
@@ -75,10 +81,19 @@ export async function buildData(op, az, store) {
       const ctx = { sessionPath: t.path, scope, sessionId: t.data.sessionId };
       const entries = (await store.listCollection(`${t.path}/entries`)).map((c) => checkEntry(c, ctx));   // all checked before any output
       if (op === 'attendanceSummary.read') return { sessionId: t.data.sessionId, ...base, entryCount: entries.length, counts: countsOf(entries) };
+      // R1-N1: session date / kind are validated, never passed through
+      if (typeof t.data.date !== 'string' || parseLocalDate(t.data.date) === null) throw dataErr('session.date missing or not a valid YYYY-MM-DD date');
+      if (typeof t.data.kind !== 'string' || !SESSION_KINDS.has(t.data.kind)) throw dataErr('session.kind missing or not daily/period');
       const rosterSnapshot = projectArray(t.data.rosterSnapshot, ROSTER_ITEM, 'rosterSnapshot');
       return { sessionId: t.data.sessionId, ...base, date: t.data.date, kind: t.data.kind, rosterSnapshot, entries };
     }
-    case 'attendanceEntry.read': return { ...project(t.data, ENTRY_OUT, 'entry'), ...base };
+    case 'attendanceEntry.read': {
+      // R1-N3: the entry must sit directly under attendanceSessions/{sessionId}/entries/ and carry that sessionId
+      const m = ENTRY_PATH_RE.exec(t.path || '');
+      if (!m) throw scopeErr(`entry is not under attendanceSessions/{sessionId}/entries: ${t.path}`);
+      if (t.data?.sessionId !== m[1]) throw scopeErr(`entry sessionId differs from its path session ${m[1]}`);
+      return { ...project(t.data, ENTRY_OUT, 'entry'), ...base };
+    }
     case 'leaveRecord.read': {
       const d = t.data;
       const out = project(d, { leaveRecordId: isStr, studentId: isStr, enrollmentId: isStr, leaveTypeId: isStr, recordEffect: isStr, teacherConfirmation: isStr, administrativeApproval: isStr, version: (v) => Number.isSafeInteger(v) && v >= 0 }, 'leaveRecord');

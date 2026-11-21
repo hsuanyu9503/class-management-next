@@ -4,6 +4,7 @@
 > 基準：`main` = `e98c46b05fe2a127f0356e66777c4484ec768ceb`（PR #4 合併；最終 Reviewed Head `ee756da8920080d4874e1f71915b97f27431576a`，兩者沒有檔案差異）。合併後同 SHA 的 CI [run 44854491499](https://github.com/hsuanyu9503/class-management-next/actions/runs/44854491499) 成功。
 > 本批**不**實作 Verifier、簽章、信任根（D-17）或 `S2B2-ATTESTATION.md` §9 的隔離。本機代理與 Observer 雛形**不是**安全隔離。
 > R1（回應 PR #5 審查 S2B2-B2-REV001～003）：場次子文件逐筆檢查 scope、巢狀陣列白名單投影、請求欄位白名單與 trace 遮罩強化（§4.4）。
+> R2（回應 PR #5 R1 複驗 R1-N1～N4）：場次 `date`／`kind` 驗證、trace 只記錄 ID 形狀且非憑證形狀的值、單筆點名的路徑與 `sessionId` 一致、分頁清單 fail closed（§4.4）。
 > 相關：[Adapter 計畫](S2B2-ADAPTER-PLAN.md)｜[認證設計](S2B2-ATTESTATION.md)｜[授權](S2B1-AUTHORIZATION.md)｜[資料模型](S2B1-DATA-MODEL.md)｜[存取矩陣](S2B1-ACCESS-MATRIX.md)
 
 ## 1. 範圍
@@ -124,7 +125,16 @@ Observer 以 `traceId` 對應兩者。測試 trace **不能**取代 `auditLog`�
 | REV002（MEDIUM） | front trace 記錄完整請求 body；遞迴遮罩沒有涵蓋 `authorization` 鍵；API 接受額外欄位 | API：請求 body 只能是 `{op, target, claimedScope}`，`target`／`claimedScope` 只能是字串平面物件，否則授權前 `FORBIDDEN`（`REQUEST_SHAPE_INVALID`）。front trace：只記錄白名單欄位；不符時只記標記（不記值、不記鍵名）。遮罩：`authorization`、`cookie`、`x-api-key`、`token` 等鍵不分大小寫與分隔符號；字串中的 `Bearer …` 與 JWT 形狀一律遮罩。代理自己的標頭紀錄改名為 `authorizationRef`，保留 `tokenSha256` 與未驗證的 `claimedAuthUid` |
 | REV003（MEDIUM） | `rosterSnapshot` 原樣輸出 | `rosterSnapshot`、`coverageSegments`、核對事項 `evidence` 逐筆驗證型別與必要欄位，只輸出白名單欄位；額外欄位（姓名、email、備註、巢狀資料）一律不送出；非陣列、元素不是物件、缺少必要欄位或型別錯誤 → `DATA_INTEGRITY_ERROR`、整個請求 `FORBIDDEN`。點名、請假摘要、核對事項本身也改為「必要欄位＋白名單」投影 |
 
-`DATA_INTEGRITY_ERROR` 是本批新增的稽核原因碼（只在 `auditLog`），對外仍是 `FORBIDDEN`。
+**R2（R1-N1～N4）：**
+
+| 審查項 | 修正 | 位置 |
+|---|---|---|
+| R1-N1（MEDIUM） | `attendanceSession.read` 不再原樣輸出 `date`、`kind`：`date` 必須是字串且通過 `parseLocalDate`（真實 `YYYY-MM-DD`，不用 `Date.parse`）；`kind` 只能是 `daily`／`period`。這個集合來自 S2-B1 資料模型 §3.5，**不是**自訂的，所以沒有新增規格缺口；fixtures 只用到 `daily`。缺少或不符 → `DATA_INTEGRITY_ERROR`、整個請求 `FORBIDDEN`。`attendanceSummary.read` 不輸出 `date`／`kind`，所以不檢查這兩欄（其子文件仍依 REV001 檢查） | `src/api/response-shape.mjs`（`SESSION_KINDS`） |
+| R1-N2（LOW） | 形狀合法的請求也逐值記錄：`op` 只在是 `OPERATIONS` 的自有鍵時記錄；`target` 只記錄已知 ID 欄位名；`target`／`claimedScope` 的值只在符合 `ID_RE`（共用 `authz.mjs` 的 export，長度上限 128）且**不是**憑證前綴形狀（`sk-`、`ghp_`、`eyJ`、`AKIA` 等）時記錄；其餘記 `{valueRecorded: false}`。憑證前綴形狀的值在所有 trace（含 back trace 的後端查詢內容）一律遮罩 | `src/api/request-shape.mjs`、`src/mask.mjs`（`CREDENTIAL_PREFIX_RE`）、`src/authz.mjs`（export `ID_RE`） |
+| R1-N3（LOW） | `attendanceEntry.read`：路徑必須是 `…/attendanceSessions/{sessionId}/entries/{id}`，且 entry 的 `sessionId` 等於路徑中的場次；父層不是 `attendanceSessions` 或不符 → `SCOPE_INTEGRITY_ERROR` | `src/api/response-shape.mjs`（`ENTRY_PATH_RE`） |
+| R1-N4（LOW） | `listCollection` 的回應有 `nextPageToken` 時 fail closed：拋出 `DATA_INTEGRITY_ERROR`，`auditLog.outcome` 以 `LIST_TRUNCATED` 開頭；不回部分 entries 或 counts | `src/api/store.mjs` |
+
+`DATA_INTEGRITY_ERROR`、`REQUEST_SHAPE_INVALID`、`LIST_TRUNCATED` 與請求白名單都是**實作層的拒絕規則**（只在 `auditLog`，對外仍是 `FORBIDDEN`），不改變任何授權結果；是否寫入 S2-B1 規格，由審查與負責人決定。
 
 ## 5. 證據與遮罩
 
@@ -231,11 +241,16 @@ Observer 以 `traceId` 對應兩者。測試 trace **不能**取代 `auditLog`�
 | 59 | REV003 session: rosterSnapshot item missing seatNo | 拒絕 `DATA_INTEGRITY_ERROR` | 403／FORBIDDEN／DATA_INTEGRITY_ERROR | 通過 | 符合 |
 | 60 | REV003 session: rosterSnapshot not an array | 拒絕 `DATA_INTEGRITY_ERROR` | 403／FORBIDDEN／DATA_INTEGRITY_ERROR | 通過 | 符合 |
 | 61 | REV003 session: rosterSnapshot item not an object | 拒絕 `DATA_INTEGRITY_ERROR` | 403／FORBIDDEN／DATA_INTEGRITY_ERROR | 通過 | 符合 |
-| 62 | membership validFrom = today (half-open boundary, allowed) | 允許 | 200／OK／OK | 通過 | 符合 |
-| 63 | membership with no end date (null) allowed | 允許 | 200／OK／OK | 通過 | 符合 |
-| 64 | REV003: rosterSnapshot extra fields never reach the client (raw HTTP response, direct to API) | 允許；原始回應不含額外欄位 | 200／OK／OK | 通過 | 符合 |
-| 65 | REV003: leave coverageSegments / extra leave fields never reach the client (raw HTTP response) | 允許；原始回應不含額外欄位 | 200／OK／OK | 通過 | 符合 |
-| 66 | backend unreachable (closed port) → UNAVAILABLE, no data | `UNAVAILABLE`，無資料 | 503／UNAVAILABLE／— | — | 符合 |
+| 62 | R1-N1 session: session date 2026-02-30 | 拒絕 `DATA_INTEGRITY_ERROR` | 403／FORBIDDEN／DATA_INTEGRITY_ERROR | 通過 | 符合 |
+| 63 | R1-N1 session: session kind not daily/period | 拒絕 `DATA_INTEGRITY_ERROR` | 403／FORBIDDEN／DATA_INTEGRITY_ERROR | 通過 | 符合 |
+| 64 | R1-N1 session: session date missing | 拒絕 `DATA_INTEGRITY_ERROR` | 403／FORBIDDEN／DATA_INTEGRITY_ERROR | 通過 | 符合 |
+| 65 | R1-N3 entry.read: entry sessionId differs from its path session | 拒絕 `SCOPE_INTEGRITY_ERROR` | 403／FORBIDDEN／SCOPE_INTEGRITY_ERROR | 通過 | 符合 |
+| 66 | R1-N3 entry.read: entry stored under a non-attendanceSessions parent | 拒絕 `SCOPE_INTEGRITY_ERROR` | 403／FORBIDDEN／SCOPE_INTEGRITY_ERROR | 通過 | 符合 |
+| 67 | membership validFrom = today (half-open boundary, allowed) | 允許 | 200／OK／OK | 通過 | 符合 |
+| 68 | membership with no end date (null) allowed | 允許 | 200／OK／OK | 通過 | 符合 |
+| 69 | REV003: rosterSnapshot extra fields never reach the client (raw HTTP response, direct to API) | 允許；原始回應不含額外欄位 | 200／OK／OK | 通過 | 符合 |
+| 70 | REV003: leave coverageSegments / extra leave fields never reach the client (raw HTTP response) | 允許；原始回應不含額外欄位 | 200／OK／OK | 通過 | 符合 |
+| 71 | backend unreachable (closed port) → UNAVAILABLE, no data | `UNAVAILABLE`，無資料 | 503／UNAVAILABLE／— | — | 符合 |
 
 另外，Emulator 停止後的真實斷線：`scripts/run-cases.mjs` 在 `emulators:exec` 結束、連接埠確認關閉後啟動 API，回應 `503 UNAVAILABLE`，只有 `code`／`traceId`。
 
@@ -267,6 +282,8 @@ Observer 以 `traceId` 對應兩者。測試 trace **不能**取代 `auditLog`�
 
 ## 8. 未驗證與限制
 
+- R1-N2 的殘餘風險：沒有已知前綴、但形狀像 ID 的不透明憑證，無法與 ID 區分，仍可能被記錄在 trace 的 `target` 值中（API 會因找不到目標而拒絕）。
+- R1-N4 的限制：分頁上限是單頁 300 筆；超過即拒絕，沒有實作多頁讀取。
 - 假 HTTP 伺服器的單元測試（`nondestructive.test.mjs`、`batch2-unit.test.mjs` 的 store 回歸）在拒絕本機連線的環境無法執行；R1 新增的 REV001～003 單元測試不需要本機連線。
 - **沒有認證**：沒有 Verifier、簽章、信任根（D-17）、§9 隔離。Adapter、Observer、API 在同一個使用者與機器上執行；本機任何程序都可以繞過代理直接存取 Emulator。
 - Emulator token 沒有簽章（G-6）。

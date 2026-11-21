@@ -5,6 +5,7 @@
 import { assertLoopbackUrl } from '../local-guard.mjs';
 import { EMULATOR_OWNER } from '../emu-client.mjs';
 import { TRACE_HEADER } from '../trace-proxy.mjs';
+import { IntegrityError } from './response-shape.mjs';
 
 export class BackendUnavailable extends Error { constructor(m) { super(m); this.name = 'BackendUnavailable'; } }
 
@@ -58,6 +59,8 @@ export function createStore({ origin, projectId, traceId = null }) {
     listCollection: async (collPath) => {
       const r = await call(`${base}/${collPath}?pageSize=300`);
       if (r.status !== 200) throw new BackendUnavailable(`list ${r.status}`);
+      // R1-N4: never return a partial list (or counts built from one): more pages → fail closed
+      if (r.json?.nextPageToken) throw new IntegrityError('DATA_INTEGRITY_ERROR', `LIST_TRUNCATED: ${collPath}`);
       return (r.json?.documents || []).map((d) => ({ path: rel(d.name), data: fromFields(d.fields) }));
     },
     getDoc,

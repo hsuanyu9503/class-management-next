@@ -515,3 +515,54 @@
 - 變異檢查：把 REV001／003 的檢查改回原樣，新單元測試 2 項失敗；把 REV002 的遮罩改回原樣，1 項失敗。
 - 證據：每個負向、對照與變異情境的原始 trace、狀態（含 `auditLog`）與結果另存，並附 `artifact-manifest.json`。
 - 範圍未擴大：沒有新增 capability、沒有修改契約、fixtures、oracle、S2-B1 規格或 CI；POC-009 維持 `BLOCKED`；72 筆後端計畫維持 `NOT_RUN`。
+
+### R1 複驗（ChatGPT，Reviewed Head `2fa78f74cd2b3b14e7e83934d372fc5022e88a30`）
+
+- 結論：需修正。REV001、REV002 結案；REV003 部分結案。新增 R1-N1（MEDIUM）、R1-N2～N4（LOW）；R1-N5～N7 列為後續。
+
+### R2 回應（Claude，依 `templates/CLAUDE_REVIEW_RESPONSE.md`）
+
+- PR：https://github.com/hsuanyu9503/class-management-next/pull/5
+- 審查版本 Head SHA：`2fa78f74cd2b3b14e7e83934d372fc5022e88a30`
+- 修正後 Head SHA：見 PR #5（本輪單一 commit）
+
+| ID | 處理結果 | 修改位置／原因 | 驗證證據 | 待使用者決策 |
+|---|---|---|---|---|
+| R1-N1 | 已修 | `poc/stage2/src/api/response-shape.mjs`：`date` 以 `parseLocalDate` 驗證；`kind` ∈ {`daily`, `period`}（S2-B1 資料模型 §3.5 已定義，未新增 G-9）；不符 → `DATA_INTEGRITY_ERROR` | 單元 10 種（`date` 物件／陣列／2026-02-30／含時間／數字／缺少；`kind` 陣列／未知／大寫／缺少）；Emulator 3 項（含對照組、403、回應只有 `code`／`traceId`、`auditLog` 恰一筆 `deny`） | 無 |
+| R1-N2 | 已修 | `src/api/request-shape.mjs`、`src/mask.mjs`、`src/authz.mjs`（export `ID_RE`）：只記錄自有 `op`、已知 ID 欄位、ID 形狀且非憑證前綴的值；憑證前綴值在所有 trace 遮罩 | 單元：`sk-live-…`、`ghp_…`、`password=…`、60000 字元、JWT 前綴、原型鏈名稱都不出現在回傳值；Emulator：2 種形狀合法但值是不透明憑證的請求，實際寫出的 front trace 不含該字串；全目錄 337 檔掃描 0 洩漏（含 back trace） | 無（殘餘風險已記錄在計畫 §8） |
+| R1-N3 | 已修 | `src/api/response-shape.mjs`：`attendanceEntry.read` 驗證父層為 `attendanceSessions` 且 `sessionId` 等於路徑 | 單元 4 種；Emulator 2 項（`sessionId` 不符、存放在非 `attendanceSessions` 父層），含對照組 | 無 |
+| R1-N4 | 已修 | `src/api/store.mjs`：`nextPageToken` → `DATA_INTEGRITY_ERROR`／`LIST_TRUNCATED`，整個請求拒絕 | 單元（以替換 `fetch` 測試，**不需要本機連線**）：兩端點都拒絕，完整清單的對照組通過 | 無 |
+| R1-N5 | 延後 | OPERATIONS 原型鏈名稱（`authorize` 內 `OPERATIONS[op]` 的查找方式）；本輪只在 trace 端以 `Object.hasOwn` 處理 | — | 無 |
+| R1-N6 | 延後 | mask 對非 Bearer `Authorization` 值的雜湊與相關註解 | — | 無 |
+| R1-N7 | 延後 | 遮罩掃描的 secrets 蒐集範圍（目前只含最後一組 token／密碼與刻意送出的虛構值） | — | 無 |
+
+變異檢查（本機）：
+
+| 改回原樣的修正 | 擋住的測試 |
+|---|---|
+| R1-N1 | `batch2-unit` #19 |
+| R1-N2（trace 逐值記錄） | `batch2-unit` #20 |
+| R1-N2（遮罩憑證前綴） | `batch2-unit` #23 |
+| R1-N3 | `batch2-unit` #21 |
+| R1-N4 | `batch2-unit` #22 |
+
+每次只有該項失敗，其餘通過。
+
+#### 已執行的測試
+
+在新 Head 的乾淨 checkout 執行，原始輸出附在複驗請求中。
+
+| 命令／操作 | 結果 | 對應 Commit／連結 |
+|---|---|---|
+| npm run check | 成功 | 新 Head |
+| npm test | 成功 | 新 Head |
+| npm run stage1:all | 成功 | 新 Head |
+| verify-anchor、受保護路徑與鎖檔 diff | 成功 | 新 Head |
+| s2:test、s2:smoke、s2:occupied-real、s2:cases | 成功 | 新 Head（Claude 本機證據） |
+| Windows、官方文件、CI 上的 Emulator | 未執行（NOT_RUN） | — |
+
+#### 未解風險與新發現
+
+- （LOW）沒有已知前綴的 ID 形狀不透明憑證仍可能被記錄為 `target` 值（計畫 §8）。
+- （資訊）`DATA_INTEGRITY_ERROR`、`REQUEST_SHAPE_INVALID`、`LIST_TRUNCATED` 是實作層拒絕規則；是否寫入 S2-B1 由審查與負責人決定。
+
