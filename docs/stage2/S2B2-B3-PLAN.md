@@ -1,9 +1,17 @@
-# S2-B2 第 3 批｜受控執行器、Verifier、信任根與隔離：計畫與決策包 v0.2（草案）
+# S2-B2 第 3 批｜受控執行器、Verifier、信任根與隔離：計畫與決策包 v0.3（草案）
 
 > **狀態：設計與決策包，未實作。** 本文件沒有任何 workflow、OIDC、簽章、Verifier 或隔離實作；沒有修改 repository 設定、外部錨定或 Stage 1 基準。所有結果維持 `UNATTESTED`／`BLOCKED`，沒有 `PASS`。
 > 基準：`main` = `40c09a3fb92b0c699a2b00dda1da5b2a32b468a4`（PR #5 合併；最後 PR Head `85a0bb4b40d9cf2ff030c1d95f70513cad9a57fd`，兩者無檔案差異；最後程式審查 Head `d2dafe16ba488df60e6a2340ad9cd075c691ed2a`）。
 > 依據：`S2B2-ADAPTER-PLAN.md` §4（第 3 批進入條件：D-17 決定；CI 變更的錨定重新核准）、`S2B2-ATTESTATION.md` v0.2 §3、§5、§9、§10、`S2B2-B2-PLAN.md`。
 > v0.2：回應 PR #6 審查（B3-REV001 artifact 內容綁定、B3-REV002 隔離政策封閉定義、B3-REV003 不受信任檔案的安全解析、B3-REV004 簽署身分與批准政策），以及對帳、簽章範圍、A10、Verifier 權限描述、公開範圍的一致性修正。
+> v0.3：回應 PR #6 R1 複審的收尾事項：
+> - 正向控制依實際拓撲並使用 sentinel；
+> - manifest 排除自身；
+> - 簽章狀態不由 statement 自我宣稱；
+> - Verifier 憑證描述、控制管道方向、壓縮比；
+> - 可信政策的取得來源與撤銷新鮮度。
+>
+> B3-REV001～004 為**設計結案，實作待驗收**。
 > 使用者「繼續」代表**開始準備**，不代表已選定信任根、核准 CI 權限或變更錨定。本文件的每一項選擇都是**提案**。
 
 ## 0. 摘要
@@ -100,6 +108,19 @@
 - 只簽 `PASS`；
 - `FAIL`／`BLOCKED`／`UNATTESTED` 只產生未簽章的診斷檔，並標示「未簽章、不是認證」。
 
+**時序與簽章狀態**（收尾事項 3）：
+
+| 步驟 | 動作 | 失敗時 |
+|---|---|---|
+| 1 | Verifier 判定，產生 `statement.json`；之後位元組不再修改 | — |
+| 2 | 只有 `verdict.result = PASS` 才進入簽章；subject = `statement.json` 的 SHA-256 | 非 `PASS` → 不簽，只輸出診斷 |
+| 3 | 簽章 | 簽章失敗 → `statement.json` 維持未簽章；交付紀錄寫 `SIGN_FAILED`；**不得**宣稱 `PASS` 已認證 |
+| 4 | 發布：上傳 `statement.json`、bundle 與交付紀錄 `delivery.json` | 發布失敗 → 交付紀錄寫 `PUBLISH_FAILED` |
+
+- `statement.json` **不含**「是否已簽章」欄位（v0.2 schema 的 `verdict.signed` 已移除），因為它在簽章前就已固定，不能預先宣稱。
+- 實際簽章狀態只寫在外部的 `delivery.json`（不是簽章對象）。
+- 第三方**只以實際的 bundle** 判斷是否已簽章、簽章是否有效；`delivery.json` 只是交付紀錄，不是證據。
+
 是否要另外以不同 predicate 簽署診斷結果，列為後續提案，不在本批決定。
 
 ### 3.2 元件表
@@ -112,7 +133,7 @@
 | front／back 代理 | `main` | `trustedToolchainCommit` | 寫證據目錄 | front：Unix socket；back：Emulator | 無（遮罩後記錄） |
 | **Adapter** | `adapterCommit`（可以是任何已審查的 commit） | 證明分別記錄 `adapterCommit` | 唯讀的 Adapter 程式碼、自己的暫存目錄 | **只有** `/run/cmn/adapter.sock` | 只有 Runner 交給它的 actor ID token（虛構使用者、短期） |
 | Observer | `main` | `trustedToolchainCommit`；Verifier 用**同一個**版本重算 | trace、state（唯讀） | 無 | 無 |
-| Verifier | `main` | `trustedToolchainCommit`；在驗證 job 只 checkout 這個 SHA | artifact、可信外部輸入 | GitHub API（下載 artifact） | 無（簽章由下一步驟使用 OIDC） |
+| Verifier | `main` | `trustedToolchainCommit`；在驗證 job 只 checkout 這個 SHA | artifact、可信外部輸入 | GitHub API（下載 artifact） | 所在的驗證 job 具有 job 層級的 `id-token: write`（§3.1）；Verifier 不主動使用，簽章是判定 `PASS` 之後的獨立步驟 |
 | 簽章步驟 | GitHub 官方 action（版本以完整 commit SHA 固定，**未驗證**可用版本） | action SHA 寫入 workflow，workflow 在錨定清單內 | 證明檔 | GitHub、Sigstore | OIDC token（`id-token: write`）：只存在於驗證 job |
 
 **界線重點**：
@@ -153,7 +174,7 @@ Runner 在啟動沙箱**之前**，把實際要套用的設定以 `stableJson` �
 | `NS_NET_DISTINCT` | 沙箱與 host 的 `/proc/<pid>/ns/net` inode 不同 | Runner 讀 host 側 inode |
 | `NS_PID_DISTINCT`、`NS_MNT_DISTINCT`、`NS_IPC_DISTINCT`、`NS_UTS_DISTINCT` | 同上，各命名空間 | 同上 |
 | `NET_NO_INTERFACES` | 沙箱內除了 `lo` 沒有網卡 | — |
-| `HOST_ENDPOINTS_BLOCKED` | 沙箱內連 8080、9099、4400、4500、9150、18300～18302 全部失敗 | **Runner 在 host 側同時連這些端點，必須成功**（證明它們確實存在） |
+| `HOST_ENDPOINTS_BLOCKED` | 沙箱內連政策 `endpoints` 清單中的每一個 TCP 端點，全部失敗 | 依政策中每個端點的預期狀態，在 host 側同時連線（見下方「端點清單與 sentinel」） |
 | `ENTRY_SOCKET_REACHABLE` | 沙箱內經 Unix socket 呼叫 front 代理成功 | — |
 | `NO_OTHER_SOCKETS` | 沙箱內看不到 host 的其他 socket（例如 Docker、Emulator 的 socket 檔案） | Runner 在 host 側確認這些路徑存在（若存在） |
 | `UID_NONROOT`、`NO_CAPS`、`NO_NEW_PRIVS` | `id -u ≠ 0`；`/proc/self/status` 的 Cap* 全為 0；`NoNewPrivs: 1` | — |
@@ -165,6 +186,19 @@ Runner 在啟動沙箱**之前**，把實際要套用的設定以 `stableJson` �
 | `FD_ALLOWLIST` | `/proc/self/fd` 只有允許的 fd | — |
 | `MOUNT_ALLOWLIST` | `/proc/self/mountinfo` 等於允許清單 | — |
 | `OUTPUT_CHANNELS_HIDDEN` | 讀寫 `GITHUB_OUTPUT`、`GITHUB_ENV`、`GITHUB_STEP_SUMMARY` 指向的檔案失敗 | Runner 在 host 側確認檔案存在 |
+
+**端點清單與 sentinel**（收尾事項 1）：
+
+- 可信政策固定一份 `endpoints` 清單，每一項有 `kind` 與預期狀態：
+  - `service`：本次實際啟動的服務，例如 Firestore 8080、Auth 9099、hub 4400、logging 4500、Firestore websocket 9150（依 Emulator 實際啟用的項目）、受控 API 18300、back 代理 18302。
+    - 預期狀態 `listening`：host 側必須連得上。
+    - 若某服務依政策**不啟動**，該項標為 `not-started-by-design`，不列入 host 側檢查。
+    - 但預期 `listening` 的服務沒有啟動 → 檢查**失敗**（`BLOCKED`），不能當作「連不到所以通過」。
+  - `sentinel`：Runner 專為隔離測試啟動的 loopback TCP listener（政策固定埠號，例如 18399），以及一個**未掛入**沙箱的 sentinel Unix socket。
+    - host 側必須連得上；沙箱內必須連不到或看不到。
+    - 這樣即使服務組合改變，仍有一組確定存在的端點可以測。
+- front 代理只在 Unix socket 上服務，**不**列為 TCP 端點；它由 `ENTRY_SOCKET_REACHABLE` 檢查。
+- 不為了正向控制新增常駐服務；sentinel 只在自我檢查期間存在。
 
 `ENETUNREACH` 之類的錯誤碼**不能**單獨作為隔離證明；必須搭配命名空間 inode、設定 digest 與正向控制。
 
@@ -199,8 +233,16 @@ Runner 在啟動沙箱**之前**，把實際要套用的設定以 `stableJson` �
 **設計**：
 
 1. **封存（seal）**：Adapter 終止、入口關閉、匯出完成後，Runner 停止寫入證據目錄，產生：
-   - `manifest.json`：每個檔案的正規化路徑、大小、SHA-256；
-   - `package.tar`：以固定順序、固定 mtime／uid／權限打包的單一檔案（可重現）；
+   - `manifest.json`：**payload** 檔案的正規化路徑、大小、SHA-256。
+     - **不列** `manifest.json` 自己、外層 `package.tar`，也不列之後才產生的 `statement.json`、簽章或交付紀錄，避免循環。
+     - `manifest.json` 本身由可信的 `manifestSha256` 綁定（job outputs）。
+   - `package.tar`：只包含 `manifest.json` 與 manifest 列出的 payload，不得有其他項目。可重現序列化規則：
+     - POSIX ustar；
+     - 項目依路徑的 UTF-8 位元組順序排序，`manifest.json` 放在最前；
+     - mtime = 0、uid／gid = 0、使用者名稱與群組名稱空白；
+     - 一般檔權限 0644、目錄 0755；
+     - 不使用擴充標頭；
+     - 不壓縮。
    - `manifestSha256`、`packageSha256`。
 2. **以不受 Adapter 控制的通道交出期望值**：封存步驟在 Adapter 終止之後執行，把 `{artifactId, packageSha256, manifestSha256, attestationNonce, runAttempt}` 寫入 **job outputs**。Adapter 不能寫 job outputs：輸出檔被沙箱遮住，以 `OUTPUT_CHANNELS_HIDDEN` 檢查；而且封存發生在 Adapter 的程序全部終止之後。
 3. **選取 artifact**：驗證 job **只**依下列條件選取，全部必須相符；禁止只用名稱、「最新」或封裝自己宣稱的資訊：
@@ -209,7 +251,7 @@ Runner 在啟動沙箱**之前**，把實際要套用的設定以 `stableJson` �
    - producer job；
    - job outputs 中的 `artifactId`（不可變 ID）；
    - 下載後重算的 `packageSha256` 等於 job outputs 的值。
-4. 解包後，`manifest.json` 的 SHA-256 必須等於 job outputs 的 `manifestSha256`；每個檔案必須與 manifest 一致；manifest 以外不得有檔案。
+4. 解包後，`manifest.json` 的 SHA-256 必須等於 job outputs 的 `manifestSha256`；每個 payload 檔案必須與 manifest 一致；封裝中除了 `manifest.json` 與 manifest 列出的 payload 之外，不得有任何項目。
 5. 證明中記錄 `package.artifactId`、`packageSha256`、`manifestSha256`。簽章的 subject 是證明本身（§7.3），因此簽章也間接綁定封裝內容。
 
 **信任假設**（明列，不隱含依賴）：
@@ -268,7 +310,21 @@ artifact 仍是不受信任的傳輸媒介：內容以 job outputs 的期望值�
   - 若撤銷原因是安全問題，紀錄標 `invalidateIssued: true`，舊證明一律拒絕；
   - 簽章時間以透明度日誌的時間為準。
 
-### 4.5 拒絕的捷徑
+### 4.5 可信政策的取得來源與撤銷新鮮度（收尾事項 5）
+
+- 撤銷檢查讀取「**目前**被外部錨定認可的 `main`」上的 `S2B2-TRUST-POLICY.json`：該 commit 的受保護檔案 digest 必須等於當時的 repository variable `CMN_STAGE1_ANCHOR_SHA256`。
+  - **不**讀 artifact 附帶的政策；
+  - **不**讀被驗證證明當時的舊工具鏈中的政策。
+- 證明與驗證結果記錄：
+  - 使用的政策版本（`policyVersion`）與政策檔的 SHA-256；
+  - 取得政策的方式（GitHub API，或本機 clone 的 commit）；
+  - 取得時間。
+- 離線驗證：
+  - 政策取得時間超過新鮮度上限（提案：24 小時）→ 結果標為「撤銷狀態未知」，不得宣稱已確認有效；
+  - 實際上限在 B3b 實作驗收時固定。
+- 這些規則列入 B3b 的實作驗收條件。
+
+### 4.6 拒絕的捷徑
 
 - 「工具鏈與 Adapter 在同一個 PR 中，雜湊自洽」→ 不等於可信。
 - 「Observer 是不同模組」「Verifier 在另一個 job」→ 不等於隔離完成。
@@ -303,7 +359,13 @@ artifact 仍是不受信任的傳輸媒介：內容以 job outputs 的期望值�
 **補充規則**（v0.2）：
 
 - `READY` 逾時（例如 60 秒）→ 終止沙箱、`BLOCKED`（`ADAPTER_NOT_READY`）；`GO` 之後的案例逾時同理。
-- 控制管道只傳固定的 `READY`／`DONE` 訊息，Runner 不接受其他內容。
+- 控制管道（一個繼承的 fd）只允許下列固定訊息，其他內容一律視為違規、終止沙箱、`BLOCKED`：
+
+  | 方向 | 訊息 | 時點 |
+  |---|---|---|
+  | Adapter → Runner | `READY` | T2，初始化完成 |
+  | Runner → Adapter | `GO` | T4 之後 |
+  | Adapter → Runner | `DONE` | 案例操作結束 |
 - 標記文件包含 `runAttempt`；重新執行（attempt +1）會產生新的 nonce 與新的標記。
 - 標記寫入後不得改寫：T4 的 `state-pre` 與匯出的 `state-post` 中，標記必須逐位元相同。
 - nonce 只防止重播與預先寫入，**不能**取代隔離（§3.3）或內容綁定（§3.4）。
@@ -417,7 +479,7 @@ Verifier 對 artifact 做的事：依 §3.4 選取並比對封裝 digest；依 �
    - 只比對 commit 也不夠，因為每一個新的 `main` commit 都會改變 signer digest。
 4. 來源 commit（source digest）：必須是 `main` 上的 commit，且其中的工具鏈符合批准紀錄。
 5. subject digest ＝ 實際取得的 `statement.json` 的 SHA-256。
-6. 對 statement 內容做政策檢查：
+6. 對 statement 內容做政策檢查（政策檔依 §4.5 取得）：
    - `toolchain.trustedToolchainCommit` 是簽章當時 `active` 的 `toolchain` 項目；
    - `targets` 等於該工具鏈中鎖定檔重算的值；
    - `verdict.result = PASS`。
@@ -436,7 +498,7 @@ Verifier 對 artifact 做的事：依 §3.4 選取並比對封裝 digest；依 �
 | 檔案類型 | 只允許一般檔案與目錄；拒絕 symlink、hardlink、裝置、FIFO、socket | `BLOCKED`（`ARTIFACT_ENTRY_TYPE`） |
 | 解析後位置 | 解開到新建的空目錄；每個檔案以 `realpath` 確認仍在根目錄內；開檔使用不跟隨連結的方式 | `BLOCKED`（`ARTIFACT_ESCAPE`） |
 | 重複 | 封裝內同一路徑出現兩次 | `BLOCKED`（`ARTIFACT_DUPLICATE`） |
-| 數量與大小 | 檔案數 ≤ 2000；單檔 ≤ 16 MiB；總解壓 ≤ 256 MiB；壓縮比上限 | `BLOCKED`（`ARTIFACT_LIMIT`） |
+| 數量與大小 | 檔案數 ≤ 2000；單檔 ≤ 16 MiB；`package.tar` 總大小 ≤ 256 MiB。`package.tar` 本身不壓縮；若平台下載時以壓縮格式傳遞，解壓後與壓縮後的大小比 ≤ 100，且解壓後仍受 256 MiB 上限 | `BLOCKED`（`ARTIFACT_LIMIT`） |
 | JSON | UTF-8；最大深度 64；拒絕重複鍵（嚴格解析器）；數字必須是安全整數或有限值 | `BLOCKED`（`ARTIFACT_JSON_INVALID`） |
 | 執行 | 不執行封裝內任何腳本；不 `npm install`；不載入封裝指定的模組；不依封裝內容決定要執行的程式 | 設計上禁止 |
 | 順序 | 解析與安全驗證全部通過後，才做語意驗證；任何一項失敗即停止，不進入簽章步驟 | — |
@@ -600,10 +662,15 @@ v0.2 縮減為 4 題。v0.1 的 Q-C（變數固定）併入 Q-2；Q-D（開放�
 |---|---|---|---|
 | Q-1（D-17） | 信任根採哪一個？ | 選項 A：GitHub artifact attestation，subject 是 `statement.json`；只簽 `PASS`（§3.1、§7.3） | public repository 可用；不需要保管金鑰；第三方可依政策獨立驗證 |
 | Q-2（Q1＋錨定） | CI 與批准形式？ | 新增 `attest.yml`，只用手動與 `main` 觸發；執行 job 與驗證 job 分開；`ci.yml` 不變。批准紀錄 `S2B2-TRUST-POLICY.json`＋兩個由你設定的變數；相關檔案全部列入外部錨定（§4、§9.4、§9.5） | 簽章權限不接觸 PR 程式碼；批准有歷史與撤銷 |
-| Q-3 | 公開與保存範圍（§9.6）：bundle 必然公開；`statement.json` 與封裝檔是否上傳為 Actions artifact、是否在 `main` 提交摘要、保存多久？ | bundle 公開（必然）；`statement.json` 上傳並在 `main` 提交摘要；封裝檔只上傳 artifact，保存期限依 D-07 先採平台預設；全部以「可能公開」設計遮罩 | 只用虛構資料；可追溯；不把原始證據提交到 `main` |
+| Q-3 | 公開與保存範圍（§9.6）：bundle 必然公開；`statement.json` 與封裝檔是否上傳為 Actions artifact、是否在 `main` 提交摘要、保存多久？ | 方向：bundle 公開（必然）；`statement.json` 上傳並在 `main` 提交摘要；封裝檔只上傳 artifact、不提交到 `main`；全部以「可能公開」設計遮罩。**保存天數與可下載範圍尚未核對**，不以「平台預設」當作 D-07 的決定；具體值在 B3b 前另行批准 | 只用虛構資料；可追溯；不把原始證據提交到 `main` |
 | Q-4 | 是否同意依 §5 的 nonce 一致流程（含 READY／GO 逾時、`runAttempt` 綁定、標記不可改寫），在 B3a 把 `S2B2-ATTESTATION.md` 修訂為 v0.3？ | 同意 | 消除 §3／§4 與 §9.2 的矛盾 |
 
-在這些問題回答前，不進入 B3a 實作。
+**分兩次批准**（一頁摘要見 `S2B2-B3-DECISION-SUMMARY.md`）：
+
+- 現在可以批准的：B3a 本機實作範圍，加上 Q-4（nonce 修訂）。
+- B3b 前才需要批准的：Q-1（D-17）、Q-2（CI、錨定、批准紀錄）、Q-3 的具體保存天數與公開範圍。
+
+在你明確批准 B3a 前，不進入 B3a 實作。
 
 ## 14. 未驗證與限制
 

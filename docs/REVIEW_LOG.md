@@ -660,3 +660,39 @@
 - （設計）內容綁定只保護封存後的替換；若 Adapter 在封存前突破沙箱，可以偽造全部內容，依賴 §3.3 隔離。
 - （未核對）job outputs、artifact ID 不可變性與 artifact 存取範圍。
 
+### R2 複審（ChatGPT，Reviewed Head `4b80145a4ac8916787d92086f2f700727928b1d6`，2026-11-21）
+
+依使用者轉交的 ChatGPT 複審報告摘要：
+
+- 結論：B3-REV001～004 **設計結案，實作待驗收**；準備包可進入使用者決策；未發現新的 HIGH／MEDIUM 設計缺失。不代表隔離、簽章或 Verifier 已實作驗收，也不代表 D-17、CI 權限或 B3a 已獲批准。
+- 審查者核對：
+  - 附件 PLAN 與 schema 的 blob SHA 與新 Head 一致；
+  - path regex 對 7 個不安全樣本全部拒絕；
+  - `selfCheck` 的 22 個 required ID 與 properties 相同，`additionalProperties = false`。
+- 審查者未完成的項目：
+  - 完整 schema suite（審查環境缺少 `jsonschema`，重跑時停止）；
+  - 根目錄測試、Emulator、Linux 隔離、端到端簽章。
+- 收尾事項（LOW／實作澄清）5 項：
+  1. 正向控制依實際拓撲，並使用 sentinel；
+  2. manifest 排除自身；
+  3. 簽章狀態不由 statement 自我宣稱；
+  4. Verifier 憑證描述、控制管道方向、壓縮比；
+  5. 可信政策的取得來源與撤銷新鮮度。
+
+### R2 回應（Claude）
+
+- 修正後 Head SHA：見 PR #6
+
+| 項目 | 處理 | 位置 |
+|---|---|---|
+| 1 正向控制 | 已修（設計）：可信政策固定 `endpoints` 清單，分 `service`（本次實際啟動；預期 `listening` 卻未啟動即失敗，依設計不啟動者標 `not-started-by-design`）與 `sentinel`（Runner 專為自我檢查啟動的 TCP listener 與未掛入的 Unix socket）。front 不列為 TCP 端點；不新增常駐服務 | 計畫 §3.3 |
+| 2 manifest | 已修（設計）：manifest 只列 payload，不列自身、`package.tar`、`statement.json`、簽章或交付紀錄；封裝只含 manifest 與其列出的 payload；寫明可重現的 ustar 序列化與排序規則 | 計畫 §3.4；schema `artifacts` 說明 |
+| 3 簽章狀態 | 已修（設計）：移除 schema 的 `verdict.signed`；寫明判定 → 固定 statement → 簽章 → 發布的時序與各步失敗處理；實際狀態只寫在外部 `delivery.json`；第三方只以 bundle 判斷 | 計畫 §3.1；schema `verdict` |
+| 4 文字與數值 | 已修：Verifier 的憑證欄與 job 層級權限一致；控制管道 READY（Adapter→Runner）／GO（Runner→Adapter）／DONE（Adapter→Runner）；`package.tar` 不壓縮，平台壓縮傳遞時比值 ≤ 100 且仍受 256 MiB 上限 | 計畫 §3.2、§5、§7.4 |
+| 5 政策來源 | 已修（設計）：撤銷檢查讀取目前被外部錨定認可的 `main` 上的批准政策，不讀 artifact 或舊工具鏈附帶的政策；記錄政策版本、雜湊、取得方式與時間；離線驗證超過新鮮度上限（提案 24 小時）時標為「撤銷狀態未知」；列入 B3b 驗收 | 計畫 §4.5 |
+| Q-3 | 已修：保存天數與可下載範圍未核對，不以平台預設代替 D-07；B3b 前以具體數值批准 | 計畫 §13 |
+| 決策分段 | 新增一頁摘要：現在可批准 B3a（本機）＋Q-4；B3b 前才決定 Q-1～Q-3 | `S2B2-B3-DECISION-SUMMARY.md` |
+
+- schema 重跑：合法控制組接受（只代表形狀），16 個拒絕案例全部拒絕（新增：statement 自稱已簽章、manifest 被列為 payload），重複鍵由嚴格解析器拒絕。
+- 使用者決策：`待決`（B3a 範圍＋Q-4；B3b 前 Q-1～Q-3）
+

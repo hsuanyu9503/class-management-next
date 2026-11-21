@@ -22,12 +22,12 @@
 - S2-B2 第 1 批狀態：已合併（PR #4）。
 - S2-B2 第 2 批狀態：PR #5。R1（Head `37546804c61c`）CHANGES REQUESTED；R1 複驗（Head `2fa78f74cd2b`）需修正（REV001／002 結案、REV003 部分結案；R1-N1～N4）；R2 修正共兩個 commit（`d17e537` 修正、`d2dafe1` 只改測試假值的寫法）；**R2 複驗（Reviewed Head `d2dafe16ba488df60e6a2340ad9cd075c691ed2a`）通過**，可交使用者驗收與合併決策。R1-N5～N7、無前綴不透明憑證、分頁拒絕仍是待辦（`docs/REVIEW_LOG.md`）。新增規格缺口 G-1～G-4 需要負責人決策（`S2B2-B2-PLAN.md` §3）。
 - 第 2 批狀態：**已合併**（PR #5）。POC-001／002／008 最多 `UNATTESTED`，POC-009 `BLOCKED`；Stage 1 的 72 筆 `NOT_RUN` 不變。R1-N5～N7、無前綴不透明憑證、分頁拒絕仍是待辦，第 3 批計畫 §10 把 N5～N7 列為 B3a 前置。
-- 第 3 批狀態：**準備／待決策**（PR #6）。R1（Head `29f47a5e82b7`）CHANGES REQUESTED（B3-REV001 HIGH；002～004 MEDIUM），計畫已修訂為 v0.2，待 ChatGPT 複驗。需要你回答的問題（v0.2 §13）：
+- 第 3 批狀態：**準備／待決策**（PR #6）。R1（Head `29f47a5e82b7`）CHANGES REQUESTED（B3-REV001 HIGH；002～004 MEDIUM），v0.2 的 R2 複審（Head `4b80145a4ac8`）：B3-REV001～004 **設計結案，實作待驗收**，可進入使用者決策；5 項收尾已在 v0.3 處理。決策分兩次（`S2B2-B3-DECISION-SUMMARY.md`）：**現在**是否批准 B3a 本機範圍＋Q-4；**B3b 前**再決定 Q-1～Q-3。各題內容：
   - Q-1 信任根：推薦 GitHub artifact attestation，只簽 PASS；
   - Q-2 CI／錨定／批准：推薦新增 `attest.yml`，加上批准紀錄與兩個 repository variable；
   - Q-3 公開與保存範圍；
   - Q-4 nonce 修訂。
-- 下一位負責人：ChatGPT（第 3 批決策包 v0.2 複驗）→ 你（回答 §13、確認信任根與 CI／錨定方案）→ 之後才進入 B3a 實作。
+- 下一位負責人：你（決定是否批准 B3a 本機範圍與 Q-4；ChatGPT 可選擇性確認 v0.3 的收尾文件）→ 你（回答 §13、確認信任根與 CI／錨定方案）→ 之後才進入 B3a 實作。
 - 最近更新：2026-11-21（臺灣）
 
 ## PR #1 正式合併紀錄
@@ -140,6 +140,8 @@
 | 2026-11-21 | 你 | 合併 PR #5 → `40c09a3fb92b`；指示繼續 | S2-B2 第 3 批準備 |
 | 2026-11-21 | Claude → ChatGPT | S2-B2 第 3 批決策包 PR #6（Base `40c09a3fb92b`，Head `29f47a5e82b7`） | 審查 |
 | 2026-11-21 | ChatGPT → Claude | 審查 `29f47a5e82b7`：CHANGES REQUESTED（B3-REV001 HIGH；002～004 MEDIUM） | v0.2 修訂 |
-| 2026-11-21 | Claude → ChatGPT | 決策包 v0.2（Head 見 PR #6） | 複驗 |
+| 2026-11-21 | Claude → ChatGPT | 決策包 v0.2（Head `4b80145a4ac8`） | 複驗 |
+| 2026-11-21 | ChatGPT → 你 | 複審 `4b80145a4ac8`：REV001～004 設計結案；可進入使用者決策；5 項收尾 | 使用者決策 |
+| 2026-11-21 | Claude → 你 | 決策包 v0.3（收尾 5 項＋一頁決策摘要；Head 見 PR #6） | B3a 與 Q-4 決策 |
 
 > 規格的正式變更請同步修改 SPEC／TECH，不要只在這裡留下新決策。

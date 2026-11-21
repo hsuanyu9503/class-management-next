@@ -1,8 +1,8 @@
 {
  "$schema": "https://json-schema.org/draft/2020-12/schema",
  "$id": "urn:cmn:s2-attestation-statement:v1-draft",
- "title": "S2-B2 batch 3 attestation statement (DRAFT v0.2, not implemented)",
- "description": "Draft only (S2B2-B3-PLAN.md v0.2 sections 3.3, 3.4, 7). No code produces or verifies this yet. Layering (plan 7.5): (1) safe artifact parsing (7.4) incl. strict JSON without duplicate keys, (2) this schema = shape only, (3) semantic verification against trusted external inputs (7.2) and policies. Passing this schema NEVER means PASS. 'verdict' is written only by the Verifier; only PASS is signed.",
+ "title": "S2-B2 batch 3 attestation statement (DRAFT v0.3, not implemented)",
+ "description": "Draft only (S2B2-B3-PLAN.md v0.2 sections 3.3, 3.4, 7). No code produces or verifies this yet. Layering (plan 7.5): (1) safe artifact parsing (7.4) incl. strict JSON without duplicate keys, (2) this schema = shape only, (3) semantic verification against trusted external inputs (7.2) and policies. Passing this schema NEVER means PASS. 'verdict' is written only by the Verifier; only PASS is signed; the statement does not carry a 'signed' flag.",
  "type": "object",
  "additionalProperties": false,
  "required": [
@@ -425,7 +425,8 @@
     "runnerLog": {
      "$ref": "#/$defs/fileDigest"
     }
-   }
+   },
+   "description": "Payload files only (plan 3.4): never the manifest itself, package.tar, statement.json or signing/delivery records."
   },
   "reconciliation": {
    "type": "object",
@@ -532,8 +533,7 @@
    "required": [
     "result",
     "reasons",
-    "verifiedAt",
-    "signed"
+    "verifiedAt"
    ],
    "properties": {
     "result": {
@@ -553,30 +553,9 @@
     },
     "verifiedAt": {
      "$ref": "#/$defs/utc"
-    },
-    "signed": {
-     "type": "boolean",
-     "description": "true only when result = PASS (ATTESTATION 9.3 kept)."
     }
    },
-   "allOf": [
-    {
-     "if": {
-      "properties": {
-       "signed": {
-        "const": true
-       }
-      }
-     },
-     "then": {
-      "properties": {
-       "result": {
-        "const": "PASS"
-       }
-      }
-     }
-    }
-   ]
+   "description": "Written only by the Verifier before signing; the statement never claims whether it is signed (plan 3.1). Signing status is in the external delivery.json and is proven only by the actual bundle."
   },
   "package": {
    "type": "object",
