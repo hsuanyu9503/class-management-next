@@ -8,8 +8,8 @@
 //   node scripts/verify-anchor.mjs --print   list "sha256  path" lines and the digest
 //   node scripts/verify-anchor.mjs           compare with env CMN_STAGE1_ANCHOR_SHA256 (fails if unset)
 //
-// Residual risk (documented, not solvable inside the PR): a PR that edits this file or
-// .github/workflows/ci.yml can skip the comparison. Both are in the anchored set, so the
+// Residual risk (documented, not solvable inside the PR): a PR that edits this file,
+// .github/workflows/ci.yml or .github/workflows/attest.yml can skip the comparison. Both are in the anchored set, so the
 // digest changes; such diffs need the owner's review before the variable is updated.
 import { readFileSync, existsSync } from 'node:fs';
 import { createHash } from 'node:crypto';
@@ -17,12 +17,20 @@ import { resolve, join } from 'node:path';
 
 const root = resolve(import.meta.dirname, '..');
 const POC = 'poc/stage1/';
+const S2 = 'poc/stage2/';
 export const PROTECTED = [
   '.gitattributes', '.github/workflows/ci.yml', 'package.json', 'scripts/check.mjs', 'scripts/verify-anchor.mjs',
   POC + 'package.json', POC + 'contracts/stage1-baseline-lock.json',
   POC + 'src/common.mjs', POC + 'src/contract-guard.mjs', POC + 'src/runner.mjs', POC + 'src/oracle.mjs', POC + 'src/evidence.mjs',
   POC + 'scripts/validate-stage0.mjs', POC + 'scripts/validate-stage1.mjs', POC + 'scripts/validate-stage1-guards.mjs', POC + 'scripts/make-plan.mjs',
   POC + 'test/runner.test.mjs', POC + 'test/contract-guard.test.mjs', POC + 'test/mock-adapter.mjs',
+  // S2-B2 B3b (plan v0.3 §9.5): the signing workflow, the approval record, and every file that launches the
+  // sandbox or decides the verdict. Any change here changes the digest → the owner re-approves the anchor.
+  // (Everything else the toolchain runs is pinned by the approved toolchain commit, CMN_S2_TRUSTED_TOOLCHAIN_SHA.)
+  '.github/workflows/attest.yml', 'docs/stage2/S2B2-TRUST-POLICY.json',
+  S2 + 'src/b3/sandbox.mjs', S2 + 'src/b3/isolation-policy.mjs', S2 + 'src/b3/verifier.mjs', S2 + 'src/b3/reconcile.mjs',
+  S2 + 'src/b3/package.mjs', S2 + 'src/b3/trust-policy.mjs', S2 + 'src/b3/attest-verify.mjs', S2 + 'scripts/attest-verify.mjs',
+  S2 + 'src/observer.mjs', S2 + 'src/verdict.mjs',
 ];
 const sha = (b) => createHash('sha256').update(b).digest('hex');
 

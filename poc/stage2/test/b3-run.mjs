@@ -27,6 +27,13 @@ import { createFixtureHash } from '../../stage1/src/common.mjs';
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.resolve(HERE, '..');
 const REPO = path.resolve(ROOT, '../..');
+// B3b: single-case mode for the attest.yml execute job (one honest case, sealed package, no attack scenarios)
+const SINGLE = process.env.B3_SINGLE_CASE || null;
+const OUT_DIR = process.env.B3_OUT_DIR || null;
+if (SINGLE && !['POC-001', 'POC-002', 'POC-008', 'POC-009'].includes(SINGLE)) throw new Error(`B3_SINGLE_CASE: unsupported ${SINGLE}`);
+if (SINGLE && !OUT_DIR) throw new Error('B3_SINGLE_CASE needs B3_OUT_DIR');
+/** Reported runner kind (evidence only; the Verifier's trusted runnerKind comes from the VERIFY job's own environment). */
+const RUNNER_KIND = process.env.GITHUB_ACTIONS === 'true' && process.env.RUNNER_ENVIRONMENT === 'github-hosted' ? 'github-hosted' : 'local-untrusted';
 const cfgE = assertLocalConfig(process.env, { firebaseJsonPath: path.join(ROOT, 'firebase.json') });
 const ownNonce = assertNonce(process.env.RUN_NONCE);
 const fsc = firestoreClient(cfgE); const au = authClient(cfgE);
@@ -49,7 +56,7 @@ const environment = {
   java: (() => { try { return execFileSync('java', ['-version'], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] }) || ''; } catch (e) { return String(e.stderr || ''); } })().match(/openjdk version "([^"]+)"/)?.[1] || 'unknown',
   firebaseTools: JSON.parse(readFileSync(path.join(ROOT, 'node_modules/firebase-tools/package.json'), 'utf8')).version,
   firestoreJarMd5: md5(path.join(process.env.HOME || '/root', '.cache/firebase/emulators/cloud-firestore-emulator-v1.22.0.jar')) || '0'.repeat(32),
-  stage2LockfileSha256: sha256Hex(readFileSync(path.join(ROOT, 'package-lock.json'))), runnerKind: 'local-untrusted',
+  stage2LockfileSha256: sha256Hex(readFileSync(path.join(ROOT, 'package-lock.json'))), runnerKind: RUNNER_KIND,
 };
 const launcherSha = sha256Hex(readFileSync(path.join(ROOT, 'src/b3/sandbox.mjs')) + '\n' + readFileSync(path.join(ROOT, 'src/b3/isolation-policy.mjs')));
 const runTag = `S2B2B3A-${new Date().toISOString().replace(/[-:]/g, '').replace(/\..+/, 'Z')}-${ownNonce.slice(0, 8)}`;
@@ -65,7 +72,8 @@ const hostPaths = {
   toolchain: [path.join(ROOT, 'src'), path.join(ROOT, 'sandbox-check'), path.join(ROOT, 'test'), path.join(ROOT, 'scripts'), path.join(ROOT, 'node_modules'), path.join(REPO, 'poc/stage1'), path.join(nodeInstallDir, 'lib'), '/etc'],
   git: [path.join(REPO, '.git'), path.join(REPO, '.github')],
 };
-const outputChannels = [outputChannel, ...(process.env.GITHUB_OUTPUT ? [process.env.GITHUB_OUTPUT] : [])];
+// every GitHub Actions command file the Runner can see must be invisible inside the sandbox (A10 / OUTPUT_CHANNELS_HIDDEN)
+const outputChannels = [outputChannel, ...['GITHUB_OUTPUT', 'GITHUB_ENV', 'GITHUB_PATH', 'GITHUB_STEP_SUMMARY', 'GITHUB_STATE'].map((k) => process.env[k]).filter((p) => p && existsSync(p))];
 // B3A-N7: node binary only; /usr = USR_BINARIES + ldd closure (copied); digest recorded in isolation.json + statement
 const pathMap = process.platform === 'linux' ? resolvePathMap({ nodeBinary: process.execPath, adapterDir: path.join(ROOT, 'adapter-b3'), checkDir: path.join(ROOT, 'sandbox-check'), entryDir }) : null;
 let runCounter = Number(BigInt('0x' + ownNonce.slice(0, 8)) % 100000n) * 1000;
@@ -73,7 +81,9 @@ const isoSec = () => new Date().toISOString().replace(/\.\d{3}Z$/, 'Z');
 
 /** One attested-style case run (plan §5 T0–T5, §6, §3.4). Options are attack variants (test only). */
 async function attestedRun(label, { testId, entry = '/adapter/main.mjs', cfg = sandboxConfig(), startSentinel = true, skipKill = false, duringCase = null, simulateUnsupported = false, attackHints = null } = {}) {
-  const runId = String(++runCounter); const runAttempt = 1;
+  // hosted single-case runs are bound to the workflow run (the verify job's trusted runId / runAttempt)
+  const runId = SINGLE && process.env.GITHUB_RUN_ID ? process.env.GITHUB_RUN_ID : String(++runCounter);
+  const runAttempt = SINGLE && process.env.GITHUB_RUN_ATTEMPT ? Number(process.env.GITHUB_RUN_ATTEMPT) : 1;
   const attestationNonce = randomBytes(32).toString('hex');                                     // T0
   const dir = path.join(runDir, label); mkdirSync(dir, { recursive: true });
   const runnerLog = []; const rl = (phase, op) => runnerLog.push({ at: new Date().toISOString(), phase, channel: 'runner', op });
@@ -119,7 +129,7 @@ async function attestedRun(label, { testId, entry = '/adapter/main.mjs', cfg = s
   const run = {
     runId, runAttempt, attestationNonce, testId, trustedToolchainCommit: HEAD, adapterCommit: HEAD, adapterEntry: entry,
     adapterSandboxPolicyDigest: configDigest(cfg), sandboxLauncherSha256: launcherSha, nonceWrittenAt, caseStartedAt, caseEndedAt, startedAt, finishedAt,
-    ownershipMarkerPath: `${MARKER_COLLECTION}/${ownNonce}`, ownershipNonceSha256: sha256Hex(ownNonce), artifactId: '0',
+    ownershipMarkerPath: `${MARKER_COLLECTION}/${ownNonce}`, ownershipNonceSha256: sha256Hex(ownNonce),
     targets: { caseSpecDigest: sha256Hex(stableJson(caseSpec)), oracleFileSha256: sha256Hex(oracleBytes), fixtureFileSha256: fileSha256, fixtureHash: createFixtureHash(fixtures), anchorDigest },
     environment, gitDirty,
   };
@@ -136,7 +146,7 @@ async function attestedRun(label, { testId, entry = '/adapter/main.mjs', cfg = s
   };
   const pkg = writePackage(files);
   // "job outputs": the trusted channel (here: Runner memory), never read back from the package
-  const trusted = { packageSha256: pkg.packageSha256, manifestSha256: pkg.manifestSha256, runId, runAttempt, attestationNonce, testId, trustedToolchainCommit: HEAD, adapterCommit: HEAD, caseSpec, runnerKind: 'local-untrusted', platformSupported: iso.platformSupported === true };   // B3A-N4: from Runner memory
+  const trusted = { packageSha256: pkg.packageSha256, manifestSha256: pkg.manifestSha256, runId, runAttempt, attestationNonce, testId, trustedToolchainCommit: HEAD, adapterCommit: HEAD, caseSpec, runnerKind: 'local-untrusted', platformSupported: iso.platformSupported === true };   // in-run check is always local; the verify job re-verifies with its own trusted inputs   // B3A-N4: from Runner memory
   const result = verifyPackage(pkg.packageBytes, trusted);
   writeFileSync(path.join(dir, 'package.tar'), pkg.packageBytes);
   writeFileSync(path.join(dir, 'job-outputs.json'), JSON.stringify({ runId, runAttempt, packageSha256: pkg.packageSha256, manifestSha256: pkg.manifestSha256, attestationNonce }, null, 1));
@@ -150,6 +160,30 @@ const R = (x) => `${x.result.result} [${x.result.reasons.join(',')}]`;
 const has = (x, ...codes) => codes.every((c) => x.result.reasons.some((r) => r.split(':')[0] === c));
 const LOCAL = ['LOCAL_UNTRUSTED_RUNNER', 'TRUST_ROOT_NOT_CONFIGURED'];
 const isLocalOnly = (x) => x.result.result === 'UNATTESTED' && stableJson([...x.result.reasons].sort()) === stableJson([...LOCAL].sort());
+
+// ---------------- B3b single-case mode: seal ONE honest case for the attest.yml verify job, then stop
+if (SINGLE) {
+  const x = await attestedRun(`case-${SINGLE}`, { testId: SINGLE });
+  const secrets = h.issuedSecrets();
+  const { readdirSync, statSync } = await import('node:fs');
+  const files = []; const walk = (d) => { for (const n of readdirSync(d)) { const p = path.join(d, n); if (statSync(p).isDirectory()) walk(p); else files.push(p); } }; walk(runDir);
+  const leaks = files.map((f) => ({ f: path.relative(runDir, f), l: findLeaks(readFileSync(f, 'latin1') + readFileSync(f, 'utf8'), { names, secrets }) })).filter((r) => r.l.length);
+  assertStillOwned(await h.markerIds(), ownNonce);
+  await fsc.clearAll(); await au.clearAll();
+  rmSync(entryDir, { recursive: true, force: true }); rmSync(workDir, { recursive: true, force: true }); cleanupSandboxDirs();
+  // R1-N7: any hit → nothing is handed over (no package, no outputs) → the job fails, nothing is uploaded
+  if (leaks.length) { console.log(`FAIL MASKING ${leaks.length} files with leaks`); process.exit(1); }
+  mkdirSync(OUT_DIR, { recursive: true });
+  const packageFile = path.join(OUT_DIR, `package-${SINGLE}.tar`);
+  writeFileSync(packageFile, x.pkg.packageBytes);
+  // values for the job outputs — written by THIS process after the Adapter's namespace was terminated
+  const outputs = { testId: SINGLE, runId: x.trusted.runId, runAttempt: x.trusted.runAttempt, attestationNonce: x.trusted.attestationNonce,
+    packageSha256: x.pkg.packageSha256, manifestSha256: x.pkg.manifestSha256, platformSupported: x.trusted.platformSupported,
+    toolchainCommit: HEAD, packageFile: path.basename(packageFile), localDiagnostic: { result: x.result.result, reasons: x.result.reasons } };
+  writeFileSync(path.join(OUT_DIR, 'execute-outputs.json'), JSON.stringify(outputs, null, 1));
+  console.log(`S2B2_B3B_EXECUTE ${SINGLE} runId=${outputs.runId} attempt=${outputs.runAttempt} package=${outputs.packageSha256} local=${x.result.result}`);
+  process.exit(0);
+}
 
 // ---------------- positive controls: honest sandboxed Adapter, four cases
 const honest = {};

@@ -886,3 +886,43 @@
   - 缺少的 NOTE ①～⑦ 與 X1～X10 沒有執行。
 - 使用者決策：`待決`（PR #9 驗收與合併）
 
+### PR #9 合併（2026-11-21）
+
+- 負責人回覆「合併 pr-9 接著開始 PR-2（B3b）」。Claude 依明確批准合併 PR #9：merge `bda85b23d3238e9652aca61f0627adf7a1482636`（Head `544f40fa`，與 R2 Reviewed Head `8ab69e1d` 相比只多文件；同 Head CI run 44909529711 success）。
+
+## S2-B2 第 3 批 B3b｜受控執行 workflow 與信任根閘門（PR-2）
+
+- Base SHA：`bda85b23d3238e9652aca61f0627adf7a1482636`（PR #9 合併）
+- Reviewed Head SHA：`[尚未審查]`
+- 風險等級（初評）：**L3**：新增具 `id-token: write`／`attestations: write` 的 workflow；修改受保護檔案與錨定清單；Verifier 判定。
+- 負責人決定（2026-11-21）：
+  - action 以官方 tag 解析出的完整 SHA 固定（同意 Claude 以 `git ls-remote` 唯讀查詢官方 tag）；
+  - PR-2 維持 `PASS_ENABLED=false`；
+  - 執行 job 以 sudo 執行 Runner。
+- 內容：`S2B2-B3B-REPORT.md`。受保護檔案 29 → 41 個，錨定 digest 改變，**負責人必須在合併前重新核准** `CMN_STAGE1_ANCHOR_SHA256`。
+- 與計畫的差異：批准紀錄先不放任何紀錄；`adapterCommit` 等於工具鏈；每次一個案例；不在 `main` 提交摘要。詳見報告 §3。
+- 使用者決策：`未核准`
+
+### PR-2 審查 R1（ChatGPT）與回應
+
+- Reviewed Head：`8056dd93c9e60d8c9f0bdfb17449aca2a3a45920`
+- 結論：**CHANGES REQUESTED**
+  - **PR2-REV001（MEDIUM／P2）**：statement 沒有記錄驗證 job 的可信來源資料。`artifactId` 仍是 `0`、`signingPolicyBlob` 仍是全零、`producerJob` 仍是 `local-b3a`。審查者以模擬流程的真實封裝重現。
+  - 不是已發生的偽造 PASS：`PASS_ENABLED=false` 有效阻止 PASS 與簽章。
+- 其他審查意見：
+  - 打開 PASS 會產生新的工具鏈 commit，文件必須寫清楚：要重新審查、更新批准紀錄與兩個指標，並重新核准錨定；
+  - 錨定要等最終 Head 再由負責人核准，**不要為目前的 Head 先更新**；
+  - 在 `main` 提交摘要仍是後續待辦；
+  - hosted 自我檢查、A10、A4／A14 的平台整合、A18 與實際簽章都尚未完成。
+- 審查者獨立執行：
+  - 附件 15 個 SHA-256 一致；manifest 91／91；封裝重播 15／15；前輪 PATCH 反例仍為 `BLOCKED`；
+  - b3-unit：37 項中 36 pass、1 fail。失敗的是需要本機 HTTP 的 JSONL 測試（審查環境 `EACCES`），不算獨立通過；
+  - CI：`validate` success，`baseline-anchor` failure。
+
+| ID | 處理（Claude） | 位置 |
+|---|---|---|
+| PR2-REV001 | 已修 | `src/b3/verifier.mjs`（可信 provenance；hosted 路徑缺少時判 `BLOCKED`；本機寫 null）；`src/b3/attest-verify.mjs`（交出 provenance；`statementSha256` 寫入診斷）；`test/b3-run.mjs`（不再寫入 `run.artifactId`）；schema 草案（null 規則與 PASS 條件） |
+| PASS 啟用順序 | 已補文件 | `S2B2-B3B-REPORT.md` §4 |
+
+- 使用者決策：`未核准`；錨定待最終 Head 再核准。
+
