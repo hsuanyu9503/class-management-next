@@ -6,7 +6,7 @@
  *  local result is UNATTESTED with reasons LOCAL_UNTRUSTED_RUNNER + TRUST_ROOT_NOT_CONFIGURED. */
 import { createHash } from 'node:crypto';
 import { readPackageSafe, parseStrictJson, PackageError } from './package.mjs';
-import { CHECK_IDS, POSITIVE_CONTROL_REQUIRED, POLICY_VERSION, configDigest, sandboxConfig } from './isolation-policy.mjs';
+import { CHECK_IDS, POSITIVE_CONTROL_REQUIRED, POLICY_VERSION, USR_BINARIES, configDigest, sandboxConfig, pathMapDigest } from './isolation-policy.mjs';
 const isPlainObj = (v) => v !== null && typeof v === 'object' && !Array.isArray(v);
 const own = (o, k) => isPlainObj(o) && Object.hasOwn(o, k);
 import { reconcile } from './reconcile.mjs';
@@ -15,7 +15,7 @@ import { verdict as contractVerdict, BLOCKED_FIELDS } from '../verdict.mjs';
 import { stableJson } from '../stable.mjs';
 
 export const PASS_ENABLED = false;
-export const VERIFIER_VERSION = 's2-verifier-b3a-1';   // -0 = 211e114; -1 = R1 (9a9450b) + follow-up F1
+export const VERIFIER_VERSION = 's2-verifier-b3a-2';   // -0 = 211e114; -1 = R1 (9a9450b) + F1; -2 = PR-1 (B3A-N5..N8)
 /** Trusted case → actor table (from the locked matrix preconditions); not taken from Adapter code. */
 export const CASE_ACTORS = Object.freeze({ 'POC-001': 'ACTOR-TEACHER', 'POC-002': 'ACTOR-OTHER', 'POC-008': 'ACTOR-TEACHER', 'POC-009': 'ACTOR-SC01-TEACHER' });
 export const PAYLOAD = Object.freeze(['adapter-claim.json', 'isolation.json', 'run.json', 'runner-log.jsonl', 'state-post.json', 'state-pre.json', 'trace-back.jsonl', 'trace-front.jsonl']);
@@ -84,6 +84,16 @@ function verifyPackageUnguarded(packageBytes, trusted) {
   if (t.namespaceTerminated !== true || t.remainingAdapterProcesses !== 0 || t.exportAfterTermination !== true) blocked('ADAPTER_TERMINATION_UNVERIFIED');
   if (!Array.isArray(iso.controlViolations) || iso.controlViolations.length) blocked('CONTROL_PROTOCOL_VIOLATION');
   if (iso.adapterReady !== true) blocked('ADAPTER_NOT_READY');
+  // B3A-N7: the launch's host path map is recorded with a digest; on a supported platform it must be present,
+  // self-consistent, and /usr must hold only well-formed /usr entries that include every USR_BINARIES file
+  const pm = iso.pathMap;
+  if (!unverifiable) {
+    const files = isPlainObj(pm) && Array.isArray(pm.usrFiles) ? pm.usrFiles : null;
+    const filesOk = !!files && files.every((f) => isPlainObj(f) && typeof f.inside === 'string' && f.inside.startsWith('/usr/') && !f.inside.includes('/../') && typeof f.source === 'string' && /^[0-9a-f]{64}$/.test(f.sha256))
+      && new Set(files.map((f) => f.inside)).size === files.length && USR_BINARIES.every((b) => files.some((f) => f.inside === b));
+    if (!filesOk || typeof iso.pathMapDigest !== 'string' || !/^[0-9a-f]{64}$/.test(iso.pathMapDigest) || pathMapDigest(pm) !== iso.pathMapDigest
+      || typeof pm.nodeBinary !== 'string' || !/^[0-9a-f]{64}$/.test(pm.nodeBinarySha256 ?? '')) blocked('PATH_MAP_INVALID');
+  }
   if (!unverifiable) {
     // B3A-N1: every required ID must be an OWN key holding a plain object with ok === true
     const sc = iso.selfCheck;
@@ -133,7 +143,7 @@ function buildStatement({ trusted, run, iso, pkg, out, claim }) {
     run: { runId: trusted.runId, runAttempt: trusted.runAttempt, attestationNonce: trusted.attestationNonce, ownershipNonceSha256: run.ownershipNonceSha256, nonceWrittenAt: run.nonceWrittenAt, startedAt: run.startedAt, finishedAt: run.finishedAt },
     package: { artifactId: run.artifactId, packageSha256: trusted.packageSha256, manifestSha256: trusted.manifestSha256, producerJob: 'local-b3a' },
     environment: run.environment,
-    isolation: { platformSupported: iso.platformSupported === true, selfCheck: iso.selfCheck, termination: iso.adapterTermination },
+    isolation: { platformSupported: iso.platformSupported === true, selfCheck: iso.selfCheck, termination: iso.adapterTermination, pathMapDigest: typeof iso.pathMapDigest === 'string' ? iso.pathMapDigest : null },
     artifacts: { traceFront: fd('trace-front.jsonl'), traceBack: fd('trace-back.jsonl'), statePre: fd('state-pre.json'), statePost: fd('state-post.json'), runnerLog: fd('runner-log.jsonl'), evidenceFiles: [fd('adapter-claim.json'), fd('isolation.json'), fd('run.json')] },
     reconciliation: out.reconciliation,
     observed: { canonical: out.observedCanonical, canonicalDigest: out.observedCanonical ? sha(stableJson(out.observedCanonical)) : null, blockedFields: out.contract?.blockedFields?.fields || [] },

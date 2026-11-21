@@ -794,3 +794,95 @@
 - 未解決（B3b 前處理）：B3A-N5～N8、NOTE-c。
 - 使用者決策：`未核准`（待驗收與合併決策）
 
+
+### PR #8 合併與負責人決定（2026-11-21）
+
+- 負責人回覆「1.合併 2.全部開始」。Claude 依明確批准合併 PR #8：merge `322f65b0373c1fda0f040cc0d249c930da0a6a7e`（Head `493feb86`，同 Head CI run 44903688999 success）。
+- 「全部開始」的範圍經負責人確認：
+  - Q-1（D-17）、Q-2、Q-3 採用 `S2B2-B3-DECISION-SUMMARY.md` B 節的推薦；
+  - **分兩個 PR**：PR-1 先處理 B3A-N5～N8（只在本機，不碰 workflow；NOTE-c 分開追蹤，見下方）；合併後 PR-2 才做 B3b（`attest.yml`、批准紀錄、錨定清單）；
+  - Q-3 Actions artifact 保存天數：**30 天**。
+- 仍待負責人處理（Claude 不代設）：錨定 digest、`CMN_S2_TRUSTED_TOOLCHAIN_SHA`、`CMN_S2_SIGNING_POLICY_BLOB`。完成前結果一律不得 `PASS`。
+- Q-3 的「可下載範圍」：repository 為 public；artifact 的實際存取範圍在 B3b 實作時核對並回報，不以推定代替。
+
+## S2-B2 第 3 批 B3b 前修正 PR-1（B3A-N5～N8）
+
+- Base SHA：`322f65b0373c1fda0f040cc0d249c930da0a6a7e`（PR #8 合併）
+- Reviewed Head SHA：`[尚未審查]`
+- 風險等級（初評）：**L3**（Verifier、reconcile、沙箱設定與自我檢查變更）
+- 詳細內容：`S2B2-B3A-REPORT.md` §7
+
+| ID | 處理 | 位置 |
+|---|---|---|
+| B3A-N5 | 已修 | `src/b3/package.mjs`（重新序列化後位元組必須相同，`ARTIFACT_NONCANONICAL`） |
+| B3A-N6 | 已修 | `src/b3/reconcile.mjs`（完整 `resourceRef`、null 順序、`claimedScope`、每筆稽核對應一筆 PATCH） |
+| B3A-N7 | 已修 | `src/b3/isolation-policy.mjs`、`sandbox.mjs`、`selfcheck-host.mjs`、`sandbox-check/selfcheck.mjs`、`verifier.mjs`、`test/b3-run.mjs`、schema 草案；**configDigest 改為 `18d9e21f…`** |
+| B3A-N8 | 已修 | `src/b3/case-input.mjs`（`buildCaseInput()`：`case.json` 只含該案例 actor 的 token）；`test/b3-run.mjs` |
+| NOTE-c | 原文缺失，待確認 | 只有編號；不推測內容、不據此修改程式、不作為獨立阻擋條件 |
+
+- 範圍：`PASS_ENABLED`、`passPossible` 仍為 false；Stage 1、錨定、CI、workflow、repository variable、OIDC 未變更。
+- 使用者決策：`未核准`
+
+### NOTE-c 的處理方式（負責人指示，2026-11-21）
+
+- NOTE-c 目前只有編號，缺少原文，狀態標為「**原文缺失，待確認**」。
+- 不推測內容、不據此修改程式、不把它當成獨立的阻擋條件。之後找到原文，再補上具體要求。
+- B3A-N5～N8 另有明確描述，與 NOTE-c **分開追蹤**。上方 F1 紀錄中「B3A-N5～N8、NOTE-c」並列的寫法，以本節為準。
+- F1 增量複驗「通過」的結論不變。
+
+### PR-1 審查 R1（ChatGPT）與回應
+
+- Reviewed Head：`30f4cccf573279a192a672cc26048e6f99678c5e`（最新 Head `501d2d71` 只多 NOTE-c 的文件更正）
+- 結論：**CHANGES REQUESTED**
+  - N5、N8：本輪可結案；
+  - N7：本機實作方向與證據可接受。`pathMapDigest` 目前只檢查自洽與形狀，不能宣稱已獨立驗證 host 實際來源；hosted 驗收仍待後續；
+  - N6：**PR1-REV001（MEDIUM）**：稽核 PATCH 的內容沒有和匯出的狀態對帳（審查者以內容矛盾的封裝重現：仍為 `UNATTESTED`）。
+- 審查者獨立執行：b3-unit 27 pass／0 fail／0 todo；manifest 91／91；封裝重播 15／15。重播的 trusted 值由作者交付的材料重建，不是來源認證。
+- 其他：N5 的 256 MiB 是輸入上限，不代表峰值記憶體；本輪沒有做上限效能驗收。
+
+| ID | 處理（Claude） | 位置 |
+|---|---|---|
+| PR1-REV001 | 已修 | `src/trace-proxy.mjs`（結構化 `query`）；`src/b3/reconcile.mjs`（只允許可觀察的建立寫入、嚴格解碼、逐欄比對、遮罩投影） |
+
+- 只修 PR1-REV001；N5／N7／N8 與既有行為維持不變。
+- 使用者決策：`未核准`
+
+### PR-1 R1 增量複驗（ChatGPT）與回應
+
+- Reviewed Head：`18c6e7c80b1eddca2570f98729a87606aa7d0daf`（增量 Base `30f4ccc`）
+- 結論：修正後再複驗，暫不合併。
+  - PR1-REV001 **已關閉**：審查者獨立重跑前輪反例，現在判 `BLOCKED AUDIT_UNRECONCILED`。
+  - 新發現 **PR1-R1-REV001（MEDIUM／P2）**：query 的參數名稱可以繞過遮罩，進入證據紀錄。審查者以 `queryOf → maskValue → JSON.stringify` 重現（全部是虛構資料）；HTTP 端到端只以原始碼確認。
+- 審查者獨立執行：b3-unit 29／0／0；manifest 91／91；封裝重播 15／15；CI run 44906499146 對應同一 Head。
+
+| ID | 處理（Claude） | 位置 |
+|---|---|---|
+| PR1-R1-REV001 | 已修 | `src/trace-proxy.mjs` 的 `queryOf`（允許清單投影） |
+
+- 只修 PR1-R1-REV001；PR1-REV001 的逐欄對帳與 create-only 驗證保留不變。
+- 使用者決策：`未核准`
+
+### PR-1 R2 增量複驗（ChatGPT）
+
+- Reviewed Head：`8ab69e1d057f3d5ad3207d177cf81ba0c742592e`（增量 Base `18c6e7c`；GitHub 增量 5 個檔案：3 份文件、`trace-proxy.mjs`、`b3-unit.test.mjs`）
+- 結論：**R2 增量程式審查通過，沒有新的阻擋項目；可交使用者驗收與合併決策。** 這不代表審查者獨立完成了全部端到端測試，也不是合併授權。
+  - PR1-R1-REV001（query 參數名稱未遮罩）：**關閉**；
+  - PR1-REV001（稽核 PATCH 內容未對帳）：維持關閉。
+- 審查者獨立結果：
+  - 附件 12 個 SHA-256 一致；manifest 91／91 一致；Verifier 重播 15／15 一致；
+  - 前輪 PATCH 反例仍為 `BLOCKED`（`audit write body missingField:auditId`）；
+  - CI run 44908505531 success，對應同一 Head；
+  - b3-unit：32 項中 31 pass、**1 fail**。失敗的是需要本機網路的 JSONL 端到端測試：審查環境的本機連線回報 `EACCES 127.0.0.1`，讀到 0 筆紀錄。審查者不據此認定程式有缺陷，**也不把這項記為獨立通過**。
+- 只有作者證據（審查者未重跑）：乾淨 checkout 的 s2:test 97／0／0、s2:b3 31／31、mutation 31／31、還原後 b3-unit 32 pass、schema 24 個拒絕案例與 15 份 statement；Linux 隔離與 Emulator。
+- 殘餘風險（不列為阻擋項目）：
+  - query 的 `fieldPaths` 允許識別字形式的值，`pageSize` 允許有限長度的數字，之後再經過 masker。無法辨識所有「看起來像正常識別字、但沒有前綴」的不透明秘密，**不得宣稱任意內容都不會被記錄**；沿用既有的保留事項；
+  - 本輪沒有重新認證所有 body／response 的資料來源；
+  - manifest 一致與重播只證明內部一致，不證明可信的執行來源。
+- 其他保留：
+  - `PASS_ENABLED=false`；POC-001／002／008 最多 `UNATTESTED`，POC-009 `BLOCKED`；
+  - N7 `pathMapDigest` 只是自洽檢查；
+  - N5 的輸入上限不代表峰值記憶體已驗收；
+  - NOTE-c 仍是「原文缺失，待確認」；
+  - 缺少的 NOTE ①～⑦ 與 X1～X10 沒有執行。
+- 使用者決策：`待決`（PR #9 驗收與合併）
+

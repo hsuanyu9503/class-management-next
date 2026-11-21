@@ -31,6 +31,10 @@ const out = {
   dev: fs.readdirSync('/dev').sort(),
   env: Object.keys(process.env).sort(),
   mounts: fs.readFileSync('/proc/self/mountinfo', 'utf8').trim().split('\n').map((l) => l.split(' ')[4]).sort(),
+  // B3A-N7: per-mount options, the root listing and every file under /usr
+  mountOptions: Object.fromEntries(fs.readFileSync('/proc/self/mountinfo', 'utf8').trim().split('\n').map((l) => { const f = l.split(' '); return [f[4], f[5]]; })),
+  rootEntries: fs.readdirSync('/').sort(),
+  usrFiles: (() => { const out = []; const walk = (d) => { for (const e of fs.readdirSync(d, { withFileTypes: true })) { const p = `${d}/${e.name}`; if (e.isDirectory()) walk(p); else out.push(e.isFile() ? p : `${p} (not a regular file)`); } }; walk('/usr'); return out.sort(); })(),
   outputChannels: input.outputChannels.map((p) => [p, exists(p)]),
 };
 for (const e of input.endpoints) out.tcp[e.port] = await tcp(e.port);

@@ -34,6 +34,36 @@ function readBody(req) {
  *  entry). On the front proxy, GET /__entry_probe is answered locally (204) and never forwarded, so the
  *  isolation self-check can prove the entry is reachable without creating API traffic or audit records. */
 export const ENTRY_PROBE_PATH = '/__entry_probe';
+/** PR1-REV001 / PR1-R1-REV001: the query string as a SAFE PROJECTION, in order, duplicates kept, one single-key
+ *  object per parameter. Parameter NAMES and VALUES come from the caller and can carry anything (the masker
+ *  keeps object keys), so nothing caller-chosen is copied unless it is on this allow-list:
+ *   - a known name whose value matches that name's rule        → { name: value }
+ *   - a known name whose value is opaque or fails the rule      → { name: { valueRecorded: false } }
+ *   - any other name                                            → { unknownParameter: { valueRecorded: false } }
+ *  Extra, duplicate or invalid parameters therefore stay visible (and rejectable) without their text. */
+const NOT_RECORDED_VALUE = Object.freeze({ valueRecorded: false });
+const FIELD_PATH_RE = /^[A-Za-z_][A-Za-z0-9_]{0,63}$/;
+export const QUERY_ALLOWLIST = Object.freeze({
+  'currentDocument.exists': (v) => v === 'true' || v === 'false',
+  pageSize: (v) => /^[0-9]{1,4}$/.test(v),
+  pageToken: () => false,                                     // opaque: name kept, value never recorded
+  key: (v) => v === 'emulator-local' || v === 'fake-api-key-for-emulator',
+  'updateMask.fieldPaths': (v) => FIELD_PATH_RE.test(v),
+  'mask.fieldPaths': (v) => FIELD_PATH_RE.test(v),
+});
+export const MAX_QUERY_PARAMS = 32;
+export function queryOf(url) {
+  const u = String(url); const i = u.indexOf('?');
+  if (i < 0) return [];
+  const out = [];
+  for (const [k, v] of new URLSearchParams(u.slice(i + 1))) {
+    if (out.length === MAX_QUERY_PARAMS) { out.push({ moreParameters: { valueRecorded: false } }); break; }
+    if (!Object.hasOwn(QUERY_ALLOWLIST, k)) out.push({ unknownParameter: NOT_RECORDED_VALUE });
+    else out.push({ [k]: QUERY_ALLOWLIST[k](v) ? v : NOT_RECORDED_VALUE });
+  }
+  return out;
+}
+
 export function createTraceProxy({ role, route, masker, file = null, port, host = '127.0.0.1', socketPath = null }) {
   const entries = [];
   let seq = 0;
@@ -64,7 +94,7 @@ export function createTraceProxy({ role, route, masker, file = null, port, host 
       if (!res.headersSent) res.writeHead(502, { 'content-type': 'application/json' });
       res.end(resText);
     } finally {
-      record({ role, seq: ++seq, traceId, at: new Date(started).toISOString(), durationMs: Date.now() - started, method: req.method, path: req.url.split('?')[0], authorizationRef: maskAuthorization(req.headers.authorization), requestBody: role === 'front' ? traceableRequestBody(parseStrict(reqText)) : parseJson(reqText), status, responseBody: parseJson(resText) });
+      record({ role, seq: ++seq, traceId, at: new Date(started).toISOString(), durationMs: Date.now() - started, method: req.method, path: req.url.split('?')[0], query: queryOf(req.url), authorizationRef: maskAuthorization(req.headers.authorization), requestBody: role === 'front' ? traceableRequestBody(parseStrict(reqText)) : parseJson(reqText), status, responseBody: parseJson(resText) });
     }
   });
   return {

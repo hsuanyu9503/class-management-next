@@ -139,4 +139,26 @@ A17（不安全封裝）與其他純函式規則在 `test/b3-unit.test.mjs`（8 
 
 - 範圍：`PASS_ENABLED`、`passPossible` 仍為 false；沙箱設定與 `configDigest` 不變。
 - 審查者探針 `S2B2-B3A-R1-reviewer-probes.mjs`（X1～X10）沒有傳到 Claude 的環境，**未執行**。
-- B3A-N5～N8 與 NOTE-c 保留到 B3b 前。
+- B3A-N5～N8 保留到 B3b 前（見 §7）。NOTE-c：原文缺失，待確認，與 N5～N8 分開追蹤。
+
+## 7. B3b 前修正 PR-1（B3A-N5～N8）
+
+依據：PR #8 合併 `322f65b0373c1fda0f040cc0d249c930da0a6a7e`。負責人決定：B3b 分兩個 PR，PR-1 先處理 B3A-N5～N8（只在本機，不碰 workflow）；Q-3 保存天數 30 天（見 REVIEW_LOG）。Verifier 版本 `s2-verifier-b3a-2`。
+
+| ID | 問題 | 修正 | 影響 | 測試 |
+|---|---|---|---|---|
+| **B3A-N5** | 安全讀取器接受 tar 結束標記後的附加內容，以及其他非標準的序列化 | `readPackageSafe` 最後以 `writePackage()` 重新序列化 payload，manifest 與整包位元組都必須完全相同，否則 `ARTIFACT_NONCANONICAL`。涵蓋結尾附加內容、缺少的結束標記、非 0 的 mtime、權限、uname、payload 順序、manifest 的 JSON 文字 | 封裝格式本來就由 `writePackage()` 產生，合法封裝不受影響 | `B3A-N5 (P6)`（原本的 todo 改為正式測試）；`B3A-N5: every non-canonical serialisation…`；`s2:b3`「N5 bytes appended…」 |
+| **B3A-N6** | 稽核紀錄只比對 `resourceRef` 的最後一段；null 欄位、`claimedScope`、稽核文件與 back PATCH 的對應沒有檢查 | reconcile：`resourceRef` 必須是目標查找唯一回傳文件的**完整路徑**（由 pre 狀態以 `OPERATIONS` 的 collection／idField 重算，有歧義則拒絕）；null 欄位順序（allow 必須四欄齊全；`authUid` 為 null 時 principal 與 resource 也必須為 null；principal 為 null 時 resource 必須為 null）；`claimedScope` 與判定一致（allow 必須等於路徑 scope；`SCOPE_CLAIM_MISMATCH` 必須不同；`SCOPE_CLAIM_MISSING` 必須不存在）；每筆新稽核文件必須正好對應同一 trace、同一路徑、狀態 200 的一筆 back PATCH | 誠實案例與攻擊判定不變。A1/A2 降級沙箱多了一個同代碼（`AUDIT_UNRECONCILED`）的細節 | `B3A-N6: audit fields are bound to the request…`（13 種違規＋3 個合法的 deny 對照組） |
+| **B3A-N7** | 沙箱掛入 host 的整個 `/usr` 與 `/etc`、整個 node 安裝目錄；只檢查掛載目標，不檢查掛載選項；pathMap 不在任何 digest 中 | `/usr` 改為唯讀 tmpfs，只複製 `USR_BINARIES`（env、rmdir、setpriv、umount）以及這些程式與 node 的 `ldd` 函式庫；**不掛 `/etc`**；`/opt/node` 只綁定 node 執行檔。自我檢查 `MOUNT_ALLOWLIST` 加查每個掛載的模式與 flags、根目錄清單、`/usr` 的檔案集合。FS 隱藏檢查加入更多 host 路徑：整個 runs 目錄、`test`、`scripts`、`node_modules`、`poc/stage1`、node 安裝的 `lib`、`/etc`、`.github`。`pathMap`（含每個複製檔與 node 執行檔的 SHA-256）與 `pathMapDigest` 寫入 `isolation.json` 與 statement；Verifier 檢查一致性與內容規則（`PATH_MAP_INVALID`） | **configDigest 改變**：`5151d6d4…` → `18d9e21f0fbdbc3a48aff834b6b6e21fdb536e339cb0b453cb3297baca9bb7db`（沙箱設定本身改變，這是預期的）。`pathMapDigest` 取決於 host，不納入 configDigest。statement schema 草案新增必填的 `isolation.pathMapDigest`（平台不支援時可為 null）。沙箱內沒有 sudo，`NO_SUDO` 觀察值為 `ENOENT`，正向控制（host 可提權）仍成立 | `B3A-N7: rootfs has no host /usr or /etc tree…`；`B3A-N7: pathMapDigest covers…`（7 種錯誤的 path map）；`s2:b3` 兩個 A15 path map 變體 |
+| **B3A-N8** | `case.json` 含有所有 actor 的 token | `src/b3/case-input.mjs` 的 `buildCaseInput()` 只放這個案例 actor 的 token（取自可信的 `CASE_ACTORS` 表，own-key 查表）；找不到 actor 或 token 時停止 | Adapter 本來就只用這個 actor | `B3A-N8: case input carries only the case actor's token`；`s2:b3`「N8 case.json holds only the case actor's token」 |
+
+| **PR1-REV001**（PR-1 審查，MEDIUM） | N6 只檢查稽核 PATCH 的 trace、路徑與狀態，沒有比對寫入的內容；back trace 也沒有記錄 query，看不到 `currentDocument.exists=false` | trace 代理以結構化方式記錄 query（每個參數一個單鍵物件，保留順序與重複，經同一個 masker 遮罩）。reconcile 對稽核 PATCH：(1) 必須是可觀察的建立寫入：query 正好是 `currentDocument.exists=false`，沒有 updateMask 等其他參數；trace 沒有 query 時拒絕，不推定已執行；(2) body 嚴格解碼：只允許 `{ fields }`、只允許稽核欄位、每個值只能是 `stringValue`（字串）或 `nullValue`（null）；必填 10 欄；(3) 解碼後與 state-post 的稽核紀錄逐欄相等，兩側欄位集合也必須相同；`auditId` 必須等於路徑末段、`traceId` 等於 trace、`policyVersion` 等於 API 的版本。遮罩投影：trace 在 Firestore 編碼層遮罩，state 在解碼後遮罩，兩側使用同一個 masker，所以被遮罩的欄位兩側都是遮罩字串，照樣逐欄比較，不會整筆略過。不符時判 `AUDIT_UNRECONCILED` | 誠實案例與攻擊判定不變（含 deny、503）。trace 格式新增 `query` 欄位 | `PR1-REV001 (reviewer probe)…`（審查者的重現與對照組）；`PR1-REV001: audit write content is compared field by field…`（逐欄不符、缺欄、未知欄位、型別、body 形狀、`auditId`／`policyVersion`、6 種 query、遮罩投影）；`s2:b3`「PR1-REV001 audit PATCH content contradicts…」 |
+
+| **PR1-R1-REV001**（PR-1 R1 複驗，MEDIUM） | PR1-REV001 新增的 query 紀錄直接把呼叫者給的參數名稱當物件 key，masker 保留 key，所以 JWT、姓名、email 放在參數名稱時會原樣寫入 trace（失敗的請求也會） | `queryOf` 改為允許清單投影：只有已知名稱（`currentDocument.exists`、`pageSize`、`pageToken`、`key`、`updateMask.fieldPaths`、`mask.fieldPaths`）會保留，值也必須符合該名稱的規則，否則記成 `{ valueRecorded: false }`；其他名稱一律記成 `{ unknownParameter: { valueRecorded: false } }`，不保留原文；保留順序與重複；最多 32 個，超過時加一筆 `moreParameters` | 誠實流量只用到允許清單內的參數，fixture 的 query 在新投影下完全相同，所以不需要重新產生。多出、重複或不合法的參數仍會使稽核 PATCH 判 `AUDIT_UNRECONCILED` | `PR1-R1-REV001: queryOf is an allow-list projection…`；`…keep the audit PATCH rejectable`；`…the JSONL the trace proxy actually writes…`：實際啟動 front、back 以及上游中斷（502）的 trace 代理，送出 11 種惡意 query（虛構 JWT／姓名／email 放在名稱或值、URL 編碼、重複、額外參數），再讀回**實際寫出的 JSONL** 檢查 |
+
+- PR1-REV001 的測試是把**內部矛盾的證據**封存後，再一致地提供 digest：測的是 Verifier 自己的對帳能力，不是宣稱不受信任的 Adapter 能改動可信 Runner 的 digest。
+- 單元測試的誠實 fixture 已重新產生（見 fixture README）：第一次是因為沙箱設定與 path map 改變，第二次是因為 PR1-REV001 讓 back trace 記錄 query。
+- `s2:b3` 由 26 項增為 31 項：N8、兩個 N7 變體、PR1-REV001、N5。原 26 項的判定（結果＋reason code）不變。
+- §3 中「`/etc` 以唯讀方式掛入沙箱」一項由 N7 取代。
+- 範圍：`PASS_ENABLED`、`passPossible` 仍為 false；Stage 1、錨定、CI、workflow 未變更。
+- NOTE-c：**原文缺失，待確認**（只有編號）。依負責人指示不推測內容、不據此修改程式，也不作為獨立阻擋條件；NOTE ①～⑦ 的原文也沒有傳到 Claude 的環境，本 PR 只依 REVIEW_LOG 的 N5～N8 描述處理。

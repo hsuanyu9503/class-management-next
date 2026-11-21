@@ -32,7 +32,7 @@ test('isolation policy: 22 check IDs; digest is stable and changes with any laun
   }
   assert.deepEqual(unshareArgs(sandboxConfig()), ['--ipc', '--mount', '--net', '--pid', '--uts', '--fork']);
   assert.ok(!unshareArgs(sandboxConfig({ namespaces: ['ipc', 'mnt', 'pid', 'uts'] })).includes('--net'));
-  const s = initScript(sandboxConfig(), { nodeDir: '/n', adapterDir: '/a', checkDir: '/c', inputDir: '/i', entryDir: '/e' }, '/adapter/main.mjs');
+  const s = initScript(sandboxConfig(), { nodeBinary: '/n/bin/node', adapterDir: '/a', checkDir: '/c', inputDir: '/i', entryDir: '/e', usrFiles: [{ inside: '/usr/bin/env', source: '/usr/bin/env' }] }, '/adapter/main.mjs');
   for (const frag of ['pivot_root . oldroot', '--reuid 65534', '--no-new-privs', '--bounding-set=-all', '/usr/bin/env -i', "remount,bind,ro,nodev,nosuid \"$R\"'/adapter'", 'CMN_INIT_FDS']) assert.ok(s.includes(frag), frag);
 });
 
@@ -90,11 +90,17 @@ test('Verifier: content binding and payload set are checked before anything else
 
 // ---- reconciliation on a synthetic world
 const T = '2026-11-21T00:00:10.000Z';
-const base = () => ({
-  front: [{ role: 'front', traceId: 'TR-1', at: T, status: 200, requestBody: { op: 'attendanceEntry.read', target: { attendanceEntryId: 'E1' } }, authorizationRef: { claimedAuthUid: 'U1' } }],
-  back: [{ role: 'back', traceId: 'TR-1', at: T, method: 'GET', path: '/v1/projects/p/databases/(default)/documents/authBindings/U1' }, { role: 'back', traceId: 'TR-1', at: T, method: 'PATCH', path: '/v1/projects/p/databases/(default)/documents/workspaces/W/auditLog/a1' }],
-  pre: { 'authBindings/U1': { principalId: 'P1' }, 'workspaces/W/classes/C/attendanceSessions/S/entries/E1': { status: 'N' }, '_attestationRuns/1': { nonce: 'n' } },
-  post: { 'authBindings/U1': { principalId: 'P1' }, 'workspaces/W/classes/C/attendanceSessions/S/entries/E1': { status: 'N' }, '_attestationRuns/1': { nonce: 'n' }, 'workspaces/W/auditLog/a1': { traceId: 'TR-1', authUid: 'U1', principalId: 'P1', action: 'attendanceEntry.read', decision: 'allow', reasonCode: 'OK', resourceRef: 'workspaces/W/classes/C/attendanceSessions/S/entries/E1', workspaceId: 'W' } },
+/** Firestore encoding of an audit record as the API's store writes it (strings and nulls only). */
+const encAudit = (o) => ({ fields: Object.fromEntries(Object.entries(o).map(([k, v]) => [k, v === null ? { nullValue: null } : { stringValue: v }])) });
+/** The synthetic audit PATCH writes WHATEVER post holds at reconcile time (getter), so tests that change the
+ *  post record keep testing their own rule; PR1-REV001 tests override requestBody / query explicitly. */
+const withAuditPatch = (b) => { const patch = b.back[1]; patch.query = [{ 'currentDocument.exists': 'false' }];
+  Object.defineProperty(patch, 'requestBody', { configurable: true, enumerable: true, get: () => encAudit(b.post['workspaces/W/auditLog/a1'] || {}) }); return b; };
+const base = () => withAuditPatch({
+  front: [{ role: 'front', traceId: 'TR-1', at: T, status: 200, requestBody: { op: 'attendanceEntry.read', target: { attendanceEntryId: 'E1' }, claimedScope: { workspaceId: 'W', classId: 'C' } }, authorizationRef: { claimedAuthUid: 'U1' } }],
+  back: [{ role: 'back', traceId: 'TR-1', at: T, method: 'GET', path: '/v1/projects/p/databases/(default)/documents/authBindings/U1' }, { role: 'back', traceId: 'TR-1', at: T, method: 'PATCH', status: 200, path: '/v1/projects/p/databases/(default)/documents/workspaces/W/auditLog/a1' }],
+  pre: { 'authBindings/U1': { principalId: 'P1' }, 'workspaces/W/classes/C/attendanceSessions/S/entries/E1': { attendanceEntryId: 'E1', status: 'N' }, '_attestationRuns/1': { nonce: 'n' } },
+  post: { 'authBindings/U1': { principalId: 'P1' }, 'workspaces/W/classes/C/attendanceSessions/S/entries/E1': { attendanceEntryId: 'E1', status: 'N' }, '_attestationRuns/1': { nonce: 'n' }, 'workspaces/W/auditLog/a1': { auditId: 'a1', at: T, policyVersion: 's2b1-v0.7', traceId: 'TR-1', authUid: 'U1', principalId: 'P1', action: 'attendanceEntry.read', decision: 'allow', reasonCode: 'OK', resourceRef: 'workspaces/W/classes/C/attendanceSessions/S/entries/E1', workspaceId: 'W' } },
   runnerLog: [], caseWindow: { start: Date.parse('2026-11-21T00:00:00Z'), end: Date.parse('2026-11-21T00:01:00Z') }, markerPath: '_attestationRuns/1', expectedMarker: { nonce: 'n' },
 });
 const probs = (mut) => { const b = base(); mut(b); return reconcile(b).problems.map((x) => x.split(':')[0]); };
@@ -224,17 +230,37 @@ test('B3A-N4: platformSupported comes from the trusted input; the unverifiable b
   assert.equal(missing.result, 'BLOCKED'); assert.ok(codes(missing).includes('TRUSTED_INPUT_MISSING'));
 });
 
-test('B3A-N5 (P6): bytes appended after the tar end-of-archive marker are rejected by the safe reader', { todo: 'B3A-N5 deferred: strict tar parsing (re-serialisation must be byte-identical)' }, () => {
+test('B3A-N5 (P6): bytes appended after the tar end-of-archive marker are rejected by the safe reader', () => {
   const p = writePackage({ 'a.json': '{}' });
-  assert.equal(code(() => readPackageSafe(Buffer.concat([p.packageBytes, Buffer.from('trailing')]))), 'ARTIFACT_FORMAT');
+  assert.equal(code(() => readPackageSafe(p.packageBytes)), 'NO_ERROR');   // control: canonical package
+  for (const tail of [Buffer.from('trailing'), Buffer.alloc(512, 0), Buffer.alloc(1, 0)]) assert.equal(code(() => readPackageSafe(Buffer.concat([p.packageBytes, tail]))), 'ARTIFACT_NONCANONICAL');
+  assert.equal(code(() => readPackageSafe(p.packageBytes.subarray(0, p.packageBytes.length - 512))), 'ARTIFACT_NONCANONICAL');   // short end marker
+});
+
+test('B3A-N5: every non-canonical serialisation of a valid payload is refused (headers, order, manifest text)', () => {
+  const p = writePackage({ 'a.json': '{}', 'b.json': '[]' }); const b = Buffer.from(p.packageBytes);
+  const reheader = (buf, off, field, val) => { const x = Buffer.from(buf); x.write(val, off + field); let sum = 0; for (let i = 0; i < 512; i++) sum += (i >= 148 && i < 156) ? 32 : x[off + i]; x.write(sum.toString(8).padStart(6, '0') + '\0 ', off + 148); return x; };
+  assert.equal(code(() => readPackageSafe(reheader(b, 0, 136, '00000000001\0'))), 'ARTIFACT_NONCANONICAL');   // mtime ≠ 0
+  assert.equal(code(() => readPackageSafe(reheader(b, 0, 100, '0000755\0'))), 'ARTIFACT_NONCANONICAL');       // mode ≠ 0644
+  assert.equal(code(() => readPackageSafe(reheader(b, 0, 265, 'root'))), 'ARTIFACT_NONCANONICAL');            // uname set
+  // same files, payload entries in reverse order
+  const m = JSON.parse(p.manifestBytes); const raw = rawTar([{ name: 'manifest.json', content: p.manifestBytes.toString() }, { name: 'b.json', content: '[]' }, { name: 'a.json', content: '{}' }]);
+  assert.equal(code(() => readPackageSafe(raw)), 'ARTIFACT_NONCANONICAL');
+  // manifest with the same content but different JSON text (whitespace)
+  const pretty = JSON.stringify(m, null, 1);
+  const raw2 = rawTar([{ name: 'manifest.json', content: pretty }, { name: 'a.json', content: '{}' }, { name: 'b.json', content: '[]' }]);
+  assert.equal(code(() => readPackageSafe(raw2)), 'ARTIFACT_NONCANONICAL');
+  // control: rawTar with canonical order and text reproduces writePackage exactly
+  const raw3 = rawTar([{ name: 'manifest.json', content: p.manifestBytes.toString() }, { name: 'a.json', content: '{}' }, { name: 'b.json', content: '[]' }]);
+  assert.ok(raw3.equals(p.packageBytes)); assert.equal(code(() => readPackageSafe(raw3)), 'NO_ERROR');
 });
 
 // ======================================================================= F1 (B3A-R1-N1, NOTE-a, NOTE-b)
 import { VERIFIER_VERSION } from '../src/b3/verifier.mjs';
 
-test('NOTE-b: Verifier version is s2-verifier-b3a-1', () => {
-  assert.equal(VERIFIER_VERSION, 's2-verifier-b3a-1');
-  assert.equal(verifyMod().verifierVersion, 's2-verifier-b3a-1');
+test('NOTE-b: Verifier version is s2-verifier-b3a-2 (PR-1)', () => {
+  assert.equal(VERIFIER_VERSION, 's2-verifier-b3a-2');
+  assert.equal(verifyMod().verifierVersion, 's2-verifier-b3a-2');
 });
 
 test('B3A-R1-N1: non-object top-level JSON is BLOCKED with a named reason and never throws', () => {
@@ -293,4 +319,235 @@ test('NOTE-a: reconcile never treats keys on the prototype chain of pre/post as 
     const p = reconcile(b).problems; assert.ok(p.some((x) => x.startsWith('AUDIT_UNRECONCILED') && x.includes('resourceRef')), JSON.stringify(p)); }
   // control: the same documents as own keys reconcile cleanly
   assert.deepEqual(reconcile(base()).problems, []);
+});
+
+// ======================================================================= PR-1 (B3A-N6): audit ↔ request binding
+test('B3A-N6: audit fields are bound to the request (full resourceRef, null order, claimedScope, one PATCH per audit)', () => {
+  const A = 'workspaces/W/auditLog/a1';
+  const has = (mut, code = 'AUDIT_UNRECONCILED') => { const b = base(); mut(b); const pr = reconcile(b).problems; return pr.some((x) => x.startsWith(code)); };
+  assert.deepEqual(reconcile(base()).problems, []);   // control
+  const cases = {
+    // resourceRef: same last segment, different (real) document → was accepted by the last-segment rule
+    'resourceRef in another class with the same id': (b) => { const o = 'workspaces/W/classes/C2/attendanceSessions/S/entries/E1'; b.pre[o] = { attendanceEntryId: 'OTHER' }; b.post[o] = { attendanceEntryId: 'OTHER' }; b.post[A].resourceRef = o; },
+    'target id matches two documents (ambiguous)': (b) => { const o = 'workspaces/W/classes/C2/attendanceSessions/S2/entries/E9'; b.pre[o] = { attendanceEntryId: 'E1' }; b.post[o] = { attendanceEntryId: 'E1' }; },
+    'unknown op cannot resolve a resource': (b) => { b.front[0].requestBody.op = 'toString'; b.post[A].action = 'toString'; },
+    // null order
+    'allow without resourceRef': (b) => { b.post[A].resourceRef = null; },
+    'authUid null but principal set': (b) => { b.post[A].authUid = null; b.post[A].decision = 'deny'; b.post[A].reasonCode = 'TOKEN_MISSING'; b.front[0].status = 403; },
+    'principal null but resource set': (b) => { b.post[A].principalId = null; b.post[A].decision = 'deny'; b.post[A].reasonCode = 'BINDING_NOT_FOUND'; b.front[0].status = 403; },
+    // claimedScope
+    'allow while the claimed class differs': (b) => { b.front[0].requestBody.claimedScope = { workspaceId: 'W', classId: 'C9' }; },
+    'allow without claimedScope': (b) => { delete b.front[0].requestBody.claimedScope; },
+    'SCOPE_CLAIM_MISMATCH while the claim matches': (b) => { Object.assign(b.post[A], { decision: 'deny', reasonCode: 'SCOPE_CLAIM_MISMATCH' }); b.front[0].status = 403; },
+    'SCOPE_CLAIM_MISSING while a claim is present': (b) => { Object.assign(b.post[A], { decision: 'deny', reasonCode: 'SCOPE_CLAIM_MISSING', resourceRef: null }); b.front[0].status = 403; },
+    // PATCH binding
+    'no back PATCH for the audit': (b) => { b.back = b.back.filter((x) => x.method !== 'PATCH'); },
+    'PATCH to a different audit path': (b) => { b.back[1].path = b.back[1].path.replace('/a1', '/a2'); },
+    'PATCH failed (409)': (b) => { b.back[1].status = 409; },
+  };
+  for (const [n, fn] of Object.entries(cases)) assert.ok(has(fn), n);
+  // controls: consistent deny records reconcile cleanly
+  const mismatchOk = (b) => { Object.assign(b.post[A], { decision: 'deny', reasonCode: 'SCOPE_CLAIM_MISMATCH' }); b.front[0].status = 403; b.front[0].requestBody.claimedScope = { workspaceId: 'W', classId: 'C9' }; };
+  const missingOk = (b) => { Object.assign(b.post[A], { decision: 'deny', reasonCode: 'SCOPE_CLAIM_MISSING', resourceRef: null }); b.front[0].status = 403; delete b.front[0].requestBody.claimedScope; };
+  const tokenOk = (b) => { Object.assign(b.post[A], { decision: 'deny', reasonCode: 'TOKEN_MISSING', authUid: null, principalId: null, resourceRef: null }); b.front[0].status = 403; b.front[0].authorizationRef = null; };
+  for (const [n, fn] of [['mismatch', mismatchOk], ['missing', missingOk], ['token', tokenOk]]) { const b = base(); fn(b); assert.deepEqual(reconcile(b).problems, [], n); }
+});
+
+// ======================================================================= PR-1 (B3A-N7): minimal rootfs + path map
+import { expectedRootEntries, insidePathOf, pathMapDigest, USR_BINARIES, MOUNT_TARGETS } from '../src/b3/isolation-policy.mjs';
+
+test('B3A-N7: rootfs has no host /usr or /etc tree; /usr is a read-only copy of the listed files; node binary only', () => {
+  const cfg = sandboxConfig();
+  assert.ok(!cfg.mounts.some((m) => m.source === 'host:/usr' || m.source === 'host:/etc' || m.target === '/etc'), 'no host /usr or /etc');
+  assert.ok(!MOUNT_TARGETS.includes('/etc') && MOUNT_TARGETS.includes('/opt/node/bin/node') && !MOUNT_TARGETS.includes('/opt/node'));
+  const usr = cfg.mounts.find((m) => m.target === '/usr'); assert.equal(usr.source, 'tmpfs'); assert.equal(usr.mode, 'ro');
+  const pm = { nodeBinary: '/n/bin/node', adapterDir: '/a', checkDir: '/c', inputDir: '/i', entryDir: '/e', usrFiles: [{ inside: '/usr/bin/env', source: '/usr/bin/env' }, { inside: '/usr/lib/x/libc.so.6', source: '/usr/lib/x/libc.so.6' }] };
+  const s = initScript(cfg, pm, '/adapter/main.mjs');
+  for (const frag of ["cp -L '/usr/bin/env' \"$R\"'/usr/bin/env'", "cp -L '/usr/lib/x/libc.so.6' \"$R\"'/usr/lib/x/libc.so.6'", "mount -o remount,ro,nodev,nosuid \"$R\"'/usr'", "touch \"$R\"'/opt/node/bin/node'", "mount --bind '/n/bin/node' \"$R\"'/opt/node/bin/node'"]) assert.ok(s.includes(frag), frag);
+  assert.ok(!/mount --bind '\/usr' /.test(s) && !s.includes("'/etc'"), 'no bind of host /usr or /etc');
+  // the copy happens before the read-only remount
+  assert.ok(s.indexOf("cp -L '/usr/bin/env'") < s.indexOf("mount -o remount,ro,nodev,nosuid \"$R\"'/usr'"));
+  assert.throws(() => initScript(cfg, { ...pm, usrFiles: [{ inside: '/etc/passwd', source: '/etc/passwd' }] }, '/x'), /outside \/usr/);
+  assert.throws(() => initScript(cfg, { ...pm, usrFiles: [] }, '/x'), /no files/);
+  assert.deepEqual(expectedRootEntries(cfg), ['adapter', 'bin', 'check', 'dev', 'entry', 'input', 'lib', 'lib64', 'opt', 'proc', 'sbin', 'usr', 'work']);
+  assert.equal(insidePathOf('/lib/x86_64-linux-gnu/libc.so.6'), '/usr/lib/x86_64-linux-gnu/libc.so.6'); assert.equal(insidePathOf('/lib64/ld-linux-x86-64.so.2'), '/usr/lib64/ld-linux-x86-64.so.2');
+  // the config digest covers the population rule
+  assert.notEqual(configDigest(sandboxConfig({ usrPopulation: { ...cfg.usrPopulation, binaries: [...USR_BINARIES, '/usr/bin/sudo'] } })), configDigest(cfg));
+});
+
+test('B3A-N7: pathMapDigest covers every host source and file digest; the Verifier rejects inconsistent path maps', () => {
+  const iso = JSON.parse(fixFiles['isolation.json']); const pm = iso.pathMap;
+  assert.equal(pathMapDigest(pm), iso.pathMapDigest);
+  for (const mut of [(p) => { p.nodeBinarySha256 = '0'.repeat(64); }, (p) => { p.adapterDir = '/x'; }, (p) => { p.usrFiles[0].sha256 = '1'.repeat(64); }, (p) => { p.usrFiles.pop(); }]) {
+    const p = structuredClone(pm); mut(p); assert.notEqual(pathMapDigest(p), iso.pathMapDigest);
+  }
+  const bad = {
+    'pathMap missing': (i) => { i.pathMap = null; },
+    'digest missing': (i) => { i.pathMapDigest = null; },
+    'digest of another map': (i) => { i.pathMap.adapterDir = '/elsewhere'; },
+    'required binary absent (digest recomputed)': (i) => { i.pathMap.usrFiles = i.pathMap.usrFiles.filter((f) => f.inside !== '/usr/bin/setpriv'); i.pathMapDigest = pathMapDigest(i.pathMap); },
+    'file outside /usr (digest recomputed)': (i) => { i.pathMap.usrFiles.push({ inside: '/etc/shadow', source: '/etc/shadow', sha256: '2'.repeat(64) }); i.pathMapDigest = pathMapDigest(i.pathMap); },
+    'duplicate inside path (digest recomputed)': (i) => { i.pathMap.usrFiles.push({ ...i.pathMap.usrFiles[0] }); i.pathMapDigest = pathMapDigest(i.pathMap); },
+    'traversal (digest recomputed)': (i) => { i.pathMap.usrFiles.push({ inside: '/usr/../etc/passwd', source: '/etc/passwd', sha256: '3'.repeat(64) }); i.pathMapDigest = pathMapDigest(i.pathMap); },
+  };
+  for (const [n, fn] of Object.entries(bad)) { const r = verifyMod(isoMod(fn)); assert.equal(r.result, 'BLOCKED', n); assert.ok(codes(r).includes('PATH_MAP_INVALID'), n); }
+  // unsupported platform: no path map is required (still UNATTESTED ISOLATION_UNVERIFIABLE)
+  const un = verifyMod(isoMod((i) => { i.platformSupported = false; i.selfCheck = null; i.pathMap = null; i.pathMapDigest = null; }), { platformSupported: false });
+  assert.equal(un.result, 'UNATTESTED'); assert.deepEqual(un.reasons, ['ISOLATION_UNVERIFIABLE']);
+  // statement carries the digest
+  assert.equal(verifyMod().statement.isolation.pathMapDigest, iso.pathMapDigest);
+});
+
+// ======================================================================= PR-1 (B3A-N8): actor-only token
+import { buildCaseInput } from '../src/b3/case-input.mjs';
+import { CASE_ACTORS } from '../src/b3/verifier.mjs';
+
+test('B3A-N8: case input carries only the case actor\'s token', () => {
+  const users = { 'ACTOR-TEACHER': { token: 't-teacher' }, 'ACTOR-OTHER': { token: 't-other' }, 'ACTOR-SC01-TEACHER': { token: 't-sc01' } };
+  for (const t of ['POC-001', 'POC-002', 'POC-008', 'POC-009']) {
+    const inp = buildCaseInput({ testId: t, fixtures: {}, users, caseActors: CASE_ACTORS });
+    assert.deepEqual(Object.keys(inp.tokens), [CASE_ACTORS[t]], t); assert.equal(inp.tokens[CASE_ACTORS[t]], users[CASE_ACTORS[t]].token);
+    assert.ok(!JSON.stringify(inp).includes(Object.values(users).map((u) => u.token).find((x) => x !== users[CASE_ACTORS[t]].token)), t);
+  }
+  for (const t of ['POC-999', 'toString', '__proto__', null]) assert.throws(() => buildCaseInput({ testId: t, fixtures: {}, users, caseActors: CASE_ACTORS }), /no trusted actor/, String(t));
+  assert.throws(() => buildCaseInput({ testId: 'POC-001', fixtures: {}, users: { 'ACTOR-OTHER': { token: 'x' } }, caseActors: CASE_ACTORS }), /no trusted actor/);
+});
+
+// ======================================================================= PR1-REV001: audit PATCH content ↔ exported record
+// These probes seal an INTERNALLY CONTRADICTORY package and supply its digests consistently: they test the
+// Verifier's own reconciliation, not an untrusted Adapter changing the trusted Runner's digests.
+import { MASK } from '../src/mask.mjs';
+import { queryOf } from '../src/trace-proxy.mjs';
+
+test('PR1-REV001 (reviewer probe): an audit PATCH body that contradicts the exported record → BLOCKED; control → UNATTESTED', () => {
+  const lines = fixFiles['trace-back.jsonl'].split('\n').filter(Boolean).map((l) => JSON.parse(l));
+  const i = lines.findIndex((e) => e.method === 'PATCH' && /\/auditLog\//.test(e.path));
+  assert.ok(i >= 0); assert.deepEqual(lines[i].query, [{ 'currentDocument.exists': 'false' }]);   // structured query recorded
+  const rebuild = (fn) => { const ls = structuredClone(lines); fn(ls[i]); return { 'trace-back.jsonl': ls.map((e) => JSON.stringify(e)).join('\n') + '\n' }; };
+  const control = verifyMod(rebuild(() => {}));
+  assert.equal(control.result, 'UNATTESTED'); assert.deepEqual(control.reasons, LOCAL_ONLY);
+  const probe = verifyMod(rebuild((e) => { e.requestBody = { fields: { decision: { stringValue: 'deny' }, reasonCode: { stringValue: 'FAKE_REASON' } } }; }));
+  assert.equal(probe.result, 'BLOCKED'); assert.ok(codes(probe).includes('AUDIT_UNRECONCILED'), JSON.stringify(probe.reasons));
+  const oneField = verifyMod(rebuild((e) => { e.requestBody.fields.decision = { stringValue: 'deny' }; }));
+  assert.equal(oneField.result, 'BLOCKED'); assert.ok(oneField.reasons.some((r) => r.includes('content differs') && r.includes('decision')), JSON.stringify(oneField.reasons));
+  const noQuery = verifyMod(rebuild((e) => { delete e.query; }));
+  assert.equal(noQuery.result, 'BLOCKED'); assert.ok(noQuery.reasons.some((r) => r.includes('not an observable create')));
+});
+
+test('PR1-REV001: audit write content is compared field by field, strictly decoded, and must be create-only', () => {
+  const A = 'workspaces/W/auditLog/a1';
+  const run = (fn) => { const b = base(); fn(b); return reconcile(b).problems; };
+  const setBody = (b, body) => Object.defineProperty(b.back[1], 'requestBody', { value: body, enumerable: true, configurable: true, writable: true });
+  const stored = () => base().post[A];
+  assert.deepEqual(run(() => {}), []);   // control (body = encoded post record, query create-only)
+  // every field: a different value in the write → BLOCKED, naming the field
+  for (const k of Object.keys(stored())) {
+    const pr = run((b) => { const d = { ...b.post[A], [k]: `${b.post[A][k]}-X` }; setBody(b, encAudit(d)); });
+    assert.ok(pr.some((x) => x.startsWith('AUDIT_UNRECONCILED') && x.includes('content differs') && x.includes(k)), `${k}: ${pr}`);
+  }
+  // optional field present on one side only
+  assert.ok(run((b) => { setBody(b, encAudit({ ...b.post[A], outcome: 'BACKEND_UNAVAILABLE' })); }).some((x) => x.includes('outcome')));
+  assert.ok(run((b) => { const d = { ...b.post[A] }; delete d.workspaceId; setBody(b, encAudit(d)); }).some((x) => x.includes('workspaceId')));
+  // missing required fields, unknown fields, wrong value types, wrong body shape
+  for (const k of ['auditId', 'at', 'authUid', 'principalId', 'action', 'resourceRef', 'decision', 'reasonCode', 'policyVersion', 'traceId']) {
+    assert.ok(run((b) => { const e = encAudit(b.post[A]); delete e.fields[k]; setBody(b, e); }).some((x) => x.includes(`missingField:${k}`)), k);
+  }
+  const shapes = {
+    'unknown field': (e) => { e.fields.extra = { stringValue: 'x' }; },
+    'integerValue': (e) => { e.fields.decision = { integerValue: '1' }; },
+    'mapValue': (e) => { e.fields.decision = { mapValue: { fields: {} } }; },
+    'two encodings': (e) => { e.fields.decision = { stringValue: 'allow', nullValue: null }; },
+    'stringValue not a string': (e) => { e.fields.decision = { stringValue: 1 }; },
+    'bare string': (e) => { e.fields.decision = 'allow'; },
+  };
+  for (const [n, fn] of Object.entries(shapes)) assert.ok(run((b) => { const e = encAudit(b.post[A]); fn(e); setBody(b, e); }).some((x) => x.startsWith('AUDIT_UNRECONCILED') && x.includes('audit write body')), n);
+  for (const [n, body] of [['no body', null], ['array', []], ['extra top-level key', { ...encAudit(stored()), updateMask: { fieldPaths: ['decision'] } }], ['fields not an object', { fields: [] }]]) {
+    assert.ok(run((b) => setBody(b, body)).some((x) => x.includes('bodyShape')), n);
+  }
+  // auditId must match the document path, traceId the trace, policyVersion the API's
+  assert.ok(run((b) => { b.post[A].auditId = 'other'; }).some((x) => x.includes('auditIdPath')));
+  assert.ok(run((b) => { b.post[A].policyVersion = 's2b1-v0.6'; }).some((x) => x.includes('policyVersion')));
+  // create-only semantics
+  const q = { 'missing (unobservable)': undefined, empty: [], 'exists=true': [{ 'currentDocument.exists': 'true' }], 'updateMask added': [{ 'currentDocument.exists': 'false' }, { 'updateMask.fieldPaths': 'decision' }], 'duplicate': [{ 'currentDocument.exists': 'false' }, { 'currentDocument.exists': 'false' }], 'not structured': 'currentDocument.exists=false' };
+  for (const [n, v] of Object.entries(q)) assert.ok(run((b) => { b.back[1].query = v; }).some((x) => x.includes('not an observable create')), n);
+  // masking projection: masked identically on both sides → equal; masked on one side only → differs
+  assert.deepEqual(run((b) => { b.post[A].authUid = MASK; const e = encAudit(b.post[A]); e.fields.authUid = MASK; setBody(b, e); }).filter((x) => x.includes('content differs')), []);
+  assert.ok(run((b) => { const e = encAudit(b.post[A]); e.fields.authUid = MASK; setBody(b, e); }).some((x) => x.includes('content differs') && x.includes('authUid')));
+  // the proxy's structured query
+  assert.deepEqual(queryOf('/v1/x/auditLog/a?currentDocument.exists=false'), [{ 'currentDocument.exists': 'false' }]);
+  assert.deepEqual(queryOf('/v1/x?a=1&a=2&b='), [{ unknownParameter: { valueRecorded: false } }, { unknownParameter: { valueRecorded: false } }, { unknownParameter: { valueRecorded: false } }]);   // PR1-R1-REV001
+  assert.deepEqual(queryOf('/v1/read'), []);
+});
+
+// ======================================================================= PR1-R1-REV001: query names/values never leak
+import http from 'node:http';
+import { mkdtempSync, readFileSync as rfs, rmSync as rms } from 'node:fs';
+import { tmpdir } from 'node:os';
+import path from 'node:path';
+import { createTraceProxy, MAX_QUERY_PARAMS } from '../src/trace-proxy.mjs';
+import { makeMasker, findLeaks } from '../src/mask.mjs';
+
+const FAKE_JWT = 'eyJhbGciOiJub25lIn0.eyJzdWIiOiJGQUtFX09OTFkifQ.fake_signature';   // fictional
+const FAKE_NAME = '測試姓名甲'; const FAKE_EMAIL = 'fake.person@example.invalid';
+const FAKE_KEY = ['sk', 'live', 'FAKE0000000000'].join('-');   // fictional; built at runtime so the source holds no credential-shaped literal
+const NR = { valueRecorded: false };
+const hostileQueries = () => [
+  `${encodeURIComponent(FAKE_JWT)}=x`, `${encodeURIComponent(FAKE_NAME)}=1`, `${encodeURIComponent(FAKE_EMAIL)}=1`,
+  `token=${encodeURIComponent(FAKE_JWT)}`, `key=${FAKE_KEY}`, `pageToken=${encodeURIComponent(FAKE_EMAIL)}`,
+  `currentDocument.exists=${encodeURIComponent(FAKE_NAME)}`, `updateMask.fieldPaths=${encodeURIComponent(FAKE_JWT)}`,
+  `currentDocument.exists=false&${encodeURIComponent(FAKE_JWT)}=1`, `currentDocument.exists=false&currentDocument.exists=false`,
+  `${'%65%79%4A'}hbGciOiJub25lIn0.x.y=1`,   // percent-encoded "eyJ…" name
+];
+
+test('PR1-R1-REV001: queryOf is an allow-list projection — no caller-chosen name or value is copied', () => {
+  for (const q of hostileQueries()) {
+    const out = queryOf(`/v1/read?${q}`); const text = JSON.stringify(out);
+    for (const secret of [FAKE_JWT, FAKE_NAME, FAKE_EMAIL, FAKE_KEY, 'eyJhbG']) assert.ok(!text.includes(secret), `${q} → ${text}`);
+  }
+  assert.deepEqual(queryOf('/x?currentDocument.exists=false'), [{ 'currentDocument.exists': 'false' }]);
+  assert.deepEqual(queryOf('/x?pageSize=300&pageToken=abc&key=emulator-local'), [{ pageSize: '300' }, { pageToken: NR }, { key: 'emulator-local' }]);
+  assert.deepEqual(queryOf(`/x?currentDocument.exists=false&${encodeURIComponent(FAKE_JWT)}=1`), [{ 'currentDocument.exists': 'false' }, { unknownParameter: NR }]);
+  assert.deepEqual(queryOf(`/x?currentDocument.exists=${encodeURIComponent(FAKE_NAME)}`), [{ 'currentDocument.exists': NR }]);
+  assert.equal(queryOf(`/x?${Array.from({ length: 40 }, (_, i) => `p${i}=1`).join('&')}`).length, MAX_QUERY_PARAMS + 1);
+});
+
+test('PR1-R1-REV001: extra, duplicate or invalid query parameters keep the audit PATCH rejectable', () => {
+  const run = (url) => { const b = base(); b.back[1].query = queryOf(url); return reconcile(b).problems; };
+  assert.deepEqual(run('/p?currentDocument.exists=false'), []);   // normal create stays reconcilable
+  for (const u of [`/p?currentDocument.exists=false&${encodeURIComponent(FAKE_JWT)}=1`, '/p?currentDocument.exists=false&currentDocument.exists=false', `/p?currentDocument.exists=${encodeURIComponent(FAKE_NAME)}`, '/p?currentDocument.exists=false&updateMask.fieldPaths=decision', '/p?']) {
+    assert.ok(run(u).some((x) => x.includes('not an observable create')), u);
+  }
+});
+
+test('PR1-R1-REV001: the JSONL the trace proxy actually writes holds none of the hostile query names/values (incl. failed requests)', async () => {
+  const dir = mkdtempSync(path.join(tmpdir(), 'cmn-q-'));
+  const upstream = http.createServer((req, res) => { req.resume(); res.writeHead(req.url.startsWith('/v1/read') ? 403 : 200, { 'content-type': 'application/json' }); res.end('{"code":"FORBIDDEN"}'); });
+  await new Promise((r) => upstream.listen(0, '127.0.0.1', r));
+  const upOrigin = `http://127.0.0.1:${upstream.address().port}`;
+  const masker = makeMasker([FAKE_NAME]);
+  const proxies = [];
+  try {
+    for (const [role, routeTo] of [['front', upOrigin], ['back', upOrigin], ['back', 'http://127.0.0.1:1']]) {   // last one: upstream down → 502 (failed request)
+      const file = path.join(dir, `${role}-${proxies.length}.jsonl`);
+      const px = createTraceProxy({ role, route: () => routeTo, masker, file, port: 0 });
+      const port = await px.listen(); proxies.push({ px, file });
+      for (const q of hostileQueries()) {
+        const p = role === 'front' ? '/v1/read' : '/v1/projects/p/databases/(default)/documents/workspaces/W/auditLog/a1';
+        await fetch(`http://127.0.0.1:${port}${p}?${q}`, { method: role === 'front' ? 'POST' : 'PATCH', headers: { 'content-type': 'application/json', ...(role === 'back' ? { 'x-cmn-trace-id': 'TR-00000000-0000-4000-8000-000000000000' } : {}) }, body: '{"op":"attendanceSession.read","target":{"sessionId":"S1"}}' }).then((r) => r.text()).catch(() => null);
+      }
+    }
+    for (const { px, file } of proxies) {
+      await px.close(); px.closed = true;
+      const text = rfs(file, 'utf8'); const lines = text.split('\n').filter(Boolean).map((l) => JSON.parse(l));
+      assert.equal(lines.length, hostileQueries().length, file);
+      assert.deepEqual(findLeaks(text, { names: [FAKE_NAME], secrets: [FAKE_JWT, FAKE_EMAIL, FAKE_KEY] }), [], file);
+      for (const s of [FAKE_JWT, FAKE_NAME, FAKE_EMAIL, FAKE_KEY, 'eyJhbG', encodeURIComponent(FAKE_JWT), encodeURIComponent(FAKE_NAME)]) assert.ok(!text.includes(s), `${file}: ${s}`);
+      for (const l of lines) for (const e of l.query) assert.equal(Object.keys(e).length, 1);
+    }
+    // the failed-request proxy really recorded failures
+    assert.ok(rfs(proxies[2].file, 'utf8').split('\n').filter(Boolean).every((l) => JSON.parse(l).status === 502));
+  } finally {
+    for (const { px } of proxies) if (!px.closed) await Promise.race([px.close(), new Promise((r) => setTimeout(r, 2000))]);
+    upstream.closeAllConnections?.(); await new Promise((r) => upstream.close(r)); rms(dir, { recursive: true, force: true });
+  }
 });

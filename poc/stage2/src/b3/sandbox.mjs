@@ -6,9 +6,32 @@
  *  Control channel = inherited fd 3 (socketpair). Allowed messages only (plan §5):
  *    Adapter → Runner: READY, DONE      Runner → Adapter: GO
  *  Anything else is a protocol violation. */
-import { spawn } from 'node:child_process';
-import { readFileSync, readdirSync, readlinkSync, rmSync } from 'node:fs';
-import { initScript, unshareArgs } from './isolation-policy.mjs';
+import { spawn, execFileSync } from 'node:child_process';
+import { readFileSync, readdirSync, readlinkSync, realpathSync, rmSync } from 'node:fs';
+import { createHash } from 'node:crypto';
+import { initScript, unshareArgs, USR_BINARIES, insidePathOf, pathMapDigest } from './isolation-policy.mjs';
+
+const fileSha = (p) => createHash('sha256').update(readFileSync(p)).digest('hex');
+/** B3A-N7: resolves the host path map for one launch: the node binary (not its installation directory) and
+ *  the files copied into the sandbox /usr — USR_BINARIES plus the ldd closure of those and of node — each
+ *  with its content digest. Returns { ...pathMap, pathMapDigest }. */
+export function resolvePathMap({ nodeBinary, adapterDir, checkDir, entryDir }) {
+  const node = realpathSync(nodeBinary);
+  const libs = new Set();
+  for (const b of [...USR_BINARIES, node]) {
+    const out = execFileSync('ldd', [b], { encoding: 'utf8', env: { PATH: '/usr/bin:/bin' } });
+    for (const m of out.matchAll(/(\/[^\s]+) \(0x[0-9a-f]+\)/g)) libs.add(m[1]);
+  }
+  const byInside = new Map();
+  for (const src of [...USR_BINARIES, ...libs]) {
+    const inside = insidePathOf(src);
+    if (!inside.startsWith('/usr/')) throw new Error(`library outside /usr layout: ${src}`);
+    if (!byInside.has(inside)) byInside.set(inside, { inside, source: realpathSync(src), sha256: fileSha(src) });
+  }
+  const usrFiles = [...byInside.values()].sort((a, b) => (a.inside < b.inside ? -1 : a.inside > b.inside ? 1 : 0));
+  const pm = { adapterDir, checkDir, entryDir, nodeBinary: node, nodeBinarySha256: fileSha(node), usrFiles };
+  return { ...pm, pathMapDigest: pathMapDigest(pm) };
+}
 
 const ALLOWED_FROM_ADAPTER = new Set(['READY', 'DONE']);
 
