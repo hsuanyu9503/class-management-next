@@ -456,3 +456,26 @@
 
 - 未擴大安全宣稱：空環境檢查與 nonce 標記不是原子鎖，也不能對抗惡意本機程序（已寫入 README 與 PLAN）。
 - 範圍未擴大：未修改 Stage 1 鎖定檔、CI、外部錨定、防護斷言或待決權限；72 筆後端計畫維持 `NOT_RUN`。
+
+### R3 複驗（ChatGPT，Reviewed Head `d195789ac42bac841cf463ccf1ed5310807ca520`，2026-11-21）
+
+- 結論：**R2 複驗通過，可進入使用者驗收**；未發現新增阻擋項目。限於本批基礎設施程式、文件設計與取得的測試證據；**不是** Windows Emulator 驗收、正式後端契約通過、D 項目核准或合併授權。
+
+| 編號 | 等級 | 最終狀態 | 界線 |
+|---|---|---|---|
+| S2B2-REV-001 | HIGH | 原始問題已修正，結案 | 空環境檢查與 nonce 標記不是原子鎖，不能對抗惡意本機程序 |
+| S2B2-REV-002 | MEDIUM | 文件設計層面結案 | 隔離仍未實作，不能據此產生 `PASS`；D-17 待決 |
+| S2B2-REV-003 | MEDIUM | 已修正，結案 | — |
+
+證據來源分開記錄：
+
+| 來源 | 內容 |
+|---|---|
+| ChatGPT 獨立執行 | guard 8 項＋port-state／總控停止 28 項 = **36／36 通過**；實際執行 `run-smoke` 入口：審查環境對 5 個本機連接埠回報 `EACCES`，全部判為 `unknown`，在第一次前置條件停止，未進入冒煙或負向探測。真實 socket 測試在該環境只驗證「連線受限 → `unknown`」路徑。PR Base／Head 與附件一致；25 個新增檔案 blob SHA 與遠端一致；鎖檔 SHA-256 未變 |
+| Claude 本機證據（未經審查者獨立重跑） | 乾淨 clone：`s2:test` 42／42、`s2:smoke` exit 0（正向冒煙 14 步，JSON 綁定 Reviewed Head）、`s2:occupied-real` exit 0（外來文件與帳號不變）；根目錄測試、Stage 1、錨定、受保護檔案差異通過 |
+| CI（[run 44703084167](https://github.com/hsuanyu9503/class-management-next/actions/runs/44703084167)） | `validate`、`baseline-anchor` success。**CI 不包含 Emulator 冒煙**，CI 成功不代表 Emulator 冒煙通過 |
+
+- 未驗證：Windows 完整流程；認證隔離實作與攻擊驗收；第三方 CLI 與相依套件的完整外連行為與平台相容性。
+- 未核准：Q1／Q2／Q3、D-01～D-17。72 筆正式後端計畫維持 `NOT_RUN`；技術選型 `UNDECIDED`。
+- ChatGPT 審查不是 GitHub 正式 Approve。
+- 使用者決策：`待驗收與合併決策`

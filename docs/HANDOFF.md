@@ -16,9 +16,10 @@
 - 正式基準 Commit（Merge Commit）：`fdcb5b9a0788584f7a35ff507e1daff3dd7d29ec`
 - 下一階段：PoC Stage 2｜Firebase Adapter 技術驗證，**尚未開始實作**（準備清單見 `docs/STAGE2_PREP.md`；S2-B1 只有設計文件）
 - S2-B1 架構決策（負責人已確認）：A 班級精確授權、B 敏感請假資訊分離、C 正式修改只經受控 API。待決事項 D-01～D-16（含決定前的預設拒絕值與解除阻擋條件）見 `docs/stage2/S2B1-AUTHORIZATION.md` §12。
-- S2-B2 第 1 批審查：R1（Head `d6181bb1ca24`）CHANGES REQUESTED（S2B2-REV-001 HIGH、S2B2-REV-002 MEDIUM）；R2（Head `9aac89570424`）CHANGES REQUESTED（S2B2-REV-003 MEDIUM；REV-001 原情境已修正、REV-002 設計結案）；R2 修正已提交到 PR #4，回應見 `docs/REVIEW_LOG.md`。
-- 下一位負責人：ChatGPT（S2-B2 第 1 批 R2 修正複驗，信任邊界部分採 L3 深度）→ 你（驗收；`S2B2-B1-PLAN.md` §7 的 Q1～Q3；D-01～D-16 仍待決）
-- 最近更新：2026-11-20（臺灣）
+- S2-B2 第 1 批審查：R1（Head `d6181bb1ca24`）CHANGES REQUESTED（S2B2-REV-001 HIGH、S2B2-REV-002 MEDIUM）；R2（Head `9aac89570424`）CHANGES REQUESTED（S2B2-REV-003 MEDIUM；REV-001 原情境已修正、REV-002 設計結案）；R3（Reviewed Head `d195789ac42bac841cf463ccf1ed5310807ca520`）**複驗通過**，REV-001／002／003 結案（REV-002 僅設計層面；隔離未實作）。詳見 `docs/REVIEW_LOG.md`。
+- 狀態：**本批 R2 複驗通過，待使用者驗收與合併決策**。CI 不含 Emulator 冒煙；真實 Emulator 結果是 Claude 本機證據，ChatGPT 獨立通過的是 36 項不需本機連線的測試。
+- 下一位負責人：你（驗收與合併決策；`S2B2-B1-PLAN.md` §7 的 Q1～Q3；D-01～D-17 仍待決）。S2-B2 第 2 批**尚未開始**。
+- 最近更新：2026-11-21（臺灣）
 
 ## PR #1 正式合併紀錄
 
@@ -118,6 +119,7 @@
 | 2026-11-20 | ChatGPT → Claude | 審查 `d6181bb1ca24`：CHANGES REQUESTED（S2B2-REV-001 HIGH；S2B2-REV-002 MEDIUM） | R1 修正 |
 | 2026-11-20 | Claude → ChatGPT | S2-B2 第 1 批 R1 修正（Head `9aac89570424`） | 複驗 |
 | 2026-11-20 | ChatGPT → Claude | 複驗 `9aac89570424`：CHANGES REQUESTED（S2B2-REV-003 MEDIUM） | R2 修正 |
-| 2026-11-20 | Claude → ChatGPT | S2-B2 第 1 批 R2 修正（Head 見 PR #4） | 複驗 |
+| 2026-11-20 | Claude → ChatGPT | S2-B2 第 1 批 R2 修正（Head `d195789ac42b`） | 複驗 |
+| 2026-11-21 | ChatGPT → 你 | 複驗 `d195789ac42b`：通過，REV-001～003 結案，可進入使用者驗收 | 使用者驗收與合併決策（待決） |
 
 > 規格的正式變更請同步修改 SPEC／TECH，不要只在這裡留下新決策。
