@@ -1193,3 +1193,18 @@
 - 錨定：`e2149bd9ff0781ce710d920e62ee8bf16495eaeba1f661eb49fd10eccf1eb976`（47 檔）。需要負責人重新核准；Claude 沒有設定任何變數。
 - 使用者決策：`待決`（C-1 合併與重新核准錨定）
 
+### PR #13 審查（ChatGPT）與 R1 回應
+
+- Reviewed Head：`9e4db47d9343827c6d4290d14ff9019538718fbe`
+- 結論：**CHANGES REQUESTED**，有五項 P2：C1-REV001～005。這不代表已觀察到實際外洩。
+- 審查者的證據：
+  - 已核對 Head、CI（`validate` success；`baseline-anchor` 為 `ANCHOR_MISMATCH`，屬待核准狀態）與附件的 SHA-256；
+  - 以最小重現確認了 REV002 的 UNKNOWN_OP／ERROR／EMFILE、REV003 的模擬目標、REV004 的合成值，以及 REV005 的未涵蓋檔案；
+  - 在 Windows 上 `a10-unit` 有兩項因 POSIX 路徑假設失敗，不列為缺陷；
+  - **沒有**重跑 Linux／root 的整合測試；hosted 仍是 NOT_RUN。
+- R1（Claude）：逐項修正與驗證見 `docs/stage2/S2B2-B3C-REPORT.md` §7。
+  - 本機結果：`npm test` 19/19；`s2:test` 138/138；`s2:b3` 33/33；`s2:a10` 9/9；hosted 模式的示範；attest-attack 的本機模擬（平台證據是合成的）；mutation 31/31。
+  - `a10.mjs` 改用 `path.posix`，路徑與平台無關。
+- 錨定：`20c804ea86c1d8a2f133bcddaf8be3b3722451c88528a08560387c43306cd88a`（83 檔）。送審時的 `e2149bd9…` 已作廢。需要負責人在複審通過後重新核准；Claude 沒有設定任何變數。
+- 使用者決策：`待決`（R1 複審之後才決定合併與重新核准錨定）
+
