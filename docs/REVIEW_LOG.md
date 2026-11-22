@@ -961,14 +961,34 @@
   | 簽章 | **skipped**（不是 PASS）；交付紀錄為 `NOT_ATTEMPTED_NOT_PASS` |
   | 診斷 | `s2-verify-POC-001`，artifact ID 14733304375，保存 30 天 |
 
-- **由判定推得的結論**：Verifier 對任何一項隔離檢查或正向控制失敗、對帳問題、run 綁定或 provenance 問題都會判 `BLOCKED`。這次的原因**只有** `TRUST_ROOT_NOT_CONFIGURED`，所以在 hosted runner 上：
-  - 22 項自我檢查與正向控制都通過；
-  - 對帳無誤；
-  - 契約比對為 MATCH；
-  - provenance 有效。
+- **由判定推得的結論（有限範圍）**：Verifier 會先處理完整性、隔離、對帳、契約比對等檢查，最後才進入信任根閘門。結果是 `UNATTESTED`，而且頂層原因只有 `TRUST_ROOT_NOT_CONFIGURED`，因此：本次提交的證據通過了該版本 Verifier 對 22 項自我檢查、政策要求的正向控制、對帳、契約 MATCH，以及 provenance 格式與綁定的檢查。
+  - 22 項中只有政策指定的子集合（12 項）要求 `positiveControlOk=true`，其餘要求 `null`。
+  - 這個結論是依原始 log 與程式的判定順序推得，**尚未**逐項閱讀原始觀察值，也**尚未**重播本次 hosted 封裝。
+  - 這個結論**不**證明所有隔離攻擊都會失敗，**不**證明 host 來源已經認證，也**不**代表 A10／A4／A14／A18 的攻擊驗收已經完成。
 - **證據界線**：
   - Claude 的執行環境無法連線 artifact 下載主機（`*.blob.core.windows.net`，網路政策 403），**沒有**讀到診斷檔中 22 項檢查的原始觀察值。以上結論來自 job log 與判定的語意，不是逐項檢視。負責人或審查者可以從 run 頁面下載 artifact 14733304375 與 14733757533 核對。
   - 這次只執行 POC-001。POC-002／008／009 尚未在 hosted 執行。
   - A10（平台憑證）沒有逐項證據；A4、A14 的平台整合只有這次正常路徑的證據，沒有攻擊情境；A18 與實際簽章仍是 NOT_RUN。
   - `PASS_ENABLED=false`。
+
+### PR #11 文件審查（ChatGPT）與回應
+
+- Reviewed Head：`38268a65a93f58afe22cdc4936d37b914c79bafa`（Base `e4f3750`）
+- 結論：**有條件通過**：主要事實與 GitHub 原始資料一致；修正 HANDOFF 的過時狀態與日期之後，可以交使用者決定是否合併。
+- 審查者獨立核對了 GitHub API，以及 execute／verify 兩個 job 的**原始 log**，內容包括：
+  - PR #10 的合併；
+  - 合併後的 CI；
+  - artifact 的 ID、名稱、大小與上傳和下載時的 digest；
+  - 判定、簽章 skipped、delivery；
+  - `verifier.mjs` 的判定順序。
+- 審查者**沒有**讀到 artifact 的原始位元組（本機無法解析下載主機），所以**沒有**重算 hosted package／statement 的 digest，也**沒有**重播 hosted 封裝。報告中的 digest 是原始 log 的值。
+- 審查者沒有讀取變數設定的稽核紀錄，所以不能獨立證明誰在何時設定了錨定；`baseline-anchor` 通過，支持基準已經一致。
+
+| ID | 處理（Claude） |
+|---|---|
+| PR11-N1（LOW）：HANDOFF 仍寫「錨定待核准、`baseline-anchor` 仍失敗」，與下一行已合併的紀錄矛盾；日期過時 | 已修：改為歷史語氣；日期改為 2026-11-22 |
+| 判定推論的措辭 | 已改為有限範圍的說法（見上一節） |
+| 後續門檻 | HANDOFF 寫明：要先保留並交付 hosted artifact 原檔；各 run／案例的證據獨立保存；完成 hosted 證據與攻擊驗收、獨立審查與負責人核准之後，才能進入 PASS 啟用 PR |
+
+- 使用者決策：`待決`（PR #11 合併）
 
