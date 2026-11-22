@@ -62,6 +62,8 @@ jobs:
         working-directory: poc/stage2
         env:
           B3_SINGLE_CASE: ${{ env.TEST_ID }}
+          # C-1 (attack plan v0.4 §1.2): this workflow only ever runs the honest scenario (trusted, fixed here)
+          B3_SCENARIO: honest
           B3_OUT_DIR: ${{ runner.temp }}/s2-out
         run: sudo -E env "PATH=$PATH" HOME=/root node scripts/run-attest-execute.mjs
       - name: 收回檔案擁有權
@@ -128,6 +130,8 @@ jobs:
           EXP_ATTESTATION_NONCE: ${{ needs.execute.outputs.attestationNonce }}
           EXP_PLATFORM_SUPPORTED: ${{ needs.execute.outputs.platformSupported }}
           EXP_TOOLCHAIN_COMMIT: ${{ needs.execute.outputs.toolchainCommit }}
+          # trusted scenario: fixed by this workflow file, never taken from the execute job or the package
+          EXP_SCENARIO: honest
           CMN_STAGE1_ANCHOR_SHA256: ${{ vars.CMN_STAGE1_ANCHOR_SHA256 }}
           CMN_S2_TRUSTED_TOOLCHAIN_SHA: ${{ vars.CMN_S2_TRUSTED_TOOLCHAIN_SHA }}
           CMN_S2_SIGNING_POLICY_BLOB: ${{ vars.CMN_S2_SIGNING_POLICY_BLOB }}

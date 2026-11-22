@@ -1,6 +1,9 @@
 /** Host side of the isolation self-check (TRUSTED TOOLCHAIN, B3a). Runs the in-sandbox probe with the SAME
  *  config as the Adapter, performs the positive controls on the host at the same time, and judges every
- *  check ID of s2-isolation-policy-v1. An errno alone is never accepted as proof (plan §3.3). */
+ *  check ID of s2-isolation-policy-v1. An errno alone is never accepted as proof (plan §3.3).
+ *  C-1 (attack plan v0.4 §6.2): observations are returned RAW and structured (selfCheckRaw); they are masked,
+ *  serialised, size-limited and summarised only at packaging time by finalizeSelfCheck() (observation.mjs),
+ *  with the complete secret list of the run. Nothing raw is written anywhere by this module. */
 import net from 'node:net';
 import { existsSync, mkdirSync, readlinkSync, rmSync, writeFileSync } from 'node:fs';
 import { spawnSync } from 'node:child_process';
@@ -27,7 +30,7 @@ export function platformSupport() {
  *  @param o.startSentinel false only in the A16 test (sentinel deliberately absent) */
 export async function runSelfCheck({ cfg, pathMap, hostPaths, outputChannels, workDir, startSentinel = true, endpoints = ENDPOINTS }) {
   const support = platformSupport();
-  if (!support.supported) return { platformSupported: false, reason: support.reason, selfCheck: null, sandboxPolicyDigest: configDigest(cfg) };
+  if (!support.supported) return { platformSupported: false, reason: support.reason, selfCheckRaw: null, sandboxPolicyDigest: configDigest(cfg) };
   mkdirSync(workDir, { recursive: true });
   // Unix socket paths are limited to ~107 bytes: the runner-private socket dir must be short (e.g. /tmp/cmn-r-XXXX)
   const sentinelSock = path.join(workDir, 'sentinel.sock');
@@ -58,7 +61,7 @@ export async function runSelfCheck({ cfg, pathMap, hostPaths, outputChannels, wo
   const hostCanElevate = process.getuid() === 0 || spawnSync('sudo', ['-n', 'true']).status === 0;
   const fds = sbx.initFds();
   const C = {};
-  const set = (id, ok, observed, pos = null) => { C[id] = { ok: !!ok, observed: String(observed).slice(0, 200), positiveControlOk: pos }; };
+  const set = (id, ok, observed, pos = null) => { C[id] = { ok: !!ok, observedRaw: observed, positiveControlOk: pos }; };
   if (!inside || !done) {
     for (const id of CHECK_IDS) set(id, false, `self-check did not complete (done=${done}, violations=${o.violations.join('|')})`, POSITIVE_CONTROL_REQUIRED.includes(id) ? false : null);
   } else {
@@ -66,16 +69,16 @@ export async function runSelfCheck({ cfg, pathMap, hostPaths, outputChannels, wo
     set('NET_NO_INTERFACES', inside.interfaces.length === 1 && inside.interfaces[0] === 'lo', inside.interfaces.join(','));
     const expected = endpoints.filter((e) => e.expect === 'listening');
     const posOk = expected.every((e) => hostTcp[e.port] === true) && endpoints.some((e) => e.kind === 'sentinel');
-    set('HOST_ENDPOINTS_BLOCKED', endpoints.every((e) => blocked(inside.tcp[e.port])), endpoints.map((e) => `${e.port}:${inside.tcp[e.port]}/host:${hostTcp[e.port]}`).join(' '), posOk);
+    set('HOST_ENDPOINTS_BLOCKED', endpoints.every((e) => blocked(inside.tcp[e.port])), endpoints.map((e) => ({ name: e.name, port: e.port, inside: inside.tcp[e.port], host: hostTcp[e.port] })), posOk);
     set('ENTRY_SOCKET_REACHABLE', inside.entryProbe === 204, `probe=${inside.entryProbe}`);
-    set('NO_OTHER_SOCKETS', otherSockets.every((p) => hiddenCode(inside.otherSockets[p])), JSON.stringify(inside.otherSockets), hostSocketsExist);
+    set('NO_OTHER_SOCKETS', otherSockets.every((p) => hiddenCode(inside.otherSockets[p])), inside.otherSockets, hostSocketsExist);
     set('UID_NONROOT', inside.uid !== 0 && inside.gid !== 0, `uid=${inside.uid} gid=${inside.gid}`);
     set('NO_CAPS', inside.caps.every((c) => /^0+$/.test(c || '')), inside.caps.join(','));
     set('NO_NEW_PRIVS', inside.noNewPrivs === '1', `NoNewPrivs=${inside.noNewPrivs}`);
     set('NO_SUDO', inside.sudoExit !== 0, `sudo exit=${inside.sudoExit} err=${inside.sudoError}`, hostCanElevate);
     for (const [id, key] of [['FS_EVIDENCE_HIDDEN', 'evidence'], ['FS_TOOLCHAIN_HIDDEN', 'toolchain'], ['FS_GIT_HIDDEN', 'git']]) {
       const list = inside.hidden[key] || [];
-      set(id, list.length > 0 && list.every(([, v]) => hiddenCode(v)), JSON.stringify(list), (hostPaths[key] || []).length > 0 && hostPaths[key].every((p) => existsSync(p)));
+      set(id, list.length > 0 && list.every(([, v]) => hiddenCode(v)), list, (hostPaths[key] || []).length > 0 && hostPaths[key].every((p) => existsSync(p)));
     }
     set('PROC_ISOLATED', inside.foreignProcs === 0, `procs=${inside.procCount} foreign=${inside.foreignProcs}`);
     set('DEV_ALLOWLIST', JSON.stringify(inside.dev) === JSON.stringify([...DEV_ALLOWLIST].sort()), inside.dev.join(','));
@@ -92,8 +95,9 @@ export async function runSelfCheck({ cfg, pathMap, hostPaths, outputChannels, wo
     const usrOk = JSON.stringify(inside.usrFiles) === JSON.stringify(expUsr);
     const rootOk = JSON.stringify(inside.rootEntries) === JSON.stringify(expectedRootEntries(cfg));
     const targetsOk = JSON.stringify(inside.mounts) === JSON.stringify([...MOUNT_TARGETS].sort());
-    set('MOUNT_ALLOWLIST', targetsOk && !optProblems.length && usrOk && rootOk, `targets=${targetsOk} opts=${optProblems.join('|') || 'ok'} usr=${usrOk}(${(inside.usrFiles || []).length}/${expUsr.length}) root=${rootOk}:${(inside.rootEntries || []).join(',')}`);
-    set('OUTPUT_CHANNELS_HIDDEN', inside.outputChannels.length > 0 && inside.outputChannels.every(([, v]) => hiddenCode(v)), JSON.stringify(inside.outputChannels), outputChannels.length > 0 && outputChannels.every((p) => existsSync(p)));
+    set('MOUNT_ALLOWLIST', targetsOk && !optProblems.length && usrOk && rootOk, { summary: `targets=${targetsOk} opts=${optProblems.join('|') || 'ok'} usr=${usrOk}(${(inside.usrFiles || []).length}/${expUsr.length}) root=${rootOk}:${(inside.rootEntries || []).join(',')}`,
+      mounts: inside.mounts, mountOptions: inside.mountOptions, rootEntries: inside.rootEntries, usrFiles: inside.usrFiles, expectedUsrFiles: expUsr, optionProblems: optProblems });
+    set('OUTPUT_CHANNELS_HIDDEN', inside.outputChannels.length > 0 && inside.outputChannels.every(([, v]) => hiddenCode(v)), inside.outputChannels, outputChannels.length > 0 && outputChannels.every((p) => existsSync(p)));
   }
-  return { platformSupported: true, selfCheck: C, sandboxPolicyDigest: configDigest(cfg), termination: term, violations: o.violations };
+  return { platformSupported: true, selfCheckRaw: C, sandboxPolicyDigest: configDigest(cfg), termination: term, violations: o.violations };
 }
