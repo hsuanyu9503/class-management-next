@@ -97,6 +97,9 @@ export function launchSandbox({ cfg, pathMap, entry }) {
       const remaining = nsBefore ? processesInPidNs(nsBefore) : 0;
       return { namespaceTerminated: !!ex && remaining === 0, remainingAdapterProcesses: remaining, pidNs: nsBefore };
     },
+    /** C-1 (A10): host PID of the namespace's init (the sandboxed program after exec), for the Runner's own
+     *  /proc view of the instance (uid, capabilities, mounts) — read from the host, not reported by the program. */
+    initPid: () => { locate(); return initPid; },
     initFds: () => { const m = /CMN_INIT_FDS((?: \d+)*)/.exec(stderr); return m ? m[1].trim().split(/\s+/).filter(Boolean).map(Number).sort((a, b) => a - b) : null; },
     output: () => ({ stdout, stderr, messages: [...messages], violations: [...violations] }),
     exited,
