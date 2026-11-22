@@ -42,7 +42,7 @@ const summary = runAttackVerify({
   a14: { outputs: outputs('A14'), scenario: env.A14_SCENARIO, pkg: a14Dir.list, read: a14Dir.read,
     decoy: ID(env.DECOY_ARTIFACT_ID) && decoyDir ? { artifactId: ID(env.DECOY_ARTIFACT_ID), ...decoyDir } : null,
     sameName: { uploadOutcome: env.SAMENAME_OUTCOME, artifactId: ID(env.SAMENAME_ARTIFACT_ID), ...(sameDir || {}) },
-    foreign: { artifactId: ID(env.FOREIGN_ARTIFACT_ID), downloadOutcome: env.FOREIGN_OUTCOME, ...(foreignDir || {}) },
+    foreign: { artifactId: ID(env.FOREIGN_ARTIFACT_ID), downloadOutcome: env.FOREIGN_OUTCOME, previousRunId: ID(env.FOREIGN_RUN_ID), crossRunDownload: env.PREV_OUTCOME || null, ...(foreignDir || {}) },
     previous },
   a4: a4Dir && ID(env.A4_ARTIFACT_ID) ? { outputs: outputs('A4'), scenario: env.A4_SCENARIO, pkg: a4Dir.list, read: a4Dir.read } : null,
 });

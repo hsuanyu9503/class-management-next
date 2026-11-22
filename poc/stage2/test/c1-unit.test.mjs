@@ -182,16 +182,16 @@ test('C-1 §6.1: java -version is read from stderr; anything unrecognised is hon
 });
 
 // ----------------------------------------------------------------------------- C1-REV004 known-secret collector
-import { collectKnownSecrets, platformSecretValues, MIN_SECRET_LEN } from '../src/b3/mask-list.mjs';
+import { collectKnownSecrets, platformSecretValues, classifyEnvName } from '../src/b3/mask-list.mjs';
 test('C1-REV004: the packaging list unites issued tokens (rotated included), case tokens and platform credentials', () => {
   const env = { ACTIONS_RUNTIME_TOKEN: 'synthetic-platform-opaque-value-1', MY_DEPLOY_SECRET: 'synthetic-platform-opaque-value-2', PATH: '/usr/bin:/bin', HOME: '/root', GITHUB_TOKEN: 'short', RUNNER_TEMP: '/tmp/x' };
   const r = collectKnownSecrets({ issued: ['issued-id-token-0001-current', 'issued-id-token-0000-rotated', 'issued-id-token-0001-current'], caseTokens: ['case-token-value-00001'], env });
   for (const v of ['issued-id-token-0001-current', 'issued-id-token-0000-rotated', 'case-token-value-00001', 'synthetic-platform-opaque-value-1', 'synthetic-platform-opaque-value-2']) assert.ok(r.values.includes(v), v);
-  assert.ok(!r.values.includes('/usr/bin:/bin') && !r.values.includes('short'));
-  assert.deepEqual(r.counts, { issued: 3, caseTokens: 1, platform: 2, total: 5 });   // per-source counts before de-duplication
+  assert.ok(!r.values.includes('/usr/bin:/bin'));
+  assert.ok(r.values.includes('short'));                                             // R2: a known secret is never dropped for being short
+  assert.equal(r.counts.issued, 3); assert.equal(r.counts.caseTokens, 1); assert.equal(r.counts.platform, 3); assert.equal(r.counts.total, 6); assert.equal(r.counts.short, 1);
   assert.throws(() => collectKnownSecrets({}), TypeError);
-  assert.ok(MIN_SECRET_LEN >= 12);
-  assert.deepEqual(platformSecretValues({ GH_TOKEN: 'x'.repeat(20), OTHER: 'y'.repeat(20) }), ['x'.repeat(20)]);
+  assert.deepEqual(platformSecretValues({ GH_TOKEN: 'x'.repeat(20), OTHER: 'y'.repeat(20) }).values, ['x'.repeat(20)]);
   // the reviewer's case: an opaque platform value under a neutral key is masked once it comes from the collector
   const full = finalizeSelfCheck({ NO_CAPS: { ok: true, observedRaw: { observed: 'synthetic-platform-opaque-value-1' }, positiveControlOk: null } }, { secretValues: r.values }).selfCheckFull.NO_CAPS.observedFull;
   assert.ok(!full.includes('synthetic-platform-opaque-value-1')); assert.ok(full.includes(MASK_SECRET));
@@ -200,3 +200,31 @@ test('C1-REV004: the packaging list unites issued tokens (rotated included), cas
   assert.doesNotMatch(run, /secretValues = h\.issuedSecrets\(\)|secrets = h\.issuedSecrets\(\)/);
   assert.equal((run.match(/packagingSecrets\(\)/g) || []).length >= 3, true);
 });
+
+test('C1-REV004 R2: short known secrets (1–11 chars) from every source are kept, masked and caught by the leak scan', () => {
+  // the reviewer's reproduction
+  const rv = collectKnownSecrets({ issued: ['old-pass-7'], env: { MY_DEPLOY_SECRET: 'pin-4829' } });
+  assert.ok(rv.values.includes('old-pass-7') && rv.values.includes('pin-4829'));
+  const raw = { NO_CAPS: { ok: true, observedRaw: { observed: 'pin-4829', nested: ['old-pass-7'] }, positiveControlOk: null } };
+  const full = finalizeSelfCheck(raw, { secretValues: rv.values }).selfCheckFull.NO_CAPS.observedFull;
+  assert.ok(!full.includes('pin-4829') && !full.includes('old-pass-7'));
+  assert.deepEqual(findLeaks('artifact with pin-4829 inside', { secrets: rv.values }).length, 1);   // the same list makes the scan hit
+  // every length 1..11 from each source, plus long, rotated and empty values
+  for (let n = 1; n <= 11; n++) {
+    const v = (k) => `${k}`.repeat(12).slice(0, n);
+    const r = collectKnownSecrets({ issued: [v('i'), 'issued-long-value-0000-rotated', 'issued-long-value-0001', ''], caseTokens: [v('c'), ''], env: { ACTIONS_RUNTIME_TOKEN: v('p'), DEPLOY_PASSWORD: v('q'), EMPTY_TOKEN: '' } });
+    for (const x of [v('i'), v('c'), v('p'), v('q'), 'issued-long-value-0000-rotated', 'issued-long-value-0001']) assert.ok(r.values.includes(x), `${n}: ${x}`);
+    assert.ok(!r.values.includes(''), `${n}: empty kept`);
+    const f = finalizeSelfCheck({ NO_CAPS: { ok: true, observedRaw: { a: `zz${v('i')}zz`, b: [`${v('c')}`], c: { d: v('p') } }, positiveControlOk: null } }, { secretValues: r.values }).selfCheckFull.NO_CAPS.observedFull;
+    assert.ok(!JSON.parse(f).a.includes(v('i')) && !f.includes(`"${v('c')}"`), `${n}: not masked`);
+  }
+});
+
+test('C1-REV004 R2: platform values are classified by name / purpose, never by length', () => {
+  for (const n of ['ACTIONS_RUNTIME_TOKEN', 'GITHUB_TOKEN', 'GH_TOKEN', 'MY_DEPLOY_SECRET', 'DB_PASSWORD', 'AWS_SECRET_ACCESS_KEY', 'SOME_API_KEY', 'SIGNING_PRIVATE_KEY', 'X_CREDENTIAL']) assert.equal(classifyEnvName(n), 'secret', n);
+  for (const [n, c] of [['CLAUDE_SESSION_INGRESS_TOKEN_FILE', 'non-secret:location'], ['TOKEN_PATH', 'non-secret:location'], ['SECRET_DIR', 'non-secret:location'], ['MAX_THINKING_TOKENS', 'non-secret:setting'], ['MIN_PASSWORD_AGE', 'non-secret:setting']]) assert.equal(classifyEnvName(n), c, n);
+  for (const n of ['PATH', 'HOME', 'RUNNER_TEMP', 'GITHUB_OUTPUT']) assert.equal(classifyEnvName(n), 'other', n);
+  const r = collectKnownSecrets({ issued: [], env: { MAX_THINKING_TOKENS: '5', CLAUDE_SESSION_INGRESS_TOKEN_FILE: '/run/x', GH_TOKEN: 'ab' } });
+  assert.deepEqual(r.values, ['ab']); assert.deepEqual(r.counts.platformExcludedByClass, { 'non-secret:setting': 1, 'non-secret:location': 1 });
+});
+

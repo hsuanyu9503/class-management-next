@@ -26,7 +26,8 @@ const codesOf = (r) => [...new Set((r.report?.reasons || []).map((x) => String(x
 const vOut = (r) => `${r.result} [${codesOf(r).join(',')}]`;
 
 /** C1-REV001 platform evidence (from a trusted step of the verify job, via the GitHub API):
- *   io.platform = { artifactsOk: bool, artifacts: [{ id, name }] (this run), sameNameErrorLines: string[], sameNameControlOutcome }
+ *   io.platform = { artifactsOk: bool, artifacts: [{ id, name }] (this run), sameNameErrorLines: string[], sameNameControlOutcome,
+ *                   foreign: { artifactId, status (HTTP; 200 / 404 / other), expired, runId (owning workflow run) } | null }
  *  @param io {
  *   env,                    // GITHUB_* of the verify job
  *   head, workflowBlob, policy, caseSpecs, now,
@@ -83,11 +84,19 @@ export function runAttackVerify(io) {
   const f = a.foreign || {};
   if (!/^[0-9]{1,20}$/.test(f.artifactId || '')) add('A14-3a', { testOutcome: 'NOT_RUN', platformOutcome: 'NOT_ATTEMPTED', verifierOutcome: 'NOT_REACHED', notRunReason: 'previous artifact ID not given' });
   else if (f.downloadOutcome === 'failure') {
-    // DEFENDED only if the API listing of THIS run (read successfully) confirms the ID is not one of its artifacts
+    // R2 (C1-REV001): the input must first be shown to BE a valid artifact of ANOTHER run of this repository
+    // (API lookup by ID on this repository: exists, not expired, owning run ≠ this run, = the given previous run).
+    // Only then does "this run's listing (read successfully) does not contain it" + the failed download count.
+    const fa = pf.foreign && String(pf.foreign.artifactId) === String(f.artifactId) ? pf.foreign : null;
     const inRun = listed ? listed.some((x) => String(x.id) === String(f.artifactId)) : null;
-    add('A14-3a', listed && inRun === false
-      ? { testOutcome: 'DEFENDED', platformOutcome: 'DOWNLOAD_NOT_FOUND_IN_RUN', verifierOutcome: 'NOT_REACHED', expected: 'download-artifact finds no such artifact in this run', evidence: { artifactsListed: true, idInThisRun: false } }
-      : { testOutcome: 'INCONCLUSIVE', platformOutcome: 'DOWNLOAD_FAILED_REASON_UNVERIFIED', verifierOutcome: 'NOT_REACHED', manualReview: 'the run artifact listing was unavailable, or the ID IS in this run: the failure reason is not established', evidence: { artifactsListed: !!listed, idInThisRun: inRun } });
+    const evidence = { artifactsListed: !!listed, idInThisRun: inRun, lookup: fa ? { status: fa.status, expired: fa.expired ?? null, ownerRunId: fa.runId ?? null } : null, givenPreviousRunId: f.previousRunId || null, crossRunDownload: f.crossRunDownload ?? null };
+    const thisRun = String(io.env.GITHUB_RUN_ID);
+    if (!fa || ![200, 404].includes(fa.status)) add('A14-3a', { testOutcome: 'INCONCLUSIVE', platformOutcome: 'FOREIGN_ARTIFACT_UNVERIFIED', verifierOutcome: 'NOT_REACHED', manualReview: 'the foreign artifact could not be looked up: it is unknown whether a valid cross-run artifact was tested', evidence });
+    else if (fa.status === 404 || fa.expired !== false) add('A14-3a', { testOutcome: 'NOT_RUN', platformOutcome: 'FOREIGN_ARTIFACT_INVALID', verifierOutcome: 'NOT_REACHED', notRunReason: fa.status === 404 ? 'the given artifact ID does not exist in this repository (or was deleted)' : 'the given artifact has expired', evidence });
+    else if (String(fa.runId) === thisRun) add('A14-3a', { testOutcome: 'INCONCLUSIVE', platformOutcome: 'FOREIGN_ARTIFACT_IS_THIS_RUN', verifierOutcome: 'NOT_REACHED', manualReview: 'the given artifact belongs to THIS run — not a cross-run test', evidence });
+    else if (f.previousRunId && String(fa.runId) !== String(f.previousRunId)) add('A14-3a', { testOutcome: 'NOT_RUN', platformOutcome: 'FOREIGN_ARTIFACT_RUN_MISMATCH', verifierOutcome: 'NOT_REACHED', notRunReason: 'the artifact does not belong to the given previousRunId', evidence });
+    else if (listed && inRun === false) add('A14-3a', { testOutcome: 'DEFENDED', platformOutcome: 'DOWNLOAD_NOT_FOUND_IN_RUN', verifierOutcome: 'NOT_REACHED', expected: 'a valid artifact of another run is not downloadable in this run', evidence });
+    else add('A14-3a', { testOutcome: 'INCONCLUSIVE', platformOutcome: 'DOWNLOAD_FAILED_REASON_UNVERIFIED', verifierOutcome: 'NOT_REACHED', manualReview: 'the run artifact listing was unavailable, or the ID IS in this run: the failure reason is not established', evidence });
   }
   else if (f.downloadOutcome === 'success' && f.list) {
     const r = verify(expEnv(a.outputs, a.scenario, { EXP_ARTIFACT_ID: f.artifactId }), f.list, f.read);

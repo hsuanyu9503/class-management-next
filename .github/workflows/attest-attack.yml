@@ -313,6 +313,7 @@ jobs:
           GITHUB_TOKEN: ${{ github.token }}
           OUT_FILE: ${{ runner.temp }}/s2-platform.json
           SAMENAME_CONTROL_OUTCOME: ${{ needs.same-name.outputs.controlOutcome }}
+          FOREIGN_ARTIFACT_ID: ${{ inputs.previousArtifactId }}
         run: node poc/stage2/scripts/attack-platform-evidence.mjs
       - name: 判定（只做安全解析，不執行任何 artifact 的內容；沒有簽章；非 DEFENDED_WHERE_RUN 時失敗）
         env:
@@ -338,6 +339,7 @@ jobs:
           SAMENAME_ARTIFACT_ID: ${{ needs.same-name.outputs.artifactId }}
           DIR_SAMENAME: ${{ runner.temp }}/s2-sn
           FOREIGN_ARTIFACT_ID: ${{ inputs.previousArtifactId }}
+          FOREIGN_RUN_ID: ${{ inputs.previousRunId }}
           FOREIGN_OUTCOME: ${{ steps.foreign.outcome }}
           DIR_FOREIGN: ${{ runner.temp }}/s2-foreign
           PREV_OUTCOME: ${{ steps.prev.outcome }}

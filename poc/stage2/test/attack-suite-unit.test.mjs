@@ -24,7 +24,7 @@ const pkgA4 = asScenario('attack-a4-tamper', {}, { canonical: { workspaceId: 'WS
 const prevPkg = asScenario('honest', { runId: '999999', attestationNonce: 'f'.repeat(64) });
 const one = (name) => () => [{ name, isFile: true }];
 const CONFLICT = ['##[error]Failed to CreateArtifact: Received non-retryable error: Failed request: (409) Conflict: an artifact with this name already exists on the workflow run'];
-const platformOk = (o = {}) => ({ artifactsOk: true, artifacts: [{ id: '1001', name: 'package-POC-001.tar' }, { id: '1002', name: 'decoy-POC-001.tar' }, { id: '1003', name: 'package-POC-002.tar' }], sameNameErrorLines: CONFLICT, sameNameControlOutcome: 'success', ...o });
+const platformOk = (o = {}) => ({ artifactsOk: true, artifacts: [{ id: '1001', name: 'package-POC-001.tar' }, { id: '1002', name: 'decoy-POC-001.tar' }, { id: '1003', name: 'package-POC-002.tar' }], sameNameErrorLines: CONFLICT, sameNameControlOutcome: 'success', foreign: { artifactId: '777', status: 200, expired: false, runId: '999999' }, ...o });
 const io = (o = {}) => ({
   platform: o.platform === undefined ? platformOk() : o.platform,
   env: { GITHUB_ACTIONS: 'true', RUNNER_ENVIRONMENT: 'github-hosted', GITHUB_RUN_ID: run0.runId, GITHUB_RUN_ATTEMPT: String(run0.runAttempt), CMN_STAGE1_ANCHOR_SHA256: 'a'.repeat(64) },
@@ -104,9 +104,10 @@ test('C1-REV001: a failed same-name upload is DEFENDED only with conflict eviden
 test('C1-REV001: a failed foreign download is DEFENDED only if the listing of THIS run confirms the ID is absent', () => {
   for (const [n, platform] of Object.entries({ 'listing unavailable': platformOk({ artifactsOk: false }), 'no evidence': null, 'ID is in this run': platformOk({ artifacts: [...platformOk().artifacts, { id: '777', name: 'x' }] }) })) {
     const r = runAttackVerify(io({ platform }));
-    assert.deepEqual([sc(r, 'A14-3a').testOutcome, sc(r, 'A14-3a').platformOutcome], ['INCONCLUSIVE', 'DOWNLOAD_FAILED_REASON_UNVERIFIED'], n);
+    assert.equal(sc(r, 'A14-3a').testOutcome, 'INCONCLUSIVE', n);
+    assert.equal(sc(r, 'A14-3a').platformOutcome, n === 'no evidence' ? 'FOREIGN_ARTIFACT_UNVERIFIED' : 'DOWNLOAD_FAILED_REASON_UNVERIFIED', n);
   }
-  assert.deepEqual(sc(runAttackVerify(io()), 'A14-3a').evidence, { artifactsListed: true, idInThisRun: false });
+  assert.deepEqual(sc(runAttackVerify(io()), 'A14-3a').evidence.idInThisRun, false);
 });
 
 test('C1-REV001: error-line extraction is bounded and keeps only platform error lines', () => {
@@ -123,3 +124,28 @@ test('C1 review: the verify CLI exits non-zero unless the summary is DEFENDED_WH
   assert.match(src, /process\.exit\(summary\.overall === 'DEFENDED_WHERE_RUN' \? 0 : 1\);\s*$/);
   assert.ok(src.indexOf("writeFileSync(path.join(env.OUT_DIR, 'attack-summary.json')") < src.indexOf('process.exit(summary.overall'));   // summary first
 });
+
+// ------------------------------------------------------------------ C1-REV001 R2: A14-3a needs a VALID artifact of another run
+test('C1-REV001 R2: an arbitrary / missing / expired / same-run / wrong-run foreign ID is never a cross-run DEFENDED', () => {
+  const with3a = (foreignEvidence, foreignIn = {}) => sc(runAttackVerify(io({ platform: platformOk({ foreign: foreignEvidence }), a14: { foreign: { artifactId: '99999999999999999999', downloadOutcome: 'failure', ...foreignIn }, previous: { bytes: null, reason: 'no valid previous artifact' } } })), 'A14-3a');
+  // the reviewer's reproduction: an ID that is merely absent from this run, with no lookup evidence
+  assert.deepEqual([with3a(null).testOutcome, with3a(null).platformOutcome], ['INCONCLUSIVE', 'FOREIGN_ARTIFACT_UNVERIFIED']);
+  // lookup evidence for ANOTHER id does not count
+  assert.equal(with3a({ artifactId: '777', status: 200, expired: false, runId: '1' }).testOutcome, 'INCONCLUSIVE');
+  const F = (o) => ({ artifactId: '99999999999999999999', status: 200, expired: false, runId: '555', ...o });
+  assert.deepEqual([with3a(F({ status: 404 })).testOutcome, with3a(F({ status: 404 })).platformOutcome], ['NOT_RUN', 'FOREIGN_ARTIFACT_INVALID']);
+  assert.match(with3a(F({ status: 404 })).notRunReason, /does not exist/);
+  assert.deepEqual([with3a(F({ expired: true })).testOutcome, with3a(F({ expired: true })).platformOutcome], ['NOT_RUN', 'FOREIGN_ARTIFACT_INVALID']);
+  assert.match(with3a(F({ expired: true })).notRunReason, /expired/);
+  for (const st of [null, 401, 403, 500]) assert.deepEqual([with3a(F({ status: st })).testOutcome, with3a(F({ status: st })).platformOutcome], ['INCONCLUSIVE', 'FOREIGN_ARTIFACT_UNVERIFIED'], String(st));
+  assert.deepEqual([with3a(F({ runId: run0.runId })).testOutcome, with3a(F({ runId: run0.runId })).platformOutcome], ['INCONCLUSIVE', 'FOREIGN_ARTIFACT_IS_THIS_RUN']);
+  assert.deepEqual([with3a(F({ runId: '555' }), { previousRunId: '556' }).testOutcome, with3a(F({ runId: '555' }), { previousRunId: '556' }).platformOutcome], ['NOT_RUN', 'FOREIGN_ARTIFACT_RUN_MISMATCH']);
+  // a valid artifact of the given other run, absent from this run's listing, download failed → DEFENDED
+  const ok = with3a(F({ runId: '555' }), { previousRunId: '555', crossRunDownload: 'success' });
+  assert.deepEqual([ok.testOutcome, ok.platformOutcome], ['DEFENDED', 'DOWNLOAD_NOT_FOUND_IN_RUN']);
+  assert.deepEqual(ok.evidence.lookup, { status: 200, expired: false, ownerRunId: '555' }); assert.equal(ok.evidence.crossRunDownload, 'success');
+  // valid artifact but this run's listing unavailable → still not DEFENDED
+  const nl = sc(runAttackVerify(io({ platform: platformOk({ artifactsOk: false, foreign: F({}) }), a14: { foreign: { artifactId: '99999999999999999999', downloadOutcome: 'failure' } } })), 'A14-3a');
+  assert.equal(nl.testOutcome, 'INCONCLUSIVE');
+});
+

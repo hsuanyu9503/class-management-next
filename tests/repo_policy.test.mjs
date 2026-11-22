@@ -91,7 +91,7 @@ test('attest-attack.yml：只能手動觸發、只在 main、沒有任何簽章�
   // the platform-evidence step (C1-REV001: this run's artifact list, same-name job error lines)
   assert.equal((w.match(/github\.token/g) || []).length, 2); assert.equal((ve.match(/github\.token/g) || []).length, 2);
   assert.match(ve, /run-id: \$\{\{ inputs\.previousRunId \}\}\n\s+github-token: \$\{\{ github\.token \}\}/);
-  assert.match(ve, /GITHUB_TOKEN: \$\{\{ github\.token \}\}\n\s+OUT_FILE: .+\n\s+SAMENAME_CONTROL_OUTCOME: .+\n\s+run: node poc\/stage2\/scripts\/attack-platform-evidence\.mjs\n/);
+  assert.match(ve, /GITHUB_TOKEN: \$\{\{ github\.token \}\}\n\s+OUT_FILE: .+\n\s+SAMENAME_CONTROL_OUTCOME: .+\n\s+FOREIGN_ARTIFACT_ID: .+\n\s+run: node poc\/stage2\/scripts\/attack-platform-evidence\.mjs\n/);
   // the same-name job has an upload control with a different name, before the same-name attempt
   assert.ok(jobs['same-name'].indexOf('id: control') > 0 && jobs['same-name'].indexOf('id: control') < jobs['same-name'].indexOf('id: up'));
   // the same-name upload must not overwrite, and its failure is expected (recorded, not fatal)
