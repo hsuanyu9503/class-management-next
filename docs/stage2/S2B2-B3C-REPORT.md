@@ -141,7 +141,7 @@
 
 ## 5. 錨定與合併後的操作
 
-- 錨定 digest 由 `fe954c3a…`（41 檔）變為 **`20c804ea86c1d8a2f133bcddaf8be3b3722451c88528a08560387c43306cd88a`（83 檔，R1）**。
+- 錨定 digest 由 `fe954c3a…`（41 檔）變為 **`fb0f85b06bf435e7314d1deb95fbdc6833ffba031ea15bdea336b2f7c160a738`（83 檔，R1）**。
   - 原因：受保護的 `attest.yml`、`verifier.mjs`、`attest-verify.mjs`、`sandbox.mjs`、`verify-anchor.mjs` 有修改，另外受保護範圍擴大為完整的可信呼叫鏈（C1-REV005）。
   - 送審時的 `e2149bd9…`（47 檔）已作廢，不應核准。
   - 在負責人重新核准錨定之前，`baseline-anchor` 會失敗。這是設計上的預期，Claude 不設定變數。
