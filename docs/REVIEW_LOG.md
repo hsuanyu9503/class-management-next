@@ -1135,3 +1135,19 @@
 - 範圍：只改文件。沒有修改程式（包括 masker）；沒有改 workflow、政策、錨定或 Settings；沒有簽章。
 - 使用者決策：`待決`（Q-A～Q-D；PR #12 合併）
 
+### PR #12 v0.4 審查（ChatGPT）：文件審查通過
+
+- Reviewed Head：`68ca03c1cfc0658b7cc58acb48ab3475cc4f6a50`
+- 結論：**文件審查通過；設計結案、實作待驗收**。F1、F2 的文件阻擋狀態關閉，沒有新的文件阻擋項。這不是 GitHub 的正式核准，也不代表負責人已授權合併、選定 Q-A～Q-D 或啟用 PASS。
+- 審查者的證據：
+  - 已核對：PR 的 Head 與 Base、同 Head CI 44976821239（兩個 job 的 head_sha 一致）、增量範圍與附件的 SHA-256；
+  - **沒有**重跑本機 npm，也沒有重算錨定。這兩項屬於提交者的證據。
+- 狀態：
+  - REV001～004、F1、F2／PR12-OBS、`scenario` 的來源：設計結案、實作待驗收；
+  - 計畫 §9 的四項備註列為 C-1／C-2 的驗收條件；
+  - F1 的等價性與 F2 的完整清單，都必須由實作證據支持；
+  - 四個 hosted run 的 artifact 原檔重播仍未完成；
+  - hosted 攻擊驗收與第三方簽章驗收都尚未完成。
+- 本段記錄是在 Reviewed Head 之後新增的文件 commit，只改 `docs/REVIEW_LOG.md` 與 `docs/HANDOFF.md`。新 Head **不是**審查者已審的版本。
+- 使用者決策：`待決`（Q-A～Q-D；PR #12 合併）
+
