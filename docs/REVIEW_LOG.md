@@ -926,3 +926,22 @@
 
 - 使用者決策：`未核准`；錨定待最終 Head 再核准。
 
+### PR-2 R1 增量複驗（ChatGPT）
+
+- Reviewed Head：`6d7e90d486fe817cc90689f115d43296323791c4`（增量 Base `8056dd9`）
+- 結論：**增量程式審查通過，PR2-REV001 關閉；沒有新的程式阻擋項目。** 等負責人核准錨定、必要的 CI 通過後，再決定是否合併。**不是**已核准合併，CI 也**不是**全綠（`baseline-anchor` 仍失敗）。結論只限於 `PASS_ENABLED=false` 的 B3b 初版。
+- `attest-execute` 是本版 schema 與程式定義的 producer 標識，對應 `attest.yml` 的 `jobs.execute`，不是 GitHub 的數字 job ID；不能單靠這個字串證明 producer 的來源。
+- 審查者獨立結果：
+  - 附件 17 個 SHA-256 一致；manifest 91／91；重播 15／15；前輪 PATCH 反例仍為 `BLOCKED`；
+  - 6 組模擬輸出的 digest 都一致，而且都沒有簽章；
+  - b3-unit：40 項中 39 pass、1 fail。失敗的是需要本機 HTTP 的 JSONL 測試（`EACCES`），不算獨立通過；
+  - **錨定**：從固定 Head 讀取全部 41 個檔案，逐檔核對後重算，得到 `fe954c3acdbb7eb9421cd23e4bd7bb91e6e390e61a267480f927211d34e15a0a`，與作者的值相同。這不是代替負責人的核准；受保護內容若再改變，就必須重新計算。
+- 只有作者證據（審查者未重跑）：完整的 Linux／Emulator 流程、mutation、schema suite、模擬腳本本身。
+- 保留：
+  - hosted 自我檢查、A10、A4／A14 的平台整合、A18、實際簽章；
+  - 在 `main` 提交摘要；
+  - N7 的 host 來源驗證、N5 的效能界線；
+  - POC-009 `BLOCKED`；
+  - NOTE-c 仍是「原文缺失，待確認」；缺少的 NOTE 與 X1～X10 沒有執行。
+- 使用者決策：`待決`（核准錨定與合併）
+
