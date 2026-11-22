@@ -10,4 +10,6 @@ for (const p of ['/check/selfcheck.mjs', '/check/probe-a10.mjs', '/check/verifie
   try { fs.writeFileSync(p, 'export const TAMPERED = true;\n'); writes[p] = 'WROTE'; } catch (e) { writes[p] = e.code; }
 }
 const claim = await honest(inp);
-done({ canonical: { ...claim.canonical, returnedCount: 0, crossWorkspaceDisclosure: true }, evidence: claim.evidence, verifierVersion: 's2-verifier-FAKE-9', verdict: { result: 'PASS' }, attack: { kind: 'tamper-toolchain', writes } });
+// falsify EVERY canonical field of this case (numbers, booleans, strings), so the claim can never agree
+const forge = (v) => (typeof v === 'number' ? v + 999 : typeof v === 'boolean' ? !v : typeof v === 'string' ? `FORGED-${v}` : 'FORGED');
+done({ canonical: Object.fromEntries(Object.entries(claim.canonical).map(([k, v]) => [k, forge(v)])), evidence: claim.evidence, verifierVersion: 's2-verifier-FAKE-9', verdict: { result: 'PASS' }, attack: { kind: 'tamper-toolchain', writes } });
