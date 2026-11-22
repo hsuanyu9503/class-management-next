@@ -15,7 +15,8 @@
 > 本 PR 內的所有結果都來自**本機**（不受信任的 runner）。hosted 驗收要等合併之後，由負責人手動觸發。
 >
 > **R1**（2026-11-22）：依 PR #13 審查（Reviewed Head `9e4db47`，CHANGES REQUESTED）修正 C1-REV001～005，見 §7。
-> **R2**（2026-11-22）：依 R1 複審（Reviewed Head `d0ab942`，CHANGES REQUESTED，剩兩項）修正 A14-3a 的有效外部 artifact，以及短秘密的規則，見 §8。本文 §4～§5 的數字已更新為 R2 的結果。
+> **R2**（2026-11-22）：依 R1 複審（Reviewed Head `d0ab942`，CHANGES REQUESTED，剩兩項）修正 A14-3a 的有效外部 artifact，以及短秘密的規則，見 §8。
+> **R3**（2026-11-23）：依 R2 複審（Reviewed Head `e4aee0d`，CHANGES REQUESTED，剩 C1-REV001 的欄位驗證）修正 A14-3a 缺少或格式錯誤欄位時的判定，見 §9。本文 §4～§5 的數字已更新為 R3 的結果。
 
 ## 1. 做了什麼
 
@@ -107,15 +108,15 @@
 
 | 項目 | 結果 | 執行者 |
 |---|---|---|
-| `npm test`（repo_policy、anchor、anchor_coverage 等） | 19/19 通過（R2） | Claude 本機 |
+| `npm test`（repo_policy、anchor、anchor_coverage 等） | 19/19 通過（R3） | Claude 本機 |
 | `npm run check` | 通過 | Claude 本機 |
 | `npm run stage1:all`，以及 `git diff --exit-code -- poc/stage1` | 通過；Stage 1 沒有變更 | Claude 本機 |
-| `npm run s2:test`（含 `c1-unit` 14 項、`a10-unit` 12 項、`attack-suite-unit` 10 項） | 141/141 通過（R2） | Claude 本機 |
-| `npm run s2:b3`（真實 Emulator、沙箱、root） | 33/33 通過（R2）。遮罩掃描 96 個檔案，以同一份清單（195 筆，含 5 筆平台憑證，排除 2 個非秘密類別的名稱）掃描，0 命中。run `S2B2B3A-20261122T160410Z-0fbfed4c`（commit `fc84321`，工作樹乾淨） | Claude 本機 |
-| `npm run s2:a10` | 9/9 符合預期（R2：run `S2B2A10-20261122T160510Z`，commit `fc84321`） | Claude 本機 |
+| `npm run s2:test`（含 `c1-unit` 14 項、`a10-unit` 12 項、`attack-suite-unit` 12 項） | 143/143 通過（R3） | Claude 本機 |
+| `npm run s2:b3`（真實 Emulator、沙箱、root） | 33/33 通過（R3）。遮罩掃描 96 個檔案，以同一份清單（195 筆，含 5 筆平台憑證，排除 2 個非秘密類別的名稱）掃描，0 命中。run `S2B2B3A-20261122T162343Z-8e367ddd`（commit `3dcaf3e`，工作樹乾淨） | Claude 本機 |
+| `npm run s2:a10` | 9/9 符合預期（R3：run `S2B2A10-20261122T162443Z`，commit `3dcaf3e`） | Claude 本機 |
 | A10 hosted 模式的示範（本機設定 `GITHUB_ACTIONS=true`、`RUNNER_ENVIRONMENT=github-hosted`） | A10-main → `INCONCLUSIVE`：`GITHUB_OUTPUT` 與 `RUNNER_INSTALL_DIR` 不是 DEFENDED，exit 1。證明 hosted 模式不會改用替代資料 | Claude 本機 |
 | attest-attack 的本機模擬 | 見 §3 | Claude 本機 |
-| mutation | R2：38/38 被測試抓到（原有 17 項、R1 的 14 項、R2 的 7 項），見 `S2B2-C1-R2-mutations.txt` | Claude 本機 |
+| mutation | R3：43/43 被測試抓到（原有 17 項、R1 的 14 項、R2 的 7 項、R3 的 5 項），見 `S2B2-C1-R3-mutations.txt` | Claude 本機 |
 | CI | 見 PR checks | GitHub |
 | hosted 的 `attest-attack.yml` | **NOT_RUN**：合併後由負責人觸發 | — |
 
@@ -142,9 +143,9 @@
 
 ## 5. 錨定與合併後的操作
 
-- 錨定 digest 由 `fe954c3a…`（41 檔）變為 **`f79ade1e95fdf78d6f5f2d0f0e2bf4e5fd5ffb99f70a253511aab24e5bf5664e`（83 檔，R2）**。
+- 錨定 digest 由 `fe954c3a…`（41 檔）變為 **`31c23e4dc7bafdf80943581e459576bd0afef9a9f495fc6d046911a36fadb8d3`（83 檔，R3）**。
   - 原因：受保護的 `attest.yml`、`verifier.mjs`、`attest-verify.mjs`、`sandbox.mjs`、`verify-anchor.mjs` 有修改，另外受保護範圍擴大為完整的可信呼叫鏈（C1-REV005）。
-  - 送審時的 `e2149bd9…`（47 檔），以及 R1 的 `fb0f85b0…`（83 檔），都已作廢，不應核准。
+  - 送審時的 `e2149bd9…`（47 檔）、R1 的 `fb0f85b0…`，以及 R2 的 `f79ade1e…`，都已作廢，不應核准。保護範圍沒有改變，仍是 83 檔。
   - 在負責人重新核准錨定之前，`baseline-anchor` 會失敗。這是設計上的預期，Claude 不設定變數。
 - 合併後，push 會照常觸發 `attest.yml`，結果應為 POC-001 honest → `UNATTESTED [TRUST_ROOT_NOT_CONFIGURED]`。之後**由負責人**手動觸發 `attest-attack.yml`：
   - `previousRunId` 與 `previousArtifactId` 可以留空，此時 A14-3a／3b 記為 `NOT_RUN`；
@@ -206,4 +207,30 @@ hosted 的實際行為仍待驗收。
 **注意**：
 - `verify-attack` 的退出碼為 0 時，仍要檢查摘要中的 `notRun` 清單。綠燈不代表所有案例都已執行。
 - 平台證據在本機都是合成的；409 的錯誤文字，以及 artifact API 的實際回應，要等 hosted 確認。
+
+## 9. R3：R2 複審的回應（Reviewed Head `e4aee0d`）
+
+複審判定：
+- 本輪結案：C1-REV004；
+- 維持結案：C1-REV002、003、005；
+- 仍開啟：C1-REV001 中 A14-3a 的必要欄位驗證，就是下表這一列。
+
+| ID | 問題 | 修正 | 位置 | 驗證 |
+|---|---|---|---|---|
+| C1-REV001（A14-3a 的必要欄位） | 沒有有效的 owner run ID 時，仍可能判為跨 run 防禦成功；收集器用 `expired === true`，會把缺少的 `expired` 推定為「未過期」 | `foreignEvidenceFrom()`（純函式，收集器直接使用）：只有真正的布林值才記為 `expired`；只有十進位 ID（數字或字串）才記為所屬 run；其他一律記為 null（未知）。<br>A14-3a 在檢查 404 與已過期之後，先檢查 `expired === false`，以及所屬 run 符合 `^[1-9][0-9]{0,19}$`；不成立就判 `INCONCLUSIVE FOREIGN_ARTIFACT_UNVERIFIED`。通過這一關之後，才檢查是否為本 run、是否等於 `previousRunId`，以及是否判 DEFENDED | `src/b3/attack-suite.mjs`、`scripts/attack-platform-evidence.mjs` | `attack-suite-unit` 新增 2 項：<br>- 審查者的重現（所屬 run 為 null、undefined、`'not-a-run'`），以及空字串、`'0'`、`'-5'`、`'12a'`、`12.5`、物件、陣列；<br>- `expired` 缺少或型別錯誤（null、undefined、`'false'`、0）；<br>- API 回應 → 平台證據 → 判定的完整路徑：沒有 `workflow_run`、`workflow_run` 沒有 id、id 為 null 或 `'abc'`、`expired` 缺少或為字串、`expired: true`、有效；<br>- 收集器的原始碼必須使用這個轉換。<br>mutation T1～T5。<br>本機模擬（**合成**證據）：有效 → `DEFENDED`；所屬 run 為 null → `INCONCLUSIVE`，exit 1；404 → `NOT_RUN` |
+
+**缺少 API 欄位時的判定**（A14-3a，下載失敗的分支）：
+
+| 查詢結果 | 判定 |
+|---|---|
+| 沒有查詢；status 為 null、401、403、500 等 | `INCONCLUSIVE FOREIGN_ARTIFACT_UNVERIFIED` |
+| 404，或 `expired === true` | `NOT_RUN FOREIGN_ARTIFACT_INVALID` |
+| 200，但 `expired` 不是 `false`（缺少、型別錯誤） | `INCONCLUSIVE FOREIGN_ARTIFACT_UNVERIFIED` |
+| 200，但所屬 run 缺少或格式錯誤 | `INCONCLUSIVE FOREIGN_ARTIFACT_UNVERIFIED` |
+| 所屬 run 就是本 run | `INCONCLUSIVE FOREIGN_ARTIFACT_IS_THIS_RUN` |
+| 所屬 run 不等於 `previousRunId`（有提供時） | `NOT_RUN FOREIGN_ARTIFACT_RUN_MISMATCH` |
+| 以上都通過，本 run 清單讀取成功且不含此 ID | `DEFENDED DOWNLOAD_NOT_FOUND_IN_RUN` |
+| 以上都通過，但清單不可用 | `INCONCLUSIVE DOWNLOAD_FAILED_REASON_UNVERIFIED` |
+
+以上判定都只經過本機單元測試與合成證據的驗證；GitHub artifact API 的實際回應要等 hosted 執行。
 

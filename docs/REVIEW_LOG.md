@@ -1228,3 +1228,22 @@
 - 錨定：`f79ade1e95fdf78d6f5f2d0f0e2bf4e5fd5ffb99f70a253511aab24e5bf5664e`（83 檔）。`e2149bd9…` 與 `fb0f85b0…` 都已作廢。
 - 使用者決策：`待決`
 
+### PR #13 R2 複審（ChatGPT）與 R3 回應
+
+- Reviewed Head：`e4aee0dbef229007bec91a8574faa0ef580fa912`
+- 結論：**CHANGES REQUESTED**，只剩 C1-REV001 的一個欄位驗證缺口。
+  - C1-REV004：本輪結案；
+  - C1-REV002、003、005：維持結案。
+- 審查者的證據：
+  - 獨立重算 83 檔的錨定 `f79ade1e…`，與附件一致；
+  - 在 Windows 上重跑三組單元測試，36/36 通過；
+  - 合成的重現：所屬 run 為 null、undefined、`'not-a-run'` 時，都判為 DEFENDED；
+  - **沒有**重跑整合測試或 mutation；hosted 仍是 NOT_RUN。
+- R3（Claude）：
+  - 新增 `foreignEvidenceFrom()`，缺少或型別錯誤的欄位一律保持未知；
+  - A14-3a 必須有明確的 `expired: false` 與合法的所屬 run ID，否則判 `INCONCLUSIVE`；
+  - 逐項說明見 REPORT §9；
+  - 本機結果：`npm test` 19/19；`s2:test` 143/143；`s2:b3` 33/33；`s2:a10` 9/9；本機模擬（合成證據）；mutation 43/43。
+- 錨定：`31c23e4dc7bafdf80943581e459576bd0afef9a9f495fc6d046911a36fadb8d3`（83 檔，保護範圍不變）。先前三個 digest 都已作廢。
+- 使用者決策：`待決`
+
