@@ -14,7 +14,8 @@
 >
 > 本 PR 內的所有結果都來自**本機**（不受信任的 runner）。hosted 驗收要等合併之後，由負責人手動觸發。
 >
-> **R1**（2026-11-22）：依 PR #13 審查（Reviewed Head `9e4db47`，CHANGES REQUESTED）修正 C1-REV001～005，見 §7。本文 §2～§5 的數字已更新為 R1 的結果。
+> **R1**（2026-11-22）：依 PR #13 審查（Reviewed Head `9e4db47`，CHANGES REQUESTED）修正 C1-REV001～005，見 §7。
+> **R2**（2026-11-22）：依 R1 複審（Reviewed Head `d0ab942`，CHANGES REQUESTED，剩兩項）修正 A14-3a 的有效外部 artifact，以及短秘密的規則，見 §8。本文 §4～§5 的數字已更新為 R2 的結果。
 
 ## 1. 做了什麼
 
@@ -106,15 +107,15 @@
 
 | 項目 | 結果 | 執行者 |
 |---|---|---|
-| `npm test`（repo_policy、anchor、anchor_coverage 等） | 19/19 通過（R1） | Claude 本機 |
+| `npm test`（repo_policy、anchor、anchor_coverage 等） | 19/19 通過（R2） | Claude 本機 |
 | `npm run check` | 通過 | Claude 本機 |
 | `npm run stage1:all`，以及 `git diff --exit-code -- poc/stage1` | 通過；Stage 1 沒有變更 | Claude 本機 |
-| `npm run s2:test`（含 `c1-unit` 12 項、`a10-unit` 12 項、`attack-suite-unit` 9 項） | 138/138 通過（R1） | Claude 本機 |
-| `npm run s2:b3`（真實 Emulator、沙箱、root） | 33/33 通過（R1：新增 C1-REV004 的呼叫端檢查）。遮罩掃描 96 個檔案，以同一份清單（196 筆，含 6 筆平台憑證）掃描，0 命中。run `S2B2B3A-20261122T154504Z-abafc73f（commit `e3853d2`，工作樹乾淨）` | Claude 本機 |
-| `npm run s2:a10` | 9/9 符合預期（R1） | Claude 本機 |
+| `npm run s2:test`（含 `c1-unit` 14 項、`a10-unit` 12 項、`attack-suite-unit` 10 項） | 141/141 通過（R2） | Claude 本機 |
+| `npm run s2:b3`（真實 Emulator、沙箱、root） | 33/33 通過（R2）。遮罩掃描 96 個檔案，以同一份清單（195 筆，含 5 筆平台憑證，排除 2 個非秘密類別的名稱）掃描，0 命中。run `S2B2B3A-20261122T160410Z-0fbfed4c`（commit `fc84321`，工作樹乾淨） | Claude 本機 |
+| `npm run s2:a10` | 9/9 符合預期（R2：run `S2B2A10-20261122T160510Z`，commit `fc84321`） | Claude 本機 |
 | A10 hosted 模式的示範（本機設定 `GITHUB_ACTIONS=true`、`RUNNER_ENVIRONMENT=github-hosted`） | A10-main → `INCONCLUSIVE`：`GITHUB_OUTPUT` 與 `RUNNER_INSTALL_DIR` 不是 DEFENDED，exit 1。證明 hosted 模式不會改用替代資料 | Claude 本機 |
 | attest-attack 的本機模擬 | 見 §3 | Claude 本機 |
-| mutation | R1：31/31 被測試抓到（原有 17 項，加上 R1 的 14 項），見下方說明與 `S2B2-C1-R1-mutations.txt` | Claude 本機 |
+| mutation | R2：38/38 被測試抓到（原有 17 項、R1 的 14 項、R2 的 7 項），見 `S2B2-C1-R2-mutations.txt` | Claude 本機 |
 | CI | 見 PR checks | GitHub |
 | hosted 的 `attest-attack.yml` | **NOT_RUN**：合併後由負責人觸發 | — |
 
@@ -141,9 +142,9 @@
 
 ## 5. 錨定與合併後的操作
 
-- 錨定 digest 由 `fe954c3a…`（41 檔）變為 **`fb0f85b06bf435e7314d1deb95fbdc6833ffba031ea15bdea336b2f7c160a738`（83 檔，R1）**。
+- 錨定 digest 由 `fe954c3a…`（41 檔）變為 **`f79ade1e95fdf78d6f5f2d0f0e2bf4e5fd5ffb99f70a253511aab24e5bf5664e`（83 檔，R2）**。
   - 原因：受保護的 `attest.yml`、`verifier.mjs`、`attest-verify.mjs`、`sandbox.mjs`、`verify-anchor.mjs` 有修改，另外受保護範圍擴大為完整的可信呼叫鏈（C1-REV005）。
-  - 送審時的 `e2149bd9…`（47 檔）已作廢，不應核准。
+  - 送審時的 `e2149bd9…`（47 檔），以及 R1 的 `fb0f85b0…`（83 檔），都已作廢，不應核准。
   - 在負責人重新核准錨定之前，`baseline-anchor` 會失敗。這是設計上的預期，Claude 不設定變數。
 - 合併後，push 會照常觸發 `attest.yml`，結果應為 POC-001 honest → `UNATTESTED [TRUST_ROOT_NOT_CONFIGURED]`。之後**由負責人**手動觸發 `attest-attack.yml`：
   - `previousRunId` 與 `previousArtifactId` 可以留空，此時 A14-3a／3b 記為 `NOT_RUN`；
@@ -188,4 +189,21 @@
 | C1-REV004 | 封存時的已知機密清單漏掉平台憑證 | `src/b3/mask-list.mjs`：已發出的 token（含輪替）、實際寫入 `case.json` 的 token，以及 Runner 環境中的平台憑證（固定名稱，加上名稱含 TOKEN／SECRET／PASSWORD／CREDENTIAL／PRIVATE_KEY／API_KEY 的變數）合成**同一份**清單。`b3-run` 的遮罩與兩處洩漏掃描都使用這份清單；清單只在記憶體中，只記錄各來源的筆數 | `src/b3/mask-list.mjs`、`test/b3-run.mjs` | `c1-unit` 新增 1 項（含審查者的合成值，以及呼叫端的原始碼檢查）；`s2:b3` 經真實呼叫端組裝的檢查（合成的平台憑證、最後一個 case token）；mutation R9、R10 |
 | C1-REV005 | 錨定遺漏直接產生驗收證據的可信程式 | 錨定改為涵蓋完整的可信呼叫鏈：<br>- `src/`、`sandbox-check/` 兩棵樹逐檔納入；<br>- 兩個 workflow 的入口腳本；<br>- 被啟動的 Runner 程式：`b3-run`、`a10-run`，以及 `smoke`（由 orchestrator 指名）；<br>- Stage 2 的 package、lock 與 Emulator 設定。<br>刻意不保護的有兩類：受測的 Adapter（`adapter-b3/`），以及單元測試。修正 `verify-anchor.mjs` 中「其他都由工具鏈 commit 固定」的錯誤描述 | `scripts/verify-anchor.mjs`、`tests/anchor_coverage.test.mjs` | `anchor_coverage` 計算每個 workflow 入口的 import closure（含被啟動的程式與 `/check` 入口），必須全部在錨定中；mutation R11、R12；83 檔 |
 | 建議（CLI 的退出碼） | job 成功與攻擊驗收的關係 | 見 §6 | `scripts/attack-verify.mjs` | `attack-suite-unit` 的原始碼檢查；mutation R13 |
+
+## 8. R2：R1 複審的回應（Reviewed Head `d0ab942`）
+
+複審判定：
+- 本輪結案：C1-REV002、003、005，以及 REV001 中的 A14-2 與退出碼；
+- 仍開啟兩項，就是下表的兩列。
+
+hosted 的實際行為仍待驗收。
+
+| ID | 問題 | 修正 | 位置 | 驗證 |
+|---|---|---|---|---|
+| C1-REV001（A14-3a） | 只證明了「不在本 run」，沒有證明測到的是有效的外部 artifact | 平台證據步驟以 artifact ID 在**本 repository** 查詢，取得 HTTP 狀態、是否過期，以及所屬的 run。<br>只有下列條件都成立才判 DEFENDED：<br>- 200 而且未過期；<br>- 所屬 run 不是本 run；<br>- 有提供 `previousRunId` 時，所屬 run 必須等於它；<br>- 本 run 的清單（讀取成功）中沒有這個 ID；<br>- 下載失敗。<br>其他情況：404 或已過期 → `NOT_RUN FOREIGN_ARTIFACT_INVALID`；run 不符 → `NOT_RUN FOREIGN_ARTIFACT_RUN_MISMATCH`；查詢失敗或沒有證據 → `INCONCLUSIVE FOREIGN_ARTIFACT_UNVERIFIED`；屬於本 run → `INCONCLUSIVE`。<br>跨 run 下載（A14-3b）的結果記錄為附帶證據 | `src/b3/attack-suite.mjs`、`scripts/attack-platform-evidence.mjs`、`scripts/attack-verify.mjs`、`attest-attack.yml` | `attack-suite-unit` 新增 1 項，涵蓋：審查者重現的 `99999999999999999999`（現在判 `INCONCLUSIVE`）、他人 ID 的證據不能用、404、已過期、null／401／403／500、本 run、run 不符、有效、清單不可用。<br>mutation S1～S4、S7。<br>本機模擬三種**合成**證據：有效 → `DEFENDED`，exit 0；404 → `NOT_RUN`（整體 `DEFENDED_WHERE_RUN` 但 `notRun=A14-3a`，exit 0）；沒有查詢 → `INCONCLUSIVE`，exit 1 |
+| C1-REV004（短秘密） | 長度 ≥ 12 的過濾會漏掉已知的短秘密 | 不再依長度過濾，只略過空值。平台環境**依名稱與用途分類**：憑證名稱都算秘密；位置類（`_FILE`／`_PATH`／`_DIR`）與設定類（`MAX_`／`MIN_`／`_TOKENS`）是明列的非秘密類別，只記錄筆數，不記錄值。極短的秘密會遮罩較多文字；若出現在 artifact 中，洩漏掃描會命中，不交出任何封裝（fail closed）。另記錄 `short` 筆數 | `src/b3/mask-list.mjs` | `c1-unit` 新增 2 項：審查者重現的 `old-pass-7`、`pin-4829`（已遮罩，掃描命中）；各來源 1～11 字元的值、長值、輪替值、空值；名稱分類（含本機實際遇到的 `MAX_THINKING_TOKENS` 與 `…_TOKEN_FILE`）。<br>mutation S5、S6。<br>`s2:b3` 33/33（`short=0`、排除 2 個） |
+
+**注意**：
+- `verify-attack` 的退出碼為 0 時，仍要檢查摘要中的 `notRun` 清單。綠燈不代表所有案例都已執行。
+- 平台證據在本機都是合成的；409 的錯誤文字，以及 artifact API 的實際回應，要等 hosted 確認。
 

@@ -52,12 +52,14 @@
   - Q-D：C-1 → C-2 → C-3。
 - **門檻（流程 I）**：A4／A10／A14 的 hosted 驗收、A18 的隔離測試簽章驗收（分為密碼學／身分層與 statement 政策層），以及第三方驗證腳本，**全部**完成並經獨立審查、負責人核准之後，才進入打開 PASS 的 PR。在那之前，`PASS_ENABLED=false`。
 - **C-1 實作**（2026-11-22，Claude）：已開 PR，見 REVIEW_LOG 的「C-1」段落。
-  - PR #13 審查（`9e4db47`）：CHANGES REQUESTED，C1-REV001～005。R1 已修正，見 REPORT §7。
-  - 錨定 digest（R1）：`fb0f85b06bf435e7314d1deb95fbdc6833ffba031ea15bdea336b2f7c160a738`（83 檔）。`e2149bd9…` 已作廢。在負責人重新核准之前，`baseline-anchor` 會失敗。
-  - 本機結果（R1）：`npm test` 19/19、`s2:test` 138/138、`s2:b3` 33/33、`s2:a10` 9/9、mutation 31/31、attest-attack 的本機模擬。
+  - PR #13 審查：
+    - `9e4db47`：CHANGES REQUESTED（C1-REV001～005），R1 已修正，見 REPORT §7；
+    - `d0ab942`：CHANGES REQUESTED（剩 A14-3a 與短秘密兩項），R2 已修正，見 REPORT §8。
+  - 錨定 digest（R2）：`f79ade1e95fdf78d6f5f2d0f0e2bf4e5fd5ffb99f70a253511aab24e5bf5664e`（83 檔）。`e2149bd9…` 與 `fb0f85b0…` 都已作廢。在負責人重新核准之前，`baseline-anchor` 會失敗。
+  - 本機結果（R2）：`npm test` 19/19、`s2:test` 141/141、`s2:b3` 33/33、`s2:a10` 9/9、mutation 38/38、attest-attack 的本機模擬。
   - **hosted 的 `attest-attack.yml` 尚未執行**（NOT_RUN）。合併並重新核准錨定之後，由負責人手動觸發。
   - `PASS_ENABLED=false`；沒有簽章權限；沒有設定任何變數或 Settings。
-- 下一位負責人：ChatGPT（複審 C-1 R1，L3）→ 你（核准合併、重新核准錨定、手動觸發 `attest-attack.yml`，並把 artifact 原檔交給審查者）→ Claude（C-2）。
+- 下一位負責人：ChatGPT（複審 C-1 R2，L3）→ 你（核准合併、重新核准錨定、手動觸發 `attest-attack.yml`，並把 artifact 原檔交給審查者）→ Claude（C-2）。
 - 四個 hosted run 的 artifact 原檔重播仍待處理，需要你提供原檔給 ChatGPT。
 - **PASS 啟用的門檻**（依 Q-B 的選擇；**選擇之前 `PASS_ENABLED=false`**）：
   - **流程 I（保留原門檻）**：A4／A10／A14 的 hosted 驗收、A18 的隔離測試簽章驗收（分為密碼學／身分層與 statement 政策層），以及第三方驗證腳本，**全部**完成並經獨立審查、負責人核准之後，才進入打開 PASS 的 PR。
@@ -198,5 +200,7 @@
 | 2026-11-22 | Claude → ChatGPT | C-1 實作 PR（A10／A14／A4、`attest-attack.yml`；錨定 `e2149bd9…`） | L3 審查 |
 | 2026-11-22 | ChatGPT → Claude | PR #13 審查 `9e4db47d9343`：CHANGES REQUESTED（C1-REV001～005） | R1 修正 |
 | 2026-11-22 | Claude → ChatGPT | C-1 R1（錨定 `fb0f85b0…`，83 檔） | 複審 |
+| 2026-11-22 | ChatGPT → Claude | R1 複審 `d0ab942897ff`：CHANGES REQUESTED（A14-3a、短秘密） | R2 修正 |
+| 2026-11-22 | Claude → ChatGPT | C-1 R2（錨定 `f79ade1e…`，83 檔） | 複審 |
 
 > 規格的正式變更請同步修改 SPEC／TECH，不要只在這裡留下新決策。

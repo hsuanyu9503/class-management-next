@@ -1208,3 +1208,23 @@
 - 錨定：`fb0f85b06bf435e7314d1deb95fbdc6833ffba031ea15bdea336b2f7c160a738`（83 檔）。送審時的 `e2149bd9…` 已作廢。需要負責人在複審通過後重新核准；Claude 沒有設定任何變數。
 - 使用者決策：`待決`（R1 複審之後才決定合併與重新核准錨定）
 
+### PR #13 R1 複審（ChatGPT）與 R2 回應
+
+- Reviewed Head：`d0ab942897ff82f8337029c556c80dd742c811f3`
+- 結論：**CHANGES REQUESTED**，只剩兩項收尾。
+  - 本輪結案：C1-REV002、003、005，以及 REV001 中的 A14-2 與退出碼；
+  - 仍開啟：REV001 的 A14-3a（沒有證明測到的是有效的外部 artifact）、REV004（短於 12 字元的已知秘密被排除）。
+- 審查者的證據：
+  - 獨立重算 83 檔的錨定 `fb0f85b0…`，與附件一致；
+  - 核對 fixture 原檔；
+  - 在 Windows 上重跑三組單元測試，33/33 通過；
+  - 兩個最小重現：任意的外部 ID 判為 DEFENDED；短秘密沒被遮罩，掃描也沒命中；
+  - **沒有**重跑 Linux／root 的整合測試或 mutation；hosted 仍是 NOT_RUN。
+- R2（Claude）：
+  - A14-3a 必須先以 artifact API 確認該 ID 存在、未過期，而且屬於另一個 run（等於給定的 `previousRunId`）；
+  - 已知秘密不再依長度過濾，平台環境依名稱與用途分類；
+  - 逐項說明見 `docs/stage2/S2B2-B3C-REPORT.md` §8；
+  - 本機結果：`npm test` 19/19；`s2:test` 141/141；`s2:b3` 33/33；`s2:a10` 9/9；本機模擬（合成證據）；mutation 38/38。
+- 錨定：`f79ade1e95fdf78d6f5f2d0f0e2bf4e5fd5ffb99f70a253511aab24e5bf5664e`（83 檔）。`e2149bd9…` 與 `fb0f85b0…` 都已作廢。
+- 使用者決策：`待決`
+
