@@ -1029,3 +1029,125 @@
   - 環境證據改為記錄實際的 Java 版本；
   - 觀察值截短時，另外保存完整的清單或 digest。
 
+### PR #11 合併與 hosted 執行 POC-001／002／008／009（2026-11-22）
+
+- 負責人回覆「三項都是」：合併 PR #11、依序觸發 POC-002／008／009、起草 hosted 攻擊驗收計畫。
+  - Claude 依明確批准合併 PR #11：merge `7324a50a6138fe1fb0c431dcd32d54fba2c520a0`（Head `8f0c9747`）。
+  - Claude 逐一以 `workflow_dispatch` 觸發三個案例，等前一個完成才觸發下一個，避免 concurrency 取消排隊中的執行。
+- 全部在 `main` 的 `7324a50` 上以 GitHub-hosted `ubuntu-24.04` 執行。兩個信任變數都還沒設定，所以可信工具鏈就是本 commit。下表由 job log 讀取：
+
+| 案例 | run | 觸發 | 封裝 artifact（ID／大小／SHA-256，上傳與下載一致） | 判定 | statement SHA-256 | 診斷 artifact | 簽章 |
+|---|---|---|---|---|---|---|---|
+| POC-001 | [44973507104](https://github.com/hsuanyu9503/class-management-next/actions/runs/44973507104) | push（PR #11 合併） | 14734552843／78,336／`6dfaa8e2b6458db522eff93c166c160751de9a36706bb83c065740ca0ed1b5fb` | `UNATTESTED [TRUST_ROOT_NOT_CONFIGURED]` | `9bbda5357f9f148626cd01be0cc7695d31a113f8d77cafbb3c7f8e6aa8273ae9` | 14733889164 | skipped |
+| POC-002 | [44973645770](https://github.com/hsuanyu9503/class-management-next/actions/runs/44973645770) | dispatch | 14734956754／71,168／`8f68e2f81370308dbe6e3d0388547625b079d69dcd23133f77478af0077a928c` | `UNATTESTED [TRUST_ROOT_NOT_CONFIGURED]` | `ff4f85e0479eb74c647ebadebd88eea38361727d0d5c952bed589012d2946092` | 14734408897 | skipped |
+| POC-008 | [44973761591](https://github.com/hsuanyu9503/class-management-next/actions/runs/44973761591) | dispatch | 14734897223／98,304／`f8bb3278a7ac41dba1f7937823ffd8e669015e2903767e0dffbd365f98ef8fec` | `UNATTESTED [TRUST_ROOT_NOT_CONFIGURED]` | `ce9a96e93b2097af660ed39de26218e0154e686625ba059c8b0b8be3eb80207a` | 14734148476 | skipped |
+| POC-009 | [44973876931](https://github.com/hsuanyu9503/class-management-next/actions/runs/44973876931) | dispatch | 14734482530／97,280／`3ce42f318eb9c56e3fa7f86c81e1ea99c3d28fda37b0e6a652218aba4a5d512d` | `BLOCKED [BLOCKED_FIELDS_G1_G4]` | `ba53ce01e447cde77f058cfcefa1db293d4993cb42997eedee483c3f9b5cbef8` | 14734867491 | skipped |
+
+- 四個判定都與預期相同：POC-001／002／008 是 `UNATTESTED`，POC-009 因 G-1／G-4 是 `BLOCKED`。所有 run 的 `platformSupported=true`；交付紀錄都是 `NOT_ATTEMPTED_NOT_PASS`。
+- **證據界線**：
+  - 以上只來自 job log。Claude 的環境無法下載 artifact，**沒有**讀取、重算或重播這些 artifact 的內容。
+  - 逐項核對與重播，需要由負責人下載各 run 的兩份 artifact 原檔，交給審查者；比照 run 44971433557 的補充複驗。
+  - 這些都是正常路徑，不代表 A4／A10／A14／A18 的攻擊驗收已經完成。
+- **hosted 攻擊驗收計畫**：`docs/stage2/S2B2-B3C-ATTACK-PLAN.md` v0.1（草案）已起草，待審查與負責人決定 Q-A～Q-D。計畫中同時列出兩項證據改善：Java 版本永遠是 `unknown` 的原因（`java -version` 寫到 stderr），以及觀察值截短的問題。
+
+### PR #12 審查（ChatGPT）與回應
+
+- Reviewed Head：`80b4f7e414187ec5079cb0d4ee358f68e9b5b1f2`（Base `7324a50`）
+- 結論：**CHANGES REQUESTED**：先修訂計畫，再請負責人決定 Q-A～Q-D；不建議照 v0.1 開始實作。四個 hosted run 的紀錄與原始 verify log 一致。
+  - 審查者**沒有**這四個 run 的 artifact 原檔，**沒有**重播。先前重播過的是 run 44971433557，不能用來代替這四次。
+- 審查意見：
+  - **PR12-REV001**：Environment 不是不可繞過的 OIDC 限制；
+  - **PR12-REV002**：A10 的判準會把沙箱自身資料當成外洩；
+  - **PR12-REV003**：A4／A14 的攻擊注入方式與預期結果不夠精確；
+  - **PR12-REV004**：A18 的選項與 PASS 前置門檻互相衝突；
+  - 兩項設計細節：`scenario` 的來源、完整觀察值的位置；
+  - 引用官方資料：GitHub Environment 文件、upload-artifact README、`gh attestation verify` 文件，以及 GHSA-wjmr-j3rp-mh2g（舊版 `--signer-workflow` 只做前綴比對，v2.102.0 修正）。
+
+| ID | 處理（Claude） | 位置 |
+|---|---|---|
+| PR12-REV001 | 已修訂：分開說明平台發出簽章與第三方接受；Environment 改為合作 workflow 的額外保護 | 計畫 §4.2、Q-C |
+| PR12-REV002 | 已修訂：逐目標分類與判準；逐目標的正向控制；由可信側以測試標記與雜湊判定；偽造與遺漏的負向案例；不輸出原始機密 | 計畫 §1.5、§2 |
+| PR12-REV003 | 已修訂：A14 每個情境列出輸入、不變的可信輸入、預期拒絕層與 NOT_RUN 條件；三層結果；A4 分為三項，並明列限制 | 計畫 §1.9、§3、§4.1 |
+| PR12-REV004 | 已修訂：兩條門檻一致的流程（I／II），由負責人選擇；第三方腳本的完整規則；固定 `gh` v2.102.0 以上 | 計畫 §5；HANDOFF |
+| 設計細節 | 已補：`scenario` 只來自可信輸入；完整觀察值只放在 `isolation.json`，statement 不變 | 計畫 §1.2、§6.2 |
+
+- 範圍：只修訂文件；沒有實作、沒有改 Settings、沒有設定變數、沒有測試簽章。
+- 使用者決策：`待決`（Q-A～Q-D；PR #12 合併）
+
+### PR #12 v0.2 複審（ChatGPT）與 v0.3 回應
+
+- Reviewed Head：`bbdc47269bfd617f35ea8d8c403796728ecf41cd`
+- 結論：**CHANGES REQUESTED**：計畫仍要修訂。這不是發現了程式實作漏洞，也不代表 hosted 攻擊驗收已完成。
+- 審查者核對的範圍：
+  - 附件的 SHA-256；
+  - Head、未合併的狀態，以及同 Head CI；
+  - 文件與證據的一致性。
+  - 審查者**沒有**重跑本機 npm 或 schema 測試。四個 hosted run 仍缺少各自 artifact 原檔的重播。
+- 前一輪項目的判定：
+  - PR12-REV001／003、`scenario` 的來源：**設計結案、實作待驗收**；
+  - PR12-REV002／004：部分解決，**仍開啟**；
+  - 完整觀察值：位置已解決，截斷的判定仍需補齊。
+- 必要修正：
+  1. REV002：「沒有看到外洩輸出」不能證明讀取被阻擋。需要可信的執行證據；無法確認時判 `INCONCLUSIVE`。
+  2. REV002：雜湊前綴與測試標記的規則不一致，而且不能把標記寫進真實的控制檔。
+  3. REV004：「目前 `active`」與「在歷史有效期間內」被混為一談，與 B3 計畫 §4.4 衝突。
+  4. 完整觀察值：截斷後的資料仍能通過雜湊與摘要比對；處理順序沒有定義。
+- 文字說明：
+  - 流程 II 中 `ACCEPTANCE_PENDING` 的語意，以及改指變數不會停止已開始的 run；
+  - §4.2「具備權限不等於已經發出簽章」。
+
+| 項目 | 處理（Claude，v0.3） | 位置 | 狀態 |
+|---|---|---|---|
+| REV002：陰性證據 | 可信探測程式，在相同隔離設定下另開沙箱實例執行；比對設定 digest；結果透過 Runner 擁有的管道回報；單一目標 `DEFENDED` 需要四個條件；輸出掃描只能證明 `BREACHED`；負向案例 N-1～N-8 | 計畫 §2.1、§2.3 | 送審 |
+| REV002：公開資料規則 | 真實機密與控制檔只做唯讀探測，不輸出內容、雜湊或前綴；canary 只來自 Runner 專建的資料；不寫入真實控制檔；先攔截再公開 | 計畫 §1.5、§2.2 | 送審 |
+| REV004：歷史有效期間 | 步驟 4a：產生新證明時要求目前 `active`；第三方依簽章時間判定，與 §4.4 一致，兩種紀錄一致套用；補上邊界、正常退役與 `invalidateIssued` 的測試；「所有 `revoked` 都拒絕」列為另需決策的政策變更 | 計畫 §5.1 | 送審 |
+| PR12-OBS：完整觀察值（新追蹤項） | 結構與必要 ID 集合；先遮罩、再序列化；以 UTF-8 bytes 計算大小與雜湊；摘要以 code point 計；截斷判 `INCOMPLETE`；邊界測試 | 計畫 §6.2 | 送審（計畫缺口，不是已發生的產品漏洞） |
+| 流程 II 的說明 | `ACCEPTANCE_PENDING` 的語意；若選流程 II，實作前另提暫停、佇列與 `invalidateIssued` 的處理 | 計畫 §5.2；HANDOFF | 文字說明 |
+| §4.2 的文字 | 改為「在平台允許，而且實際請求與簽署成功時」 | 計畫 §4.2 | 文字說明 |
+
+- 範圍：只改文件。沒有實作；沒有改 Settings、變數或 workflow；沒有測試簽章；沒有觸發 workflow。
+- 使用者決策：`待決`（Q-A～Q-D；PR #12 合併）
+
+### PR #12 v0.3 複審（ChatGPT）與 v0.4 回應
+
+- Reviewed Head：`9bca6c78c4f832aec9fc4ec2e9e4783921ee61e1`
+- 結論：**CHANGES REQUESTED**，只剩兩項文件收尾。不要求重設架構，也不要求在本 PR 實作。這是計畫審查，不代表產品已經外洩。
+- 審查者的證據：
+  - 核對了 Head、CI head_sha、增量範圍與附件的 SHA-256；
+  - 讀取相同 Head 的 `mask.mjs`，用合成資料執行一個測試：只有被明確傳入的不透明機密值才會被遮罩；
+  - **沒有**重跑完整的 npm、schema 或 hosted 套件。
+- 狀態：
+  - **設計結案、實作待驗收**：REV001／003／004、REV002 的公開資料規則、`scenario` 的來源；
+  - **仍開啟**：
+    - **F1**：REV002 的 N-2，把相同設定等同相同的執行結果；
+    - **F2**：PR12-OBS，masker 缺少已知機密清單的來源與呼叫契約。
+- 實作驗收備註，不是文件阻擋項，記在計畫 §9：
+  - `revoked` 紀錄格式錯誤時拒絕；
+  - `selfCheckFull` 的邊界，以及對照可信 `CHECK_IDS`；
+  - 掃描的有限範圍；
+  - `ACCEPTANCE_PENDING` 的措辭。
+
+| 項目 | 處理（Claude，v0.4） | 位置 | 狀態 |
+|---|---|---|---|
+| F1 | 結論範圍限於「這個探測操作被阻擋」；每個目標記錄身分、操作、時點與執行條件；無法建立等價性時記 `INCONCLUSIVE`；已確認成功時不被覆蓋。N-2 改為非機密 canary 的受控案例，預期回報 `READ_OK` | 計畫 §2.3 | 送審 |
+| F2 | 新增包裝層 `maskObservation(value, { secretValues })`（`[MASKED_SECRET]`）；由可信 Runner 收集完整機密清單，包含輪替過的舊值；清單不輸出；無法取得時判 `BLOCKED`；新增六項測試 | 計畫 §6.2 | 送審 |
+
+- 範圍：只改文件。沒有修改程式（包括 masker）；沒有改 workflow、政策、錨定或 Settings；沒有簽章。
+- 使用者決策：`待決`（Q-A～Q-D；PR #12 合併）
+
+### PR #12 v0.4 審查（ChatGPT）：文件審查通過
+
+- Reviewed Head：`68ca03c1cfc0658b7cc58acb48ab3475cc4f6a50`
+- 結論：**文件審查通過；設計結案、實作待驗收**。F1、F2 的文件阻擋狀態關閉，沒有新的文件阻擋項。這不是 GitHub 的正式核准，也不代表負責人已授權合併、選定 Q-A～Q-D 或啟用 PASS。
+- 審查者的證據：
+  - 已核對：PR 的 Head 與 Base、同 Head CI 44976821239（兩個 job 的 head_sha 一致）、增量範圍與附件的 SHA-256；
+  - **沒有**重跑本機 npm，也沒有重算錨定。這兩項屬於提交者的證據。
+- 狀態：
+  - REV001～004、F1、F2／PR12-OBS、`scenario` 的來源：設計結案、實作待驗收；
+  - 計畫 §9 的四項備註列為 C-1／C-2 的驗收條件；
+  - F1 的等價性與 F2 的完整清單，都必須由實作證據支持；
+  - 四個 hosted run 的 artifact 原檔重播仍未完成；
+  - hosted 攻擊驗收與第三方簽章驗收都尚未完成。
+- 本段記錄是在 Reviewed Head 之後新增的文件 commit，只改 `docs/REVIEW_LOG.md` 與 `docs/HANDOFF.md`。新 Head **不是**審查者已審的版本。
+- 使用者決策：`待決`（Q-A～Q-D；PR #12 合併）
+
