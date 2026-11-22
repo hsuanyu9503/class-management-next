@@ -1050,3 +1050,27 @@
   - 這些都是正常路徑，不代表 A4／A10／A14／A18 的攻擊驗收已經完成。
 - **hosted 攻擊驗收計畫**：`docs/stage2/S2B2-B3C-ATTACK-PLAN.md` v0.1（草案）已起草，待審查與負責人決定 Q-A～Q-D。計畫中同時列出兩項證據改善：Java 版本永遠是 `unknown` 的原因（`java -version` 寫到 stderr），以及觀察值截短的問題。
 
+### PR #12 審查（ChatGPT）與回應
+
+- Reviewed Head：`80b4f7e414187ec5079cb0d4ee358f68e9b5b1f2`（Base `7324a50`）
+- 結論：**CHANGES REQUESTED**：先修訂計畫，再請負責人決定 Q-A～Q-D；不建議照 v0.1 開始實作。四個 hosted run 的紀錄與原始 verify log 一致。
+  - 審查者**沒有**這四個 run 的 artifact 原檔，**沒有**重播。先前重播過的是 run 44971433557，不能用來代替這四次。
+- 審查意見：
+  - **PR12-REV001**：Environment 不是不可繞過的 OIDC 限制；
+  - **PR12-REV002**：A10 的判準會把沙箱自身資料當成外洩；
+  - **PR12-REV003**：A4／A14 的攻擊注入方式與預期結果不夠精確；
+  - **PR12-REV004**：A18 的選項與 PASS 前置門檻互相衝突；
+  - 兩項設計細節：`scenario` 的來源、完整觀察值的位置；
+  - 引用官方資料：GitHub Environment 文件、upload-artifact README、`gh attestation verify` 文件，以及 GHSA-wjmr-j3rp-mh2g（舊版 `--signer-workflow` 只做前綴比對，v2.102.0 修正）。
+
+| ID | 處理（Claude） | 位置 |
+|---|---|---|
+| PR12-REV001 | 已修訂：分開說明平台發出簽章與第三方接受；Environment 改為合作 workflow 的額外保護 | 計畫 §4.2、Q-C |
+| PR12-REV002 | 已修訂：逐目標分類與判準；逐目標的正向控制；由可信側以測試標記與雜湊判定；偽造與遺漏的負向案例；不輸出原始機密 | 計畫 §1.5、§2 |
+| PR12-REV003 | 已修訂：A14 每個情境列出輸入、不變的可信輸入、預期拒絕層與 NOT_RUN 條件；三層結果；A4 分為三項，並明列限制 | 計畫 §1.9、§3、§4.1 |
+| PR12-REV004 | 已修訂：兩條門檻一致的流程（I／II），由負責人選擇；第三方腳本的完整規則；固定 `gh` v2.102.0 以上 | 計畫 §5；HANDOFF |
+| 設計細節 | 已補：`scenario` 只來自可信輸入；完整觀察值只放在 `isolation.json`，statement 不變 | 計畫 §1.2、§6.2 |
+
+- 範圍：只修訂文件；沒有實作、沒有改 Settings、沒有設定變數、沒有測試簽章。
+- 使用者決策：`待決`（Q-A～Q-D；PR #12 合併）
+
