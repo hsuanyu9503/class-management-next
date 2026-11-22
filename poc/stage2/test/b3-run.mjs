@@ -19,6 +19,7 @@ import { sandboxConfig, configDigest, POLICY_VERSION, pathMapDigest } from '../s
 import { launchSandbox, cleanupSandboxDirs, resolvePathMap } from '../src/b3/sandbox.mjs';
 import { runSelfCheck } from '../src/b3/selfcheck-host.mjs';
 import { finalizeSelfCheck } from '../src/b3/observation.mjs';
+import { collectKnownSecrets } from '../src/b3/secrets.mjs';
 import { javaVersion } from '../src/b3/env-info.mjs';
 import { writePackage } from '../src/b3/package.mjs';
 import { buildCaseInput } from '../src/b3/case-input.mjs';
@@ -87,6 +88,13 @@ const outputChannels = [outputChannel, ...['GITHUB_OUTPUT', 'GITHUB_ENV', 'GITHU
 // B3A-N7: node binary only; /usr = USR_BINARIES + ldd closure (copied); digest recorded in isolation.json + statement
 const pathMap = process.platform === 'linux' ? resolvePathMap({ nodeBinary: process.execPath, adapterDir: path.join(ROOT, 'adapter-b3'), checkDir: path.join(ROOT, 'sandbox-check'), entryDir }) : null;
 let runCounter = Number(BigInt('0x' + ownNonce.slice(0, 8)) % 100000n) * 1000;
+// C1-REV004: ONE known-secret list for masking AND for the pre-hand-over leak scan — issued tokens (rotated
+// included), every token value actually written into a case.json, and the Runner's visible platform credentials
+const caseTokenValues = [];
+const packagingSecrets = () => collectKnownSecrets({ issued: h.issuedSecrets(), caseTokens: caseTokenValues, env: process.env });
+// local suite only: a synthetic platform credential in the Runner's environment, to prove it reaches the list
+const SYNTHETIC_PLATFORM_TOKEN = SINGLE ? null : `synthetic-platform-opaque-${randomBytes(12).toString('hex')}`;
+if (SYNTHETIC_PLATFORM_TOKEN) process.env.S2_SYNTHETIC_PLATFORM_TOKEN = SYNTHETIC_PLATFORM_TOKEN;
 const isoSec = () => new Date().toISOString().replace(/\.\d{3}Z$/, 'Z');
 
 /** One attested-style case run (plan §5 T0–T5, §6, §3.4). Options are attack variants (test only). */
@@ -110,7 +118,9 @@ async function attestedRun(label, { testId, entry = '/adapter/main.mjs', cfg = s
   // B3A-N8: the Adapter receives ONLY the token of this case's actor (trusted CASE_ACTORS table), never the others
   writeFileSync(path.join(inputDir, 'case.json'), JSON.stringify(buildCaseInput({ testId, fixtures, users, attackHints, caseActors: CASE_ACTORS })));
   chmodSync(path.join(inputDir, 'case.json'), 0o644);
-  const caseTokenActors = Object.keys(JSON.parse(readFileSync(path.join(inputDir, 'case.json'), 'utf8')).tokens);   // as written (N8)
+  const caseTokensWritten = JSON.parse(readFileSync(path.join(inputDir, 'case.json'), 'utf8')).tokens;
+  const caseTokenActors = Object.keys(caseTokensWritten);   // as written (N8)
+  for (const v of Object.values(caseTokensWritten)) if (typeof v === 'string') caseTokenValues.push(v);
   let sbx = null; let ready = false; let doneOk = false; let term = null; let nonceWrittenAt = null; let pre = null; let caseStartedAt = null; let caseEndedAt = null;
   const caseSpec = caseSpecs[testId];
   const sandboxAdapter = { mode: 'BACKEND_REAL', backend: 'firebase', execute: async () => {
@@ -146,10 +156,10 @@ async function attestedRun(label, { testId, entry = '/adapter/main.mjs', cfg = s
   const { pathMapDigest: pmd = null, ...pathMapRecord } = pathMap || {};
   // C-1 §6.2: mask → serialise → size-limit → summarise NOW, with the complete in-memory secret list of the run
   // (every token issued so far, rotated ones included; the list itself is never written — only its size)
-  const secretValues = h.issuedSecrets();
+  const known = packagingSecrets(); const secretValues = known.values;
   const { selfCheck, selfCheckFull } = finalizeSelfCheck(iso.selfCheckRaw, { fixtureNames: names, secretValues });
   const isolation = { isolationPolicyVersion: POLICY_VERSION, platformSupported: iso.platformSupported, platformReason: iso.reason ?? null, sandboxPolicyDigest: iso.sandboxPolicyDigest,
-    pathMap: pathMap ? pathMapRecord : null, pathMapDigest: pmd, selfCheck, selfCheckFull, maskSecretCount: secretValues.length, selfCheckTermination: iso.termination ?? null,
+    pathMap: pathMap ? pathMapRecord : null, pathMapDigest: pmd, selfCheck, selfCheckFull, maskSecretCount: secretValues.length, maskSecretSources: known.counts, selfCheckTermination: iso.termination ?? null,
     adapterTermination: term ? { namespaceTerminated: term.namespaceTerminated, remainingAdapterProcesses: term.remainingAdapterProcesses, exportAfterTermination: true } : null,
     adapterReady: ready, adapterDone: doneOk, controlViolations: sbx ? sbx.output().violations : [] };
   const files = {
@@ -183,7 +193,7 @@ if (SINGLE) {
   const treeBefore = treeDigest();
   const x = await attestedRun(`case-${SINGLE}`, { testId: SINGLE, scenario: SINGLE_SCENARIO, entry: SINGLE_ENTRY });
   const trustedTreesUnchanged = treeDigest() === treeBefore;
-  const secrets = h.issuedSecrets();
+  const secrets = packagingSecrets().values;
   const { readdirSync, statSync } = await import('node:fs');
   const files = []; const walk = (d) => { for (const n of readdirSync(d)) { const p = path.join(d, n); if (statSync(p).isDirectory()) walk(p); else files.push(p); } }; walk(runDir);
   const leaks = files.map((f) => ({ f: path.relative(runDir, f), l: findLeaks(readFileSync(f, 'latin1') + readFileSync(f, 'utf8'), { names, secrets }) })).filter((r) => r.l.length);
@@ -294,7 +304,14 @@ for (const [n, text] of Object.entries(variants)) {
   log(x.result.result === 'BLOCKED' && has(x, 'ARTIFACT_NONCANONICAL'), 'N5 bytes appended after the end-of-archive marker (consistent digest) → BLOCKED ARTIFACT_NONCANONICAL', R(x)); }
 
 // ---------------- masking scan of every artifact with every issued secret (R1-N7)
-const secrets = h.issuedSecrets();
+const secrets = packagingSecrets().values;
+{ // C1-REV004 through the REAL call-site assembly: the synthetic platform credential and the last case token are
+  // in the packaging list, and a raw observation carrying them under neutral keys comes out masked
+  const known = packagingSecrets(); const lastCaseToken = caseTokenValues[caseTokenValues.length - 1];
+  const probe = finalizeSelfCheck({ NO_CAPS: { ok: true, observedRaw: { observed: SYNTHETIC_PLATFORM_TOKEN, nested: [`x=${lastCaseToken};`] }, positiveControlOk: null } }, { fixtureNames: names, secretValues: known.values });
+  const full = probe.selfCheckFull.NO_CAPS.observedFull;
+  log(known.values.includes(SYNTHETIC_PLATFORM_TOKEN) && known.values.includes(lastCaseToken) && known.counts.platform >= 1 && !full.includes(SYNTHETIC_PLATFORM_TOKEN) && !full.includes(lastCaseToken) && findLeaks(full, { secrets: known.values }).length === 0,
+    'C1-REV004 packaging secret list = issued + case tokens + platform credentials; masking and leak scan use the same list', `counts=${JSON.stringify(known.counts)}`); }
 const { readdirSync, statSync } = await import('node:fs');
 const files = []; const walk = (d) => { for (const n of readdirSync(d)) { const p = path.join(d, n); if (statSync(p).isDirectory()) walk(p); else files.push(p); } }; walk(runDir);
 const leaks = files.map((f) => ({ f: path.relative(runDir, f), l: findLeaks(readFileSync(f, 'latin1') + readFileSync(f, 'utf8'), { names, secrets }) })).filter((r) => r.l.length);

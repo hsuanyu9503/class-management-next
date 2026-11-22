@@ -86,9 +86,14 @@ test('attest-attack.yml：只能手動觸發、只在 main、沒有任何簽章�
   // A4-3: the verify job checks out only the trusted toolchain (+ main for the policy) and runs only the trusted CLI
   const ve = jobs['verify-attack'];
   assert.deepEqual(ve.match(/ref: .+/g), ['ref: ${{ vars.CMN_S2_TRUSTED_TOOLCHAIN_SHA || github.sha }}', 'ref: main']);
-  assert.deepEqual(runLines(ve), ['node poc/stage2/scripts/attack-verify.mjs']);
-  // the actions-read token is used only to fetch the earlier run's package for A14-3b
-  assert.equal((w.match(/github\.token/g) || []).length, 1); assert.match(ve, /run-id: \$\{\{ inputs\.previousRunId \}\}\n\s+github-token: \$\{\{ github\.token \}\}/);
+  assert.deepEqual(runLines(ve), ['node poc/stage2/scripts/attack-platform-evidence.mjs', 'node poc/stage2/scripts/attack-verify.mjs']);
+  // the read-only token is used in exactly two places of verify-attack: the earlier run's package (A14-3b) and
+  // the platform-evidence step (C1-REV001: this run's artifact list, same-name job error lines)
+  assert.equal((w.match(/github\.token/g) || []).length, 2); assert.equal((ve.match(/github\.token/g) || []).length, 2);
+  assert.match(ve, /run-id: \$\{\{ inputs\.previousRunId \}\}\n\s+github-token: \$\{\{ github\.token \}\}/);
+  assert.match(ve, /GITHUB_TOKEN: \$\{\{ github\.token \}\}\n\s+OUT_FILE: .+\n\s+SAMENAME_CONTROL_OUTCOME: .+\n\s+run: node poc\/stage2\/scripts\/attack-platform-evidence\.mjs\n/);
+  // the same-name job has an upload control with a different name, before the same-name attempt
+  assert.ok(jobs['same-name'].indexOf('id: control') > 0 && jobs['same-name'].indexOf('id: control') < jobs['same-name'].indexOf('id: up'));
   // the same-name upload must not overwrite, and its failure is expected (recorded, not fatal)
   assert.match(jobs['same-name'], /continue-on-error: true\n\s+uses: actions\/upload-artifact@[0-9a-f]{40} # v7\.0\.2\n\s+with:\n(?:.*\n)*?\s+overwrite: false/);
 });

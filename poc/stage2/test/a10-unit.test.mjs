@@ -1,14 +1,16 @@
 /** A10 judgement unit tests (pure; no sandbox, no root). Attack-acceptance plan v0.4 §2.1, §2.3. */
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { planTargets, judgeA10, needlesFor, scanOutputs, REQUIRED_TARGETS } from '../src/b3/a10.mjs';
+import { readFileSync } from 'node:fs';
+import { planTargets, judgeA10, needlesFor, scanOutputs, hostControl, REQUIRED_TARGETS, DENIAL_ERRNOS } from '../src/b3/a10.mjs';
 
 const opts = { env: { GITHUB_OUTPUT: '/rt/_temp/out', GITHUB_ENV: '/rt/_temp/env' }, repoRoot: '/repo', runnerInstall: '/runner', helperPid: 4242, canaryFile: '/rt/_temp/s2-canary-x/canary', canaryPort: 18398, emulatorPort: 8080, endpoints: [{ port: 8080 }, { port: 9099 }] };
 const targets = planTargets(opts);
 const view = { uid: '65534', gid: '65534', caps: ['0', '0', '0', '0', '0'], noNewPrivs: '1', mountDigest: 'm', pidNs: 'pid:[1]' };
 const eq = (o = {}) => ({ cfgDigestProbe: 'd', cfgDigestAttacker: 'd', hostViewProbe: view, hostViewAttacker: { ...view, pidNs: 'pid:[2]' }, probeCompleted: true, attackerCompleted: true, sameRun: true, ...o });
 const present = () => Object.fromEntries(targets.map((t) => [t.id, t.class === 'self' ? { present: null } : { present: true, identity: t.hostPath && !t.hostPath.startsWith('/proc') ? { dev: '1', ino: t.id.length + '' } : undefined }]));
-const denied = () => ({ probeVersion: 's2-a10-probe-v1', results: Object.fromEntries(targets.filter((t) => t.class !== 'self').map((t) => [t.id, { result: 'DENIED', errnoClass: 'ENOENT' }])) });
+const denyCode = (t) => DENIAL_ERRNOS[t.op][0];
+const denied = () => ({ probeVersion: 's2-a10-probe-v2', results: Object.fromEntries(targets.filter((t) => t.class !== 'self').map((t) => [t.id, { result: 'DENIED', errnoClass: denyCode(t) }])) });
 const run = (o = {}) => judgeA10({ targets, controlsBefore: o.before || present(), controlsAfter: o.after || present(), probe: o.probe === undefined ? denied() : o.probe, scanHits: o.scanHits || new Set(), equivalence: o.equivalence || eq() });
 const out = (r, id) => r.targets.find((t) => t.id === id);
 
@@ -86,3 +88,53 @@ test('A10 scan: needles from canaries, real contents (lines ≥ 16 chars) and re
   assert.deepEqual([...hits].sort(), ['ENV_ACTIONS_RUNTIME_TOKEN', 'GIT_CONFIG']);
   assert.equal(scanOutputs([Buffer.from('S2CANARY-TEMP-0123456789').toString('base64')], N).size, 0);   // declared limit: no decoding
 });
+
+// ------------------------------------------------------------------ C1-REV002: a probe failure is never a block
+test('C1-REV002: UNKNOWN_OP, ERROR, EMFILE, TIMEOUT or an unlisted errno is INCONCLUSIVE, never DEFENDED', () => {
+  for (const [result, errnoClass] of [['DENIED', 'UNKNOWN_OP'], ['DENIED', 'ERROR'], ['DENIED', 'EMFILE'], ['DENIED', 'EIO'], ['PROBE_ERROR', 'EMFILE'], ['PROBE_ERROR', 'TIMEOUT'], ['PROBE_ERROR', 'UNKNOWN_OP_OR_TARGET'], ['DENIED', 'ENOTFOUND'], ['DENIED', 'EAI_AGAIN']]) {
+    const p = denied(); p.results.GIT_CONFIG = { result, errnoClass }; p.results.EMULATOR_PORT = { result, errnoClass };
+    const r = run({ probe: p });
+    assert.equal(out(r, 'GIT_CONFIG').outcome, 'INCONCLUSIVE', `${result}/${errnoClass}`);
+    assert.equal(out(r, 'EMULATOR_PORT').outcome, 'INCONCLUSIVE', `${result}/${errnoClass}`);
+    assert.equal(r.overall, 'INCONCLUSIVE', `${result}/${errnoClass}`);
+  }
+  // a denial errno valid for one op is not valid for another (ECONNREFUSED is not a file denial)
+  const p = denied(); p.results.GIT_CONFIG = { result: 'DENIED', errnoClass: 'ECONNREFUSED' };
+  assert.equal(out(run({ probe: p }), 'GIT_CONFIG').reason, 'DENIAL_REASON_NOT_ACCEPTED');
+  // a confirmed success still wins over a probe error elsewhere
+  const b = denied(); b.results.GIT_CONFIG = { result: 'PROBE_ERROR', errnoClass: 'EMFILE' };
+  assert.equal(run({ probe: b, scanHits: new Set(['RUNNER_TEMP_CANARY']) }).overall, 'BREACHED');
+});
+
+test('C1-REV002: the probe and the judge use the same denial lists; the probe never resolves names itself', () => {
+  const src = readFileSync(new URL('../sandbox-check/probe-a10.mjs', import.meta.url), 'utf8');
+  const m = /export const DENIAL_ERRNOS = Object\.freeze\((\{[\s\S]*?\})\);/.exec(src);
+  assert.ok(m); assert.deepEqual(new Function(`return ${m[1]}`)(), JSON.parse(JSON.stringify(DENIAL_ERRNOS)));
+  assert.doesNotMatch(src, /dns|lookup\(/); assert.match(src, /host: t\.addr/);
+  for (const ok of [['DENIED', 'TIMEOUT'], ['DENIED', 'ENOTFOUND']]) assert.ok(!Object.values(DENIAL_ERRNOS).flat().includes(ok[1]));
+});
+
+test('C1-REV002: a TCP target without a host-resolved address has no positive control (N/A, not DEFENDED)', async () => {
+  const t = { id: 'NET_X', class: 'network', op: 'connect-tcp', host: 'unresolvable.invalid', port: 443, addr: null };
+  assert.deepEqual(await hostControl(t, {}), { present: false });
+});
+
+// ------------------------------------------------------------------ C1-REV003: simulation is local-only
+test('C1-REV003: stand-ins are used only with allowSimulation; a simulated required target never satisfies acceptance by default', () => {
+  const hostedLike = { ...opts, env: {}, runnerInstall: null, simulatedRunnerInstall: '/sim', localOutputStandIn: '/sim/out' };
+  const h = planTargets({ ...hostedLike, allowSimulation: false });
+  assert.equal(h.find((t) => t.id === 'RUNNER_INSTALL_DIR').hostPath, null); assert.equal(h.find((t) => t.id === 'GITHUB_OUTPUT'), undefined);
+  const l = planTargets({ ...hostedLike, allowSimulation: true });
+  assert.equal(l.find((t) => t.id === 'RUNNER_INSTALL_DIR').simulated, true); assert.equal(l.find((t) => t.id === 'GITHUB_OUTPUT').simulated, true);
+  // judged with the default (acceptSimulated=false): the simulated required targets are INCONCLUSIVE
+  const ctl = Object.fromEntries(l.map((t) => [t.id, t.class === 'self' ? { present: null } : { present: true }]));
+  const pr = { probeVersion: 's2-a10-probe-v2', results: Object.fromEntries(l.filter((t) => t.class !== 'self').map((t) => [t.id, { result: 'DENIED', errnoClass: DENIAL_ERRNOS[t.op][0] }])) };
+  const strict = judgeA10({ targets: l, controlsBefore: ctl, controlsAfter: ctl, probe: pr, scanHits: new Set(), equivalence: eq() });
+  assert.equal(strict.overall, 'INCONCLUSIVE'); assert.equal(strict.targets.find((t) => t.id === 'GITHUB_OUTPUT').reason, 'SIMULATED_TARGET_NOT_ACCEPTED');
+  assert.ok(strict.requiredNotDefended.includes('GITHUB_OUTPUT') && strict.requiredNotDefended.includes('RUNNER_INSTALL_DIR'));
+  // a local run may accept them, and says so
+  const local = judgeA10({ targets: l, controlsBefore: ctl, controlsAfter: ctl, probe: pr, scanHits: new Set(), equivalence: eq(), acceptSimulated: true });
+  assert.equal(local.overall, 'DEFENDED'); assert.equal(local.evidenceScope, 'LOCAL_WITH_SIMULATED_TARGETS');
+  assert.equal(run().evidenceScope, 'REAL_TARGETS_ONLY');
+});
+

@@ -7,7 +7,10 @@
  *   A14_*  : execute-a14 outputs  (TEST_ID ARTIFACT_ID PACKAGE_SHA256 MANIFEST_SHA256 NONCE PLATFORM_SUPPORTED TOOLCHAIN_COMMIT), A14_SCENARIO, DIR_A14
  *   DECOY_ARTIFACT_ID, DIR_DECOY · SAMENAME_OUTCOME, SAMENAME_ARTIFACT_ID, DIR_SAMENAME
  *   FOREIGN_ARTIFACT_ID, FOREIGN_OUTCOME, DIR_FOREIGN · PREV_OUTCOME, DIR_PREV
- *   A4_*   : execute-a4 outputs (same keys + TREES_UNCHANGED), A4_SCENARIO, DIR_A4 */
+ *   A4_*   : execute-a4 outputs (same keys + TREES_UNCHANGED), A4_SCENARIO, DIR_A4
+ *   PLATFORM_FILE : output of attack-platform-evidence.mjs (C1-REV001); missing → no platform evidence
+ *  Exit code (C1 review): 0 ONLY when the summary is DEFENDED_WHERE_RUN; otherwise 1 after the summary is written.
+ *  A green job is still not an acceptance — that needs the summary and the raw artifacts reviewed. */
 import { readFileSync, readdirSync, lstatSync, writeFileSync, mkdirSync, existsSync } from 'node:fs';
 import { execFileSync } from 'node:child_process';
 import path from 'node:path';
@@ -32,9 +35,10 @@ const a14Dir = dirIO(env.DIR_A14);
 if (!a14Dir) { console.log('ATTACK_VERIFY_NOT_RUN: A14 package not downloaded'); process.exit(1); }
 const prevDir = dirIO(env.DIR_PREV); let previous = { bytes: null, reason: env.PREV_OUTCOME === 'failure' ? 'previous package download failed (expired, wrong IDs, or no access)' : 'previous run / artifact not given' };
 if (prevDir && env.PREV_OUTCOME === 'success') { const fs = prevDir.list().filter((e) => e.isFile); if (fs.length === 1) previous = { bytes: prevDir.read(fs[0].name) }; else previous = { bytes: null, reason: `previous download holds ${fs.length} files` }; }
+let platform = null; try { platform = JSON.parse(readFileSync(env.PLATFORM_FILE, 'utf8')); } catch { platform = null; }
 const sameDir = dirIO(env.DIR_SAMENAME); const decoyDir = dirIO(env.DIR_DECOY); const foreignDir = dirIO(env.DIR_FOREIGN); const a4Dir = dirIO(env.DIR_A4);
 const summary = runAttackVerify({
-  env, head, workflowBlob, policy, caseSpecs: Object.fromEntries(oracle.cases.map((c) => [c.testId, c])),
+  env, head, workflowBlob, policy, platform, caseSpecs: Object.fromEntries(oracle.cases.map((c) => [c.testId, c])),
   a14: { outputs: outputs('A14'), scenario: env.A14_SCENARIO, pkg: a14Dir.list, read: a14Dir.read,
     decoy: ID(env.DECOY_ARTIFACT_ID) && decoyDir ? { artifactId: ID(env.DECOY_ARTIFACT_ID), ...decoyDir } : null,
     sameName: { uploadOutcome: env.SAMENAME_OUTCOME, artifactId: ID(env.SAMENAME_ARTIFACT_ID), ...(sameDir || {}) },
@@ -46,3 +50,4 @@ mkdirSync(env.OUT_DIR, { recursive: true });
 writeFileSync(path.join(env.OUT_DIR, 'attack-summary.json'), JSON.stringify({ ...summary, runId: env.GITHUB_RUN_ID ?? null, runAttempt: env.GITHUB_RUN_ATTEMPT ?? null, verifyHead: head, workflowBlob }, null, 1));
 for (const s of summary.scenarios) console.log(`ATTACK ${s.id} test=${s.testOutcome} platform=${s.platformOutcome} verifier=${s.verifierOutcome}${s.notRunReason ? ` notRun="${s.notRunReason}"` : ''}`);
 console.log(`ATTACK_SUMMARY overall=${summary.overall} notRun=${summary.notRun.join(',') || '-'}`);
+process.exit(summary.overall === 'DEFENDED_WHERE_RUN' ? 0 : 1);

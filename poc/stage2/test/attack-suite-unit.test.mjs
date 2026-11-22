@@ -5,7 +5,7 @@ import { readFileSync as rf } from 'node:fs';
 import { createHash } from 'node:crypto';
 import { fileURLToPath as f2p } from 'node:url';
 import { writePackage, readPackageSafe } from '../src/b3/package.mjs';
-import { runAttackVerify } from '../src/b3/attack-suite.mjs';
+import { runAttackVerify, errorLines, saysConflict } from '../src/b3/attack-suite.mjs';
 
 const sha = (b) => createHash('sha256').update(b).digest('hex');
 const FIX = f2p(new URL('./fixtures/b3a-honest-poc001/', import.meta.url));
@@ -23,7 +23,10 @@ const pkgA14 = asScenario('attack-a14');
 const pkgA4 = asScenario('attack-a4-tamper', {}, { canonical: { workspaceId: 'WS-A17', returnedCount: 0, crossWorkspaceDisclosure: true }, verifierVersion: 's2-verifier-FAKE-9' });
 const prevPkg = asScenario('honest', { runId: '999999', attestationNonce: 'f'.repeat(64) });
 const one = (name) => () => [{ name, isFile: true }];
+const CONFLICT = ['##[error]Failed to CreateArtifact: Received non-retryable error: Failed request: (409) Conflict: an artifact with this name already exists on the workflow run'];
+const platformOk = (o = {}) => ({ artifactsOk: true, artifacts: [{ id: '1001', name: 'package-POC-001.tar' }, { id: '1002', name: 'decoy-POC-001.tar' }, { id: '1003', name: 'package-POC-002.tar' }], sameNameErrorLines: CONFLICT, sameNameControlOutcome: 'success', ...o });
 const io = (o = {}) => ({
+  platform: o.platform === undefined ? platformOk() : o.platform,
   env: { GITHUB_ACTIONS: 'true', RUNNER_ENVIRONMENT: 'github-hosted', GITHUB_RUN_ID: run0.runId, GITHUB_RUN_ATTEMPT: String(run0.runAttempt), CMN_STAGE1_ANCHOR_SHA256: 'a'.repeat(64) },
   head: run0.trustedToolchainCommit, workflowBlob: 'b'.repeat(40), policy: null, caseSpecs: { 'POC-001': caseSpec001 }, now: () => new Date('2026-11-22T00:00:00Z'),
   a14: { outputs: outputsOf(pkgA14), scenario: 'attack-a14', pkg: one('package-POC-001.tar'), read: () => pkgA14.packageBytes,
@@ -39,8 +42,8 @@ test('attack suite: expected defences on the fixture (positive control, A14-1/2/
   for (const id of ['A14-1', 'A14-2', 'A14-3a', 'A14-3b-i', 'A14-3b-ii', 'A4-1', 'A4-2-i', 'A4-2-ii', 'A4-3']) assert.equal(sc(r, id).testOutcome, 'DEFENDED', `${id}: ${sc(r, id).verifierOutcome}`);
   assert.equal(r.overall, 'DEFENDED_WHERE_RUN'); assert.deepEqual(r.notRun, []);
   assert.match(sc(r, 'A14-1').verifierOutcome, /ARTIFACT_SELECTION_MISMATCH/);
-  assert.equal(sc(r, 'A14-2').platformOutcome, 'UPLOAD_REJECTED'); assert.equal(sc(r, 'A14-2').verifierOutcome, 'NOT_REACHED');
-  assert.equal(sc(r, 'A14-3a').platformOutcome, 'DOWNLOAD_NOT_FOUND');
+  assert.equal(sc(r, 'A14-2').platformOutcome, 'UPLOAD_REJECTED_CONFLICT'); assert.equal(sc(r, 'A14-2').verifierOutcome, 'NOT_REACHED');
+  assert.equal(sc(r, 'A14-3a').platformOutcome, 'DOWNLOAD_NOT_FOUND_IN_RUN');
   assert.match(sc(r, 'A14-3b-i').verifierOutcome, /PACKAGE_DIGEST_MISMATCH/); assert.match(sc(r, 'A14-3b-ii').verifierOutcome, /RUN_BINDING_MISMATCH/);
   assert.match(sc(r, 'A4-2-i').verifierOutcome, /PACKAGE_DIGEST_MISMATCH/); assert.match(sc(r, 'A4-2-ii').verifierOutcome, /PAYLOAD_SET_MISMATCH/);
   assert.ok(!JSON.stringify(r).includes('"statement'));                                          // no statements in the summary
@@ -75,4 +78,48 @@ test('attack suite: A4-1 is BREACHED if the trusted trees changed, A4-3 if the v
   const f = runAttackVerify(io({ a14: { foreign: { artifactId: '777', downloadOutcome: 'success', list: one('package-POC-001.tar'), read: () => prevPkg.packageBytes } } }));
   assert.equal(sc(f, 'A14-3a').testOutcome, 'DEFENDED'); assert.equal(sc(f, 'A14-3a').platformOutcome, 'DOWNLOADED_FOREIGN');
   assert.equal(sha(prevPkg.packageBytes), sc(runAttackVerify(io()), 'A14-3b-i').previousPackageSha256);
+});
+
+// ------------------------------------------------------------------ C1-REV001: an action failure alone is not a defence
+test('C1-REV001: a failed same-name upload is DEFENDED only with conflict evidence; any other failure is INCONCLUSIVE', () => {
+  const variants = {
+    'network error': platformOk({ sameNameErrorLines: ['##[error]Failed to CreateArtifact: Unable to make request: ECONNRESET'] }),
+    'service error': platformOk({ sameNameErrorLines: ['##[error]Failed request: (503) Service Unavailable'] }),
+    'permission': platformOk({ sameNameErrorLines: ['##[error]Failed request: (403) Forbidden: Resource not accessible by integration'] }),
+    'no log': platformOk({ sameNameErrorLines: [] }),
+    'control upload failed too': platformOk({ sameNameControlOutcome: 'failure' }),
+    'listing unavailable': platformOk({ artifactsOk: false }),
+    'two artifacts of that name': platformOk({ artifacts: [{ id: '1001', name: 'package-POC-001.tar' }, { id: '1099', name: 'package-POC-001.tar' }] }),
+    'the one of that name is not the sealed package': platformOk({ artifacts: [{ id: '1099', name: 'package-POC-001.tar' }] }),
+    'no platform evidence at all': null,
+  };
+  for (const [n, platform] of Object.entries(variants)) {
+    const r = runAttackVerify(io({ platform }));
+    assert.deepEqual([sc(r, 'A14-2').testOutcome, sc(r, 'A14-2').platformOutcome], ['INCONCLUSIVE', 'UPLOAD_FAILED_REASON_UNVERIFIED'], n);
+    assert.ok(sc(r, 'A14-2').manualReview, n); assert.equal(r.overall, 'INCONCLUSIVE', n);
+  }
+  assert.equal(sc(runAttackVerify(io()), 'A14-2').testOutcome, 'DEFENDED');
+});
+
+test('C1-REV001: a failed foreign download is DEFENDED only if the listing of THIS run confirms the ID is absent', () => {
+  for (const [n, platform] of Object.entries({ 'listing unavailable': platformOk({ artifactsOk: false }), 'no evidence': null, 'ID is in this run': platformOk({ artifacts: [...platformOk().artifacts, { id: '777', name: 'x' }] }) })) {
+    const r = runAttackVerify(io({ platform }));
+    assert.deepEqual([sc(r, 'A14-3a').testOutcome, sc(r, 'A14-3a').platformOutcome], ['INCONCLUSIVE', 'DOWNLOAD_FAILED_REASON_UNVERIFIED'], n);
+  }
+  assert.deepEqual(sc(runAttackVerify(io()), 'A14-3a').evidence, { artifactsListed: true, idInThisRun: false });
+});
+
+test('C1-REV001: error-line extraction is bounded and keeps only platform error lines', () => {
+  const log = ['2026-11-22T03:00:00.0000000Z ##[group]Run actions/upload-artifact', `2026-11-22T03:00:01.0000000Z ${CONFLICT[0]}`, 'plain line', ...Array.from({ length: 20 }, (_, i) => `2026-11-22T03:00:02.0000000Z ##[error]${'e'.repeat(400)}${i}`)].join('\n');
+  const l = errorLines(log);
+  assert.equal(l.length, 10); assert.equal(l[0], CONFLICT[0]); assert.ok(l.every((x) => x.length <= 300 && x.includes('##[error]')));
+  assert.equal(saysConflict(l), true); assert.equal(saysConflict(['##[error](409) Something else']), false); assert.equal(saysConflict(['##[error]Conflict without a status']), false);
+  assert.deepEqual(errorLines(undefined), []);
+});
+
+
+test('C1 review: the verify CLI exits non-zero unless the summary is DEFENDED_WHERE_RUN (a green job is still not acceptance)', () => {
+  const src = rf(f2p(new URL('../scripts/attack-verify.mjs', import.meta.url)), 'utf8');
+  assert.match(src, /process\.exit\(summary\.overall === 'DEFENDED_WHERE_RUN' \? 0 : 1\);\s*$/);
+  assert.ok(src.indexOf("writeFileSync(path.join(env.OUT_DIR, 'attack-summary.json')") < src.indexOf('process.exit(summary.overall'));   // summary first
 });

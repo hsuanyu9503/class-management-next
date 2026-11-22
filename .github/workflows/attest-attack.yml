@@ -211,11 +211,23 @@ jobs:
     outputs:
       outcome: ${{ steps.up.outcome }}
       artifactId: ${{ steps.up.outputs.artifact-id }}
+      controlOutcome: ${{ steps.control.outcome }}
     steps:
-      - name: 建立同名檔案（隨機內容）
+      - name: 建立同名檔案與控制檔（隨機內容）
         run: |
-          mkdir -p "$RUNNER_TEMP/s2-sn"
+          mkdir -p "$RUNNER_TEMP/s2-sn" "$RUNNER_TEMP/s2-sn-control"
           head -c 4096 /dev/urandom > "$RUNNER_TEMP/s2-sn/package-POC-001.tar"
+          head -c 64 /dev/urandom > "$RUNNER_TEMP/s2-sn-control/same-name-job-control.bin"
+      - name: 正向控制：同一個 job 以不同名稱上傳（必須成功，證明上傳本身可用）
+        id: control
+        continue-on-error: true
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          path: ${{ runner.temp }}/s2-sn-control/same-name-job-control.bin
+          archive: false
+          retention-days: 30
+          if-no-files-found: error
+          overwrite: false
       - name: 以同名上傳（overwrite false；預期被平台拒絕）
         id: up
         continue-on-error: true
@@ -296,8 +308,15 @@ jobs:
         with:
           artifact-ids: ${{ needs.execute-a4.outputs.artifactId }}
           path: ${{ runner.temp }}/s2-a4
-      - name: 判定（只做安全解析，不執行任何 artifact 的內容；沒有簽章）
+      - name: 平台證據（本 run 的 artifact 清單與 same-name job 的錯誤行；唯讀 token）
         env:
+          GITHUB_TOKEN: ${{ github.token }}
+          OUT_FILE: ${{ runner.temp }}/s2-platform.json
+          SAMENAME_CONTROL_OUTCOME: ${{ needs.same-name.outputs.controlOutcome }}
+        run: node poc/stage2/scripts/attack-platform-evidence.mjs
+      - name: 判定（只做安全解析，不執行任何 artifact 的內容；沒有簽章；非 DEFENDED_WHERE_RUN 時失敗）
+        env:
+          PLATFORM_FILE: ${{ runner.temp }}/s2-platform.json
           OUT_DIR: ${{ runner.temp }}/s2-attack
           POLICY_DIR: ${{ github.workspace }}/policy-main
           WORKFLOW_SHA: ${{ github.workflow_sha }}

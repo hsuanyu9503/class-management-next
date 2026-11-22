@@ -17,7 +17,7 @@ const ctl = new net.Socket({ fd: 3, readable: true, writable: true });
 let cbuf = ''; const go = new Promise((res) => ctl.on('data', (d) => { cbuf += d; if (cbuf.split('\n').includes('GO')) res(); }));
 const mode = inp.mode || 'exfil';
 const tryRead = (t) => { try { return t.op === 'list' ? fs.readdirSync(t.insidePath).join('\n') : t.op === 'env' ? (process.env[t.name] ?? null) : fs.readFileSync(t.insidePath, 'utf8'); } catch (e) { return { err: e.code }; } };
-const tryConnect = (t) => new Promise((res) => { const s = net.connect(t.op === 'connect-unix' ? { path: t.insidePath } : { host: t.host, port: t.port }); const to = setTimeout(() => { s.destroy(); res('TIMEOUT'); }, 1500); s.once('connect', () => { clearTimeout(to); s.destroy(); res('CONNECTED'); }); s.once('error', (e) => { clearTimeout(to); res(e.code || 'ERROR'); }); });
+const tryConnect = (t) => new Promise((res) => { const s = net.connect(t.op === 'connect-unix' ? { path: t.insidePath } : { host: t.addr || '127.0.0.1', port: t.port }); const to = setTimeout(() => { s.destroy(); res('TIMEOUT'); }, 1500); s.once('connect', () => { clearTimeout(to); s.destroy(); res('CONNECTED'); }); s.once('error', (e) => { clearTimeout(to); res(e.code || 'ERROR'); }); });
 
 ctl.write('READY\n');
 await go;

@@ -11,12 +11,23 @@ import { createHash } from 'node:crypto';
 import { runVerifyJob } from './attest-verify.mjs';
 import { readPackageSafe, writePackage } from './package.mjs';
 
-export const SUITE_VERSION = 's2-attack-suite-v1';
+export const SUITE_VERSION = 's2-attack-suite-v2';   // v2: C1-REV001 — a failed platform step is never DEFENDED by itself
+
+/** Platform error lines of a job log ("##[error]" lines only), bounded — kept for the reviewer and for the
+ *  conflict check. Never contains secrets: the same-name job has no token and handles only random bytes. */
+export function errorLines(logText) {
+  if (typeof logText !== 'string') return [];
+  return logText.split('\n').filter((l) => l.includes('##[error]')).map((l) => l.replace(/^\S+Z\s+/, '').slice(0, 300)).slice(0, 10);
+}
+/** Conflict evidence for A14-2: the platform said so (HTTP 409 / conflict) — the action outcome alone is not enough. */
+export const saysConflict = (lines) => lines.some((l) => /\b409\b/.test(l) && /conflict/i.test(l));
 const sha = (b) => createHash('sha256').update(b).digest('hex');
 const codesOf = (r) => [...new Set((r.report?.reasons || []).map((x) => String(x).split(':')[0]))];
 const vOut = (r) => `${r.result} [${codesOf(r).join(',')}]`;
 
-/** @param io {
+/** C1-REV001 platform evidence (from a trusted step of the verify job, via the GitHub API):
+ *   io.platform = { artifactsOk: bool, artifacts: [{ id, name }] (this run), sameNameErrorLines: string[], sameNameControlOutcome }
+ *  @param io {
  *   env,                    // GITHUB_* of the verify job
  *   head, workflowBlob, policy, caseSpecs, now,
  *   a14: { outputs: {testId, artifactId, packageSha256, manifestSha256, attestationNonce, platformSupported, toolchainCommit}, scenario,
@@ -49,8 +60,19 @@ export function runAttackVerify(io) {
     add('A14-1', { testOutcome: blockedWith(r, 'ARTIFACT_SELECTION_MISMATCH') ? 'DEFENDED' : 'BREACHED', platformOutcome: 'DOWNLOADED', verifierOutcome: vOut(r), expected: 'BLOCKED ARTIFACT_SELECTION_MISMATCH' }); }
 
   // ---------------------------------------------------------------- A14-2 same-name upload (→ A14-1b if the platform accepted it)
-  const sn = a.sameName || {};
-  if (sn.uploadOutcome === 'failure') add('A14-2', { testOutcome: 'DEFENDED', platformOutcome: 'UPLOAD_REJECTED', verifierOutcome: 'NOT_REACHED', expected: 'platform rejects a second artifact with the same name (overwrite: false)' });
+  const sn = a.sameName || {}; const pf = io.platform || {};
+  const listed = pf.artifactsOk === true && Array.isArray(pf.artifacts) ? pf.artifacts : null;
+  if (sn.uploadOutcome === 'failure') {
+    // DEFENDED only with checkable conflict evidence: the job's own upload control succeeded, the platform's error
+    // says 409 / conflict, and this run holds exactly ONE artifact of that name — the sealed package
+    const sameNamed = listed ? listed.filter((x) => x.name === expName) : null;
+    const conflict = saysConflict(pf.sameNameErrorLines || []);
+    const evidence = { controlUpload: pf.sameNameControlOutcome ?? null, platformErrorLines: pf.sameNameErrorLines || [], artifactsListed: !!listed, sameNamedArtifactIds: sameNamed ? sameNamed.map((x) => String(x.id)) : null };
+    const ok = pf.sameNameControlOutcome === 'success' && conflict && !!sameNamed && sameNamed.length === 1 && String(sameNamed[0].id) === String(a.outputs.artifactId);
+    add('A14-2', ok
+      ? { testOutcome: 'DEFENDED', platformOutcome: 'UPLOAD_REJECTED_CONFLICT', verifierOutcome: 'NOT_REACHED', expected: 'platform rejects a second artifact with the same name (overwrite: false)', evidence }
+      : { testOutcome: 'INCONCLUSIVE', platformOutcome: 'UPLOAD_FAILED_REASON_UNVERIFIED', verifierOutcome: 'NOT_REACHED', manualReview: 'check the same-name job log: the failure must be the name conflict, not a network / service / permission error', evidence });
+  }
   else if (sn.uploadOutcome === 'success' && /^[0-9]{1,20}$/.test(sn.artifactId || '') && sn.list) {
     const r = verify(expEnv(a.outputs, a.scenario, { EXP_ARTIFACT_ID: sn.artifactId }), sn.list, sn.read);
     add('A14-2', { testOutcome: 'INCONCLUSIVE', platformOutcome: 'UPLOAD_ACCEPTED', verifierOutcome: 'NOT_REACHED', note: 'platform accepted the same name; see A14-1b' });
@@ -60,7 +82,13 @@ export function runAttackVerify(io) {
   // ---------------------------------------------------------------- A14-3a another run's artifact ID, downloaded in THIS run
   const f = a.foreign || {};
   if (!/^[0-9]{1,20}$/.test(f.artifactId || '')) add('A14-3a', { testOutcome: 'NOT_RUN', platformOutcome: 'NOT_ATTEMPTED', verifierOutcome: 'NOT_REACHED', notRunReason: 'previous artifact ID not given' });
-  else if (f.downloadOutcome === 'failure') add('A14-3a', { testOutcome: 'DEFENDED', platformOutcome: 'DOWNLOAD_NOT_FOUND', verifierOutcome: 'NOT_REACHED', expected: 'download-artifact finds no such artifact in this run' });
+  else if (f.downloadOutcome === 'failure') {
+    // DEFENDED only if the API listing of THIS run (read successfully) confirms the ID is not one of its artifacts
+    const inRun = listed ? listed.some((x) => String(x.id) === String(f.artifactId)) : null;
+    add('A14-3a', listed && inRun === false
+      ? { testOutcome: 'DEFENDED', platformOutcome: 'DOWNLOAD_NOT_FOUND_IN_RUN', verifierOutcome: 'NOT_REACHED', expected: 'download-artifact finds no such artifact in this run', evidence: { artifactsListed: true, idInThisRun: false } }
+      : { testOutcome: 'INCONCLUSIVE', platformOutcome: 'DOWNLOAD_FAILED_REASON_UNVERIFIED', verifierOutcome: 'NOT_REACHED', manualReview: 'the run artifact listing was unavailable, or the ID IS in this run: the failure reason is not established', evidence: { artifactsListed: !!listed, idInThisRun: inRun } });
+  }
   else if (f.downloadOutcome === 'success' && f.list) {
     const r = verify(expEnv(a.outputs, a.scenario, { EXP_ARTIFACT_ID: f.artifactId }), f.list, f.read);
     add('A14-3a', { testOutcome: r.result === 'BLOCKED' ? 'DEFENDED' : 'BREACHED', platformOutcome: 'DOWNLOADED_FOREIGN', verifierOutcome: vOut(r), expected: 'BLOCKED (selection / digest)' });

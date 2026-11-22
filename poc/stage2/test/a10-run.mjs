@@ -18,7 +18,7 @@ import { fileURLToPath } from 'node:url';
 import { assertLocalConfig } from '../src/local-guard.mjs';
 import { sandboxConfig, configDigest, ENDPOINTS } from '../src/b3/isolation-policy.mjs';
 import { launchSandbox, cleanupSandboxDirs, resolvePathMap } from '../src/b3/sandbox.mjs';
-import { planTargets, hostControl, hostViewOf, needlesFor, scanOutputs, judgeA10, discoverRunnerInstall, A10_VERSION } from '../src/b3/a10.mjs';
+import { planTargets, resolveTargets, hostControl, hostViewOf, needlesFor, scanOutputs, judgeA10, discoverRunnerInstall, A10_VERSION } from '../src/b3/a10.mjs';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.resolve(HERE, '..');
@@ -36,11 +36,15 @@ const canaryFile = path.join(canaryDir, 'canary'); writeFileSync(canaryFile, `${
 const helper = spawn('/bin/sleep', ['900'], { env: { S2_CANARY: CANARY.HOST_PROC_ENVIRON }, stdio: 'ignore' });
 const CANARY_PORT = 18398;
 const canarySrv = net.createServer((s) => s.destroy()); await new Promise((r, j) => { canarySrv.once('error', j); canarySrv.listen(CANARY_PORT, '127.0.0.1', r); });
-// local only: a Runner-private stand-in for GITHUB_OUTPUT and a simulated runner install (marked simulated)
-const localOutputStandIn = path.join(workDir, 'GITHUB_OUTPUT'); writeFileSync(localOutputStandIn, `${CANARY.GITHUB_OUTPUT}\n`);
+// C1-REV003: stand-ins exist ONLY on a local run. On a GitHub-hosted runner nothing is simulated: a real
+// required target that cannot be found stays missing and the run cannot be DEFENDED.
+const HOSTED = process.env.GITHUB_ACTIONS === 'true' && process.env.RUNNER_ENVIRONMENT === 'github-hosted';
+const allowSimulation = !HOSTED;
+let localOutputStandIn = null;
+if (allowSimulation) { localOutputStandIn = path.join(workDir, 'GITHUB_OUTPUT'); writeFileSync(localOutputStandIn, `${CANARY.GITHUB_OUTPUT}\n`); }
 const runnerInstall = discoverRunnerInstall();
 let simulatedRunnerInstall = null;
-if (!runnerInstall) {
+if (!runnerInstall && allowSimulation) {
   simulatedRunnerInstall = path.join(workDir, 'sim-runner'); mkdirSync(path.join(simulatedRunnerInstall, '_diag'), { recursive: true });
   writeFileSync(path.join(simulatedRunnerInstall, '.runner'), `${CANARY.RUNNER_DOT_RUNNER}\n`); writeFileSync(path.join(simulatedRunnerInstall, '.credentials'), `${CANARY.RUNNER_CREDENTIALS}\n`);
 }
@@ -50,7 +54,7 @@ const probeSha256 = sha(readFileSync(path.join(ROOT, 'sandbox-check/probe-a10.mj
 
 const POLICY = sandboxConfig();
 const leakCfg = () => sandboxConfig({ mounts: [...POLICY.mounts, { target: '/leak', source: `host:${canaryDir}`, mode: 'ro', flags: ['nodev', 'nosuid'] }] });
-const baseOpts = { env: process.env, repoRoot: REPO, runnerInstall, simulatedRunnerInstall, localOutputStandIn, helperPid: helper.pid, canaryFile, canaryPort: CANARY_PORT, emulatorPort: 8080, endpoints: ENDPOINTS };
+const baseOpts = { env: process.env, repoRoot: REPO, allowSimulation, runnerInstall, simulatedRunnerInstall, localOutputStandIn, helperPid: helper.pid, canaryFile, canaryPort: CANARY_PORT, emulatorPort: 8080, endpoints: ENDPOINTS };
 
 /** Scenario table (plan §2.3(3)). expect: overall and per-target expectations checked below. */
 const SCENARIOS = {
@@ -88,8 +92,8 @@ for (const [name, sc] of Object.entries(SCENARIOS)) {
   if (only.length && !only.includes(name)) continue;
   const attackerCfg = sc.leak ? leakCfg() : POLICY;
   const probeCfg = sc.probeCfg || attackerCfg;
-  const targets = planTargets({ ...baseOpts, leakMount: sc.leak ? { hostDir: canaryDir, insideDir: '/leak' } : null });
-  const insideList = targets.map(({ id, op, insidePath, name: n, host, port }) => ({ id, op, insidePath, name: n, host, port }));
+  const targets = await resolveTargets(planTargets({ ...baseOpts, leakMount: sc.leak ? { hostDir: canaryDir, insideDir: '/leak' } : null }));
+  const insideList = targets.map(({ id, op, insidePath, name: n, addr, port }) => ({ id, op, insidePath, name: n, addr, port }));
   const controlsBefore = {}; for (const t of targets) controlsBefore[t.id] = await hostControl(t, process.env);
   const p = await instance({ cfg: probeCfg, entry: '/check/probe-a10.mjs', input: { targets: insideList, skip: sc.skip || [] } });
   let probe = null; try { probe = JSON.parse(p.stdout); } catch { /* not completed */ }
@@ -99,12 +103,12 @@ for (const [name, sc] of Object.entries(SCENARIOS)) {
   const needles = needlesFor(targets, { canaryValues: CANARY, hostEnv: process.env });
   const scanHits = scanOutputs([a.stdout, a.stderr], needles);
   const equivalence = { cfgDigestProbe: p.cfgDigest, cfgDigestAttacker: a.cfgDigest, hostViewProbe: p.hostView, hostViewAttacker: a.hostView,
-    probeCompleted: p.done && !!probe && probe.probeVersion === 's2-a10-probe-v1', attackerCompleted: a.done, sameRun: true,
+    probeCompleted: p.done && !!probe && probe.probeVersion === 's2-a10-probe-v2', attackerCompleted: a.done, sameRun: true,
     timing: { probe: [p.startedAt, p.endedAt], attacker: [a.startedAt, a.endedAt] } };
-  const j = judgeA10({ targets, controlsBefore, controlsAfter, probe, scanHits, equivalence });
+  const j = judgeA10({ targets, controlsBefore, controlsAfter, probe, scanHits, equivalence, acceptSimulated: allowSimulation });
   const report = {
     a10Version: A10_VERSION, scenario: name, attackerMode: sc.mode, policyConfig: attackerCfg === POLICY && probeCfg === POLICY, policyConfigDigest: configDigest(POLICY),
-    probeSha256, runnerInstall: runnerInstall ? 'discovered' : 'simulated', overall: j.overall, requiredNotDefended: j.requiredNotDefended, equivalenceEstablished: j.equivalenceEstablished,
+    probeSha256, hosted: HOSTED, evidenceScope: j.evidenceScope, runnerInstall: runnerInstall ? 'discovered' : simulatedRunnerInstall ? 'simulated' : 'NOT_FOUND', overall: j.overall, requiredNotDefended: j.requiredNotDefended, equivalenceEstablished: j.equivalenceEstablished,
     equivalence: { ...equivalence }, targets: j.targets.map((t) => ({ ...t, hostIdentity: controlsBefore[t.id]?.identity ? { dev: controlsBefore[t.id].identity.dev, ino: controlsBefore[t.id].identity.ino } : null })),
     termination: { probe: { namespaceTerminated: p.term.namespaceTerminated, remaining: p.term.remainingAdapterProcesses }, attacker: { namespaceTerminated: a.term.namespaceTerminated, remaining: a.term.remainingAdapterProcesses } },
     controlViolations: { probe: p.violations.length, attacker: a.violations.length },
@@ -127,7 +131,7 @@ const tag = `S2B2A10-${new Date().toISOString().replace(/[-:]/g, '').replace(/\.
 const outDir = process.env.A10_OUT_DIR && path.isAbsolute(process.env.A10_OUT_DIR) ? process.env.A10_OUT_DIR : path.join(ROOT, 'evidence', 'runs', 's2b2-a10', tag);
 mkdirSync(outDir, { recursive: true });
 for (const [n, t] of Object.entries(reports)) writeFileSync(path.join(outDir, `a10-${n}.json`), t);
-const summary = { kind: 'S2B2_A10_RUN', tag, a10Version: A10_VERSION, notAPocPass: true, runnerKind: process.env.GITHUB_ACTIONS === 'true' && process.env.RUNNER_ENVIRONMENT === 'github-hosted' ? 'github-hosted' : 'local-untrusted', runnerInstall: runnerInstall ? 'discovered' : 'simulated', checks: results, ok: results.length > 0 && results.every((r) => r.ok) };
+const summary = { kind: 'S2B2_A10_RUN', tag, a10Version: A10_VERSION, notAPocPass: true, runnerKind: process.env.GITHUB_ACTIONS === 'true' && process.env.RUNNER_ENVIRONMENT === 'github-hosted' ? 'github-hosted' : 'local-untrusted', hosted: HOSTED, runnerInstall: runnerInstall ? 'discovered' : simulatedRunnerInstall ? 'simulated' : 'NOT_FOUND', checks: results, ok: results.length > 0 && results.every((r) => r.ok) };
 writeFileSync(path.join(outDir, 'a10-summary.json'), JSON.stringify(summary, null, 1));
 console.log(`S2B2_A10_RUN ${tag} ok=${summary.ok} checks=${results.filter((r) => r.ok).length}/${results.length} out=${path.relative(ROOT, outDir) || outDir}`);
 process.exit(summary.ok ? 0 : 1);

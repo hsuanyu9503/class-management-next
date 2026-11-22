@@ -180,3 +180,23 @@ test('C-1 §6.1: java -version is read from stderr; anything unrecognised is hon
   assert.equal(parseJavaVersion({ status: 0, stderr: 'something else entirely' }), 'unknown');
   assert.equal(parseJavaVersion(), 'unknown');
 });
+
+// ----------------------------------------------------------------------------- C1-REV004 known-secret collector
+import { collectKnownSecrets, platformSecretValues, MIN_SECRET_LEN } from '../src/b3/secrets.mjs';
+test('C1-REV004: the packaging list unites issued tokens (rotated included), case tokens and platform credentials', () => {
+  const env = { ACTIONS_RUNTIME_TOKEN: 'synthetic-platform-opaque-value-1', MY_DEPLOY_SECRET: 'synthetic-platform-opaque-value-2', PATH: '/usr/bin:/bin', HOME: '/root', GITHUB_TOKEN: 'short', RUNNER_TEMP: '/tmp/x' };
+  const r = collectKnownSecrets({ issued: ['issued-id-token-0001-current', 'issued-id-token-0000-rotated', 'issued-id-token-0001-current'], caseTokens: ['case-token-value-00001'], env });
+  for (const v of ['issued-id-token-0001-current', 'issued-id-token-0000-rotated', 'case-token-value-00001', 'synthetic-platform-opaque-value-1', 'synthetic-platform-opaque-value-2']) assert.ok(r.values.includes(v), v);
+  assert.ok(!r.values.includes('/usr/bin:/bin') && !r.values.includes('short'));
+  assert.deepEqual(r.counts, { issued: 3, caseTokens: 1, platform: 2, total: 5 });   // per-source counts before de-duplication
+  assert.throws(() => collectKnownSecrets({}), TypeError);
+  assert.ok(MIN_SECRET_LEN >= 12);
+  assert.deepEqual(platformSecretValues({ GH_TOKEN: 'x'.repeat(20), OTHER: 'y'.repeat(20) }), ['x'.repeat(20)]);
+  // the reviewer's case: an opaque platform value under a neutral key is masked once it comes from the collector
+  const full = finalizeSelfCheck({ NO_CAPS: { ok: true, observedRaw: { observed: 'synthetic-platform-opaque-value-1' }, positiveControlOk: null } }, { secretValues: r.values }).selfCheckFull.NO_CAPS.observedFull;
+  assert.ok(!full.includes('synthetic-platform-opaque-value-1')); assert.ok(full.includes(MASK_SECRET));
+  // and b3-run assembles the list ONLY through the collector, for masking and for the leak scans
+  const run = rf(f2p(new URL('./b3-run.mjs', import.meta.url)), 'utf8');
+  assert.doesNotMatch(run, /secretValues = h\.issuedSecrets\(\)|secrets = h\.issuedSecrets\(\)/);
+  assert.equal((run.match(/packagingSecrets\(\)/g) || []).length >= 3, true);
+});
