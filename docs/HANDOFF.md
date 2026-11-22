@@ -34,11 +34,11 @@
 - PR-2（PR #10）：R1 審查 CHANGES REQUESTED（PR2-REV001）→ 已修；**R1 增量複驗（Reviewed Head `6d7e90d4`）通過，PR2-REV001 關閉**。R1 增量複驗通過時，錨定尚待負責人核准，`baseline-anchor` 尚未通過；之後已完成核准、CI 通過與合併，見下一行的最新紀錄。
 - **PR #10（B3b）已合併**：merge `e4f37509e91a66979fabb76fb6501e1e09c6cae6`；錨定 `fe954c3acdbb7eb9421cd23e4bd7bb91e6e390e61a267480f927211d34e15a0a`（41 檔）已由負責人核准，合併後 `main` 的 CI（含 `baseline-anchor`）通過。**第一次 hosted 執行**（[run 44971433557](https://github.com/hsuanyu9503/class-management-next/actions/runs/44971433557)，POC-001）：execute 與 verify 都成功，判定 `UNATTESTED [TRUST_ROOT_NOT_CONFIGURED]`，簽章 skipped。依原始 log 與 Verifier 的判定順序，這次證據通過了該版本 Verifier 的下列檢查（有限範圍的結論，見 REVIEW_LOG）：22 項自我檢查、政策要求的正向控制、對帳、契約 MATCH，以及 provenance 的格式與綁定。2026-11-22 ChatGPT 取得使用者提供的 artifact 原檔後補充複驗：digest 與日誌一致；22 項 selfCheck、12 項正向控制、終止與對帳都已逐項核對；獨立重播結果相同（`UNATTESTED [TRUST_ROOT_NOT_CONFIGURED]`、contract MATCH）。限制：部分 `observed` 被截短；Java 版本為 `unknown`；攻擊驗收與簽章沒有因此完成（見 REVIEW_LOG）。
 - **PR #11 已合併**（merge `7324a50`）。**hosted 正常路徑四個案例都已執行**（`7324a50`）：POC-001／002／008 `UNATTESTED [TRUST_ROOT_NOT_CONFIGURED]`，POC-009 `BLOCKED [BLOCKED_FIELDS_G1_G4]`，都沒有簽章（run 與 artifact ID 見 REVIEW_LOG）。只有 run 44971433557 的 POC-001 經過 artifact 原檔逐項核對與重播；其他 run 目前只有 job log 的證據。
-- **hosted 攻擊驗收計畫** `docs/stage2/S2B2-B3C-ATTACK-PLAN.md` **v0.3（草案）**：已依 v0.2 複審修訂。
-  - PR12-REV001／003：設計結案、實作待驗收；
-  - PR12-REV002／004 與新追蹤項 PR12-OBS：v0.3 送審，未經審查通過；
+- **hosted 攻擊驗收計畫** `docs/stage2/S2B2-B3C-ATTACK-PLAN.md` **v0.4（草案）**：已依 v0.3 複審修訂 F1、F2。
+  - 設計結案、實作待驗收：PR12-REV001／003／004、REV002 的公開資料規則、`scenario` 的來源；
+  - v0.4 送審，尚未通過：REV002 的 N-2 推論範圍（F1）、PR12-OBS 的機密清單契約（F2）；
   - 待 ChatGPT 複驗，並由負責人決定 Q-A～Q-D；核准後依 C-1 → C-2 →（C-3）實作。
-- 下一位負責人：ChatGPT（複驗計畫 v0.3；若負責人提供四個 run 的 artifact 原檔，也一併核對與重播）→ 你（Q-A～Q-D，特別是 Q-B）。
+- 下一位負責人：ChatGPT（最後一次文件差異複驗 v0.4；若負責人提供四個 run 的 artifact 原檔，也一併核對與重播）→ 你（Q-A～Q-D，特別是 Q-B）。
 - **PASS 啟用的門檻**（依 Q-B 的選擇；**選擇之前 `PASS_ENABLED=false`**）：
   - **流程 I（保留原門檻）**：A4／A10／A14 的 hosted 驗收、A18 的隔離測試簽章驗收（分為密碼學／身分層與 statement 政策層），以及第三方驗證腳本，**全部**完成並經獨立審查、負責人核准之後，才進入打開 PASS 的 PR。
   - **流程 II（經負責人書面批准的例外）**：打開 PASS 前，先完成 A4／A10／A14 的 hosted 驗收與第三方驗證腳本，並取得負責人的書面例外批准。第一份簽章的狀態是 `ACCEPTANCE_PENDING`，要立刻完成正向與反向的第三方驗證；失敗時刪除或改指工具鏈變數、撤銷批准紀錄，並重新審查。
@@ -171,5 +171,7 @@
 | 2026-11-21 | Claude → ChatGPT | B3a R1 修正（Head 見 PR #7） | 增量複驗 |
 | 2026-11-22 | ChatGPT → Claude | PR #12 v0.2 複審 `bbdc47269bfd`：CHANGES REQUESTED（REV002／004 仍開啟；完整觀察值的截斷） | v0.3 修訂 |
 | 2026-11-22 | Claude → ChatGPT | 攻擊驗收計畫 v0.3（PR #12） | 複驗 |
+| 2026-11-22 | ChatGPT → Claude | v0.3 複審 `9bca6c78c4f8`：CHANGES REQUESTED（只剩 F1、F2） | v0.4 修訂 |
+| 2026-11-22 | Claude → ChatGPT | 攻擊驗收計畫 v0.4（PR #12） | 最後一次文件複驗 |
 
 > 規格的正式變更請同步修改 SPEC／TECH，不要只在這裡留下新決策。

@@ -1108,3 +1108,30 @@
 - 範圍：只改文件。沒有實作；沒有改 Settings、變數或 workflow；沒有測試簽章；沒有觸發 workflow。
 - 使用者決策：`待決`（Q-A～Q-D；PR #12 合併）
 
+### PR #12 v0.3 複審（ChatGPT）與 v0.4 回應
+
+- Reviewed Head：`9bca6c78c4f832aec9fc4ec2e9e4783921ee61e1`
+- 結論：**CHANGES REQUESTED**，只剩兩項文件收尾。不要求重設架構，也不要求在本 PR 實作。這是計畫審查，不代表產品已經外洩。
+- 審查者的證據：
+  - 核對了 Head、CI head_sha、增量範圍與附件的 SHA-256；
+  - 讀取相同 Head 的 `mask.mjs`，用合成資料執行一個測試：只有被明確傳入的不透明機密值才會被遮罩；
+  - **沒有**重跑完整的 npm、schema 或 hosted 套件。
+- 狀態：
+  - **設計結案、實作待驗收**：REV001／003／004、REV002 的公開資料規則、`scenario` 的來源；
+  - **仍開啟**：
+    - **F1**：REV002 的 N-2，把相同設定等同相同的執行結果；
+    - **F2**：PR12-OBS，masker 缺少已知機密清單的來源與呼叫契約。
+- 實作驗收備註，不是文件阻擋項，記在計畫 §9：
+  - `revoked` 紀錄格式錯誤時拒絕；
+  - `selfCheckFull` 的邊界，以及對照可信 `CHECK_IDS`；
+  - 掃描的有限範圍；
+  - `ACCEPTANCE_PENDING` 的措辭。
+
+| 項目 | 處理（Claude，v0.4） | 位置 | 狀態 |
+|---|---|---|---|
+| F1 | 結論範圍限於「這個探測操作被阻擋」；每個目標記錄身分、操作、時點與執行條件；無法建立等價性時記 `INCONCLUSIVE`；已確認成功時不被覆蓋。N-2 改為非機密 canary 的受控案例，預期回報 `READ_OK` | 計畫 §2.3 | 送審 |
+| F2 | 新增包裝層 `maskObservation(value, { secretValues })`（`[MASKED_SECRET]`）；由可信 Runner 收集完整機密清單，包含輪替過的舊值；清單不輸出；無法取得時判 `BLOCKED`；新增六項測試 | 計畫 §6.2 | 送審 |
+
+- 範圍：只改文件。沒有修改程式（包括 masker）；沒有改 workflow、政策、錨定或 Settings；沒有簽章。
+- 使用者決策：`待決`（Q-A～Q-D；PR #12 合併）
+
