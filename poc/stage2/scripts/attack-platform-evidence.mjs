@@ -6,7 +6,7 @@
  *  R2: (3) the foreign artifact given for A14-3a, looked up by ID in THIS repository (exists / expired / owning run).
  *  env: GITHUB_TOKEN, GITHUB_REPOSITORY, GITHUB_RUN_ID, GITHUB_RUN_ATTEMPT, GITHUB_API_URL, OUT_FILE, SAMENAME_CONTROL_OUTCOME, FOREIGN_ARTIFACT_ID */
 import { writeFileSync } from 'node:fs';
-import { errorLines } from '../src/b3/attack-suite.mjs';
+import { errorLines, foreignEvidenceFrom } from '../src/b3/attack-suite.mjs';
 
 const env = process.env;
 const api = (env.GITHUB_API_URL || 'https://api.github.com').replace(/\/$/, '');
@@ -30,8 +30,8 @@ if (repo && run && attempt && env.GITHUB_TOKEN) {
   } catch (e) { out.errors.push(`same-name log: ${e.message}`); }
   if (foreignId) {
     // repository-scoped lookup: a 200 proves the artifact exists IN THIS repository; 404 = no such artifact here
-    try { const r = await raw(`${api}/repos/${repo}/actions/artifacts/${foreignId}`); const j = r.status === 200 ? await r.json() : null;
-      out.foreign = { artifactId: foreignId, status: r.status, expired: j ? j.expired === true : null, runId: j?.workflow_run?.id != null ? String(j.workflow_run.id) : null, name: j ? String(j.name) : null };
+    try { const r = await raw(`${api}/repos/${repo}/actions/artifacts/${foreignId}`); let j = null; if (r.status === 200) { try { j = await r.json(); } catch { j = null; } }
+      out.foreign = foreignEvidenceFrom(foreignId, r.status, j);   // R3: unknown fields stay null (never "not expired" / "other run")
     } catch (e) { out.foreign = { artifactId: foreignId, status: null }; out.errors.push(`foreign artifact: ${e.message}`); }
   }
 } else out.errors.push('missing repository / run / attempt / token');

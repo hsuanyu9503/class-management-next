@@ -5,7 +5,7 @@ import { readFileSync as rf } from 'node:fs';
 import { createHash } from 'node:crypto';
 import { fileURLToPath as f2p } from 'node:url';
 import { writePackage, readPackageSafe } from '../src/b3/package.mjs';
-import { runAttackVerify, errorLines, saysConflict } from '../src/b3/attack-suite.mjs';
+import { runAttackVerify, errorLines, saysConflict, foreignEvidenceFrom } from '../src/b3/attack-suite.mjs';
 
 const sha = (b) => createHash('sha256').update(b).digest('hex');
 const FIX = f2p(new URL('./fixtures/b3a-honest-poc001/', import.meta.url));
@@ -147,5 +147,48 @@ test('C1-REV001 R2: an arbitrary / missing / expired / same-run / wrong-run fore
   // valid artifact but this run's listing unavailable → still not DEFENDED
   const nl = sc(runAttackVerify(io({ platform: platformOk({ artifactsOk: false, foreign: F({}) }), a14: { foreign: { artifactId: '99999999999999999999', downloadOutcome: 'failure' } } })), 'A14-3a');
   assert.equal(nl.testOutcome, 'INCONCLUSIVE');
+});
+
+// ------------------------------------------------------------------ C1-REV001 R3: missing / malformed identity fields
+test('C1-REV001 R3: an owner run that is missing or malformed is never "another run" (reviewer reproduction)', () => {
+  const run3a = (foreign) => sc(runAttackVerify(io({ platform: platformOk({ foreign: { artifactId: '777', status: 200, expired: false, ...foreign } }), a14: { foreign: { artifactId: '777', downloadOutcome: 'failure' } } })), 'A14-3a');
+  for (const runId of [null, undefined, '', 'not-a-run', '0', '-5', '12a', 12.5, {}, []]) {
+    const r = run3a({ runId });
+    assert.deepEqual([r.testOutcome, r.platformOutcome], ['INCONCLUSIVE', 'FOREIGN_ARTIFACT_UNVERIFIED'], JSON.stringify(runId));
+  }
+  for (const expired of [null, undefined, 'false', 0, 'no']) {
+    const r = run3a({ runId: '555', expired });
+    assert.deepEqual([r.testOutcome, r.platformOutcome], ['INCONCLUSIVE', 'FOREIGN_ARTIFACT_UNVERIFIED'], JSON.stringify(expired));
+  }
+  // the existing outcomes are unchanged
+  assert.equal(run3a({ runId: '555' }).testOutcome, 'DEFENDED');
+  assert.equal(run3a({ runId: '555', expired: true }).platformOutcome, 'FOREIGN_ARTIFACT_INVALID');
+  assert.equal(run3a({ runId: run0.runId }).platformOutcome, 'FOREIGN_ARTIFACT_IS_THIS_RUN');
+});
+
+test('C1-REV001 R3: API response → platform evidence keeps unknown fields unknown, end to end', () => {
+  const cases = [
+    [{ id: 777, name: 'package-POC-001.tar', expired: false, workflow_run: { id: 555 } }, { expired: false, runId: '555' }, 'DEFENDED'],
+    [{ id: 777, expired: false }, { expired: false, runId: null }, 'INCONCLUSIVE'],                                   // no workflow_run
+    [{ id: 777, expired: false, workflow_run: {} }, { expired: false, runId: null }, 'INCONCLUSIVE'],                 // no id
+    [{ id: 777, expired: false, workflow_run: { id: null } }, { expired: false, runId: null }, 'INCONCLUSIVE'],
+    [{ id: 777, expired: false, workflow_run: { id: 'abc' } }, { expired: false, runId: null }, 'INCONCLUSIVE'],
+    [{ id: 777, workflow_run: { id: 555 } }, { expired: null, runId: '555' }, 'INCONCLUSIVE'],                        // expired missing
+    [{ id: 777, expired: 'false', workflow_run: { id: 555 } }, { expired: null, runId: '555' }, 'INCONCLUSIVE'],      // expired wrong type
+    [{ id: 777, expired: true, workflow_run: { id: 555 } }, { expired: true, runId: '555' }, 'NOT_RUN'],
+  ];
+  for (const [body, want, outcome] of cases) {
+    const ev = foreignEvidenceFrom('777', 200, body);
+    assert.equal(ev.expired, want.expired, JSON.stringify(body)); assert.equal(ev.runId, want.runId, JSON.stringify(body));
+    const r = sc(runAttackVerify(io({ platform: platformOk({ foreign: ev }), a14: { foreign: { artifactId: '777', downloadOutcome: 'failure' } } })), 'A14-3a');
+    assert.equal(r.testOutcome, outcome, JSON.stringify(body));
+  }
+  // non-200 / unparsable bodies carry no identity at all
+  assert.deepEqual(foreignEvidenceFrom('777', 404, null), { artifactId: '777', status: 404, expired: null, runId: null, name: null });
+  assert.deepEqual(foreignEvidenceFrom('777', 200, null), { artifactId: '777', status: 200, expired: null, runId: null, name: null });
+  assert.equal(foreignEvidenceFrom('777', undefined, {}).status, null);
+  // the collector uses exactly this conversion
+  const src = rf(f2p(new URL('../scripts/attack-platform-evidence.mjs', import.meta.url)), 'utf8');
+  assert.match(src, /out\.foreign = foreignEvidenceFrom\(foreignId, r\.status, j\);/); assert.doesNotMatch(src, /j\.expired === true/);
 });
 

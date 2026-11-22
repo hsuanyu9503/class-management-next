@@ -20,6 +20,18 @@ export function errorLines(logText) {
   return logText.split('\n').filter((l) => l.includes('##[error]')).map((l) => l.replace(/^\S+Z\s+/, '').slice(0, 300)).slice(0, 10);
 }
 /** Conflict evidence for A14-2: the platform said so (HTTP 409 / conflict) — the action outcome alone is not enough. */
+/** R3 (C1-REV001): converts the repository-scoped artifact lookup into platform evidence. Every identity field
+ *  keeps an explicit UNKNOWN (null) unless the API returned it with the right type: `expired` only as a real
+ *  boolean, the owning run only as a decimal ID. A 200 alone is never "belongs to another run". */
+export function foreignEvidenceFrom(artifactId, status, body) {
+  const ok = status === 200 && body !== null && typeof body === 'object';
+  const rid = ok && body.workflow_run && typeof body.workflow_run === 'object' ? body.workflow_run.id : undefined;
+  return { artifactId: String(artifactId), status: Number.isInteger(status) ? status : null,
+    expired: ok && typeof body.expired === 'boolean' ? body.expired : null,
+    runId: (typeof rid === 'number' && Number.isSafeInteger(rid) && rid > 0) || (typeof rid === 'string' && /^[1-9][0-9]{0,19}$/.test(rid)) ? String(rid) : null,
+    name: ok && typeof body.name === 'string' ? body.name : null };
+}
+const RUN_ID_RE = /^[1-9][0-9]{0,19}$/;
 export const saysConflict = (lines) => lines.some((l) => /\b409\b/.test(l) && /conflict/i.test(l));
 const sha = (b) => createHash('sha256').update(b).digest('hex');
 const codesOf = (r) => [...new Set((r.report?.reasons || []).map((x) => String(x).split(':')[0]))];
@@ -92,7 +104,9 @@ export function runAttackVerify(io) {
     const evidence = { artifactsListed: !!listed, idInThisRun: inRun, lookup: fa ? { status: fa.status, expired: fa.expired ?? null, ownerRunId: fa.runId ?? null } : null, givenPreviousRunId: f.previousRunId || null, crossRunDownload: f.crossRunDownload ?? null };
     const thisRun = String(io.env.GITHUB_RUN_ID);
     if (!fa || ![200, 404].includes(fa.status)) add('A14-3a', { testOutcome: 'INCONCLUSIVE', platformOutcome: 'FOREIGN_ARTIFACT_UNVERIFIED', verifierOutcome: 'NOT_REACHED', manualReview: 'the foreign artifact could not be looked up: it is unknown whether a valid cross-run artifact was tested', evidence });
-    else if (fa.status === 404 || fa.expired !== false) add('A14-3a', { testOutcome: 'NOT_RUN', platformOutcome: 'FOREIGN_ARTIFACT_INVALID', verifierOutcome: 'NOT_REACHED', notRunReason: fa.status === 404 ? 'the given artifact ID does not exist in this repository (or was deleted)' : 'the given artifact has expired', evidence });
+    else if (fa.status === 404 || fa.expired === true) add('A14-3a', { testOutcome: 'NOT_RUN', platformOutcome: 'FOREIGN_ARTIFACT_INVALID', verifierOutcome: 'NOT_REACHED', notRunReason: fa.status === 404 ? 'the given artifact ID does not exist in this repository (or was deleted)' : 'the given artifact has expired', evidence });
+    // R3: required identity fields must be PRESENT and well-formed — unknown is never "valid, other run"
+    else if (fa.expired !== false || typeof fa.runId !== 'string' || !RUN_ID_RE.test(fa.runId)) add('A14-3a', { testOutcome: 'INCONCLUSIVE', platformOutcome: 'FOREIGN_ARTIFACT_UNVERIFIED', verifierOutcome: 'NOT_REACHED', manualReview: 'the lookup did not establish the artifact\'s expiry and owning run (missing or malformed fields)', evidence });
     else if (String(fa.runId) === thisRun) add('A14-3a', { testOutcome: 'INCONCLUSIVE', platformOutcome: 'FOREIGN_ARTIFACT_IS_THIS_RUN', verifierOutcome: 'NOT_REACHED', manualReview: 'the given artifact belongs to THIS run — not a cross-run test', evidence });
     else if (f.previousRunId && String(fa.runId) !== String(f.previousRunId)) add('A14-3a', { testOutcome: 'NOT_RUN', platformOutcome: 'FOREIGN_ARTIFACT_RUN_MISMATCH', verifierOutcome: 'NOT_REACHED', notRunReason: 'the artifact does not belong to the given previousRunId', evidence });
     else if (listed && inRun === false) add('A14-3a', { testOutcome: 'DEFENDED', platformOutcome: 'DOWNLOAD_NOT_FOUND_IN_RUN', verifierOutcome: 'NOT_REACHED', expected: 'a valid artifact of another run is not downloadable in this run', evidence });
