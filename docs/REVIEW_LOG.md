@@ -1029,3 +1029,24 @@
   - 環境證據改為記錄實際的 Java 版本；
   - 觀察值截短時，另外保存完整的清單或 digest。
 
+### PR #11 合併與 hosted 執行 POC-001／002／008／009（2026-11-22）
+
+- 負責人回覆「三項都是」：合併 PR #11、依序觸發 POC-002／008／009、起草 hosted 攻擊驗收計畫。
+  - Claude 依明確批准合併 PR #11：merge `7324a50a6138fe1fb0c431dcd32d54fba2c520a0`（Head `8f0c9747`）。
+  - Claude 逐一以 `workflow_dispatch` 觸發三個案例，等前一個完成才觸發下一個，避免 concurrency 取消排隊中的執行。
+- 全部在 `main` 的 `7324a50` 上以 GitHub-hosted `ubuntu-24.04` 執行。兩個信任變數都還沒設定，所以可信工具鏈就是本 commit。下表由 job log 讀取：
+
+| 案例 | run | 觸發 | 封裝 artifact（ID／大小／SHA-256，上傳與下載一致） | 判定 | statement SHA-256 | 診斷 artifact | 簽章 |
+|---|---|---|---|---|---|---|---|
+| POC-001 | [44973507104](https://github.com/hsuanyu9503/class-management-next/actions/runs/44973507104) | push（PR #11 合併） | 14734552843／78,336／`6dfaa8e2b6458db522eff93c166c160751de9a36706bb83c065740ca0ed1b5fb` | `UNATTESTED [TRUST_ROOT_NOT_CONFIGURED]` | `9bbda5357f9f148626cd01be0cc7695d31a113f8d77cafbb3c7f8e6aa8273ae9` | 14733889164 | skipped |
+| POC-002 | [44973645770](https://github.com/hsuanyu9503/class-management-next/actions/runs/44973645770) | dispatch | 14734956754／71,168／`8f68e2f81370308dbe6e3d0388547625b079d69dcd23133f77478af0077a928c` | `UNATTESTED [TRUST_ROOT_NOT_CONFIGURED]` | `ff4f85e0479eb74c647ebadebd88eea38361727d0d5c952bed589012d2946092` | 14734408897 | skipped |
+| POC-008 | [44973761591](https://github.com/hsuanyu9503/class-management-next/actions/runs/44973761591) | dispatch | 14734897223／98,304／`f8bb3278a7ac41dba1f7937823ffd8e669015e2903767e0dffbd365f98ef8fec` | `UNATTESTED [TRUST_ROOT_NOT_CONFIGURED]` | `ce9a96e93b2097af660ed39de26218e0154e686625ba059c8b0b8be3eb80207a` | 14734148476 | skipped |
+| POC-009 | [44973876931](https://github.com/hsuanyu9503/class-management-next/actions/runs/44973876931) | dispatch | 14734482530／97,280／`3ce42f318eb9c56e3fa7f86c81e1ea99c3d28fda37b0e6a652218aba4a5d512d` | `BLOCKED [BLOCKED_FIELDS_G1_G4]` | `ba53ce01e447cde77f058cfcefa1db293d4993cb42997eedee483c3f9b5cbef8` | 14734867491 | skipped |
+
+- 四個判定都與預期相同：POC-001／002／008 是 `UNATTESTED`，POC-009 因 G-1／G-4 是 `BLOCKED`。所有 run 的 `platformSupported=true`；交付紀錄都是 `NOT_ATTEMPTED_NOT_PASS`。
+- **證據界線**：
+  - 以上只來自 job log。Claude 的環境無法下載 artifact，**沒有**讀取、重算或重播這些 artifact 的內容。
+  - 逐項核對與重播，需要由負責人下載各 run 的兩份 artifact 原檔，交給審查者；比照 run 44971433557 的補充複驗。
+  - 這些都是正常路徑，不代表 A4／A10／A14／A18 的攻擊驗收已經完成。
+- **hosted 攻擊驗收計畫**：`docs/stage2/S2B2-B3C-ATTACK-PLAN.md` v0.1（草案）已起草，待審查與負責人決定 Q-A～Q-D。計畫中同時列出兩項證據改善：Java 版本永遠是 `unknown` 的原因（`java -version` 寫到 stderr），以及觀察值截短的問題。
+
