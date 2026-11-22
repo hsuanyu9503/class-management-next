@@ -1,5 +1,13 @@
 # PoC Stage 2｜S2-B2：本機 Emulator 基礎設施（第 1 批）與受控讀取 API 案例執行（第 2 批）
 
+> **第 3 批 C-1**：hosted 攻擊驗收的實作，只做驗收、不簽章。
+> - A10：可信探測加上 host 端的正向控制。指令：`npm run s2:a10`。
+> - A14／A4：驗證端的攻擊測試組。
+> - 無簽章的 `attest-attack.yml`。
+> - scenario 綁定與完整觀察值。
+>
+> 本機結果上限仍是 `UNATTESTED`。見 `docs/stage2/S2B2-B3C-REPORT.md`。
+>
 > **第 3 批 B3a**：本機沙箱（命名空間、uid 65534、無 capability、Unix socket 入口）、22 項隔離自我檢查、終止 → 匯出 → 對帳、封存與安全解析、Verifier 純函式、攻擊測試。**本機、不受信任，結果上限 `UNATTESTED`**；需要 Linux 與 root。指令：`npm run s2:b3`。見 `docs/stage2/S2B2-B3A-REPORT.md`。
 >
 > **第 2 批**：本機受控讀取 API、trace 記錄代理、狀態匯出、Observer 雛形，以及 POC-001、002、008、009 在真實 Emulator 上的執行。結果一律 `UNATTESTED`／`BLOCKED`，**沒有 PASS**。設計、案例對照與結果見 `docs/stage2/S2B2-B2-PLAN.md`。指令：`npm run s2:cases`。

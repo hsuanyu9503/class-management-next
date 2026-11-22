@@ -1171,3 +1171,25 @@
   - Q-D C-1 → C-2 → C-3。
 - 使用者決策：合併 `已核准`；Q-A～Q-D `已決定`
 
+### C-1：hosted 攻擊驗收的實作（Claude 送審）
+
+- 依據：攻擊驗收計畫 v0.4；負責人 2026-11-22 的 Q-A～Q-D（Q-D：先做 C-1）。
+- 基準：`main` = `0771790`。PR 與 Head 見 PR 描述與審查請求。
+- 初評風險：**L3**。理由：
+  - 修改受保護的 `attest.yml`、Verifier、`attest-verify.mjs`、沙箱啟動器；
+  - 新增一個 workflow，其中 verify-attack job 有 `actions: read`；
+  - 錨定 digest 改變。
+- 內容摘要：
+  - C-1a：scenario 綁定與完整觀察值；
+  - C-1b：A10 可信探測與判定；
+  - C-1c：A14／A4 驗證端的攻擊測試組，以及無簽章的 `attest-attack.yml`；
+  - 詳見 `docs/stage2/S2B2-B3C-REPORT.md`。
+- 證據（全部是 Claude 本機的結果）：
+  - `npm test` 17/17；`check`；`stage1:all` 且 Stage 1 沒有變更；
+  - `s2:test` 129/129；`s2:b3` 32/32（遮罩 0 命中）；`s2:a10` 9/9；
+  - attest-attack 的本機模擬：平台層的結果是手動餵入的；
+  - mutation 17/17。
+- **沒有**的證據：hosted 的 `attest-attack.yml`（NOT_RUN）、獨立審查、負責人核准。
+- 錨定：`e2149bd9ff0781ce710d920e62ee8bf16495eaeba1f661eb49fd10eccf1eb976`（47 檔）。需要負責人重新核准；Claude 沒有設定任何變數。
+- 使用者決策：`待決`（C-1 合併與重新核准錨定）
+
