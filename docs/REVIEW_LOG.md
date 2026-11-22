@@ -945,3 +945,30 @@
   - NOTE-c 仍是「原文缺失，待確認」；缺少的 NOTE 與 X1～X10 沒有執行。
 - 使用者決策：`待決`（核准錨定與合併）
 
+### PR #10 合併與第一次 hosted 執行（2026-11-22）
+
+- 負責人核准錨定（`CMN_STAGE1_ANCHOR_SHA256 = fe954c3acdbb7eb9421cd23e4bd7bb91e6e390e61a267480f927211d34e15a0a`，41 檔）後，由負責人合併 PR #10：merge `e4f37509e91a66979fabb76fb6501e1e09c6cae6`（2026-11-22T01:25:54Z，Head `95559cac`）。
+- 合併後 `main` 的 CI：[run 44971433581](https://github.com/hsuanyu9503/class-management-next/actions/runs/44971433581) success（含 `baseline-anchor`）。
+- **第一次 hosted 執行**：`attest.yml`，[run 44971433557](https://github.com/hsuanyu9503/class-management-next/actions/runs/44971433557)，由 push 觸發，案例 POC-001，在 GitHub-hosted `ubuntu-24.04` 上執行。
+
+  | 項目 | 由 job log 讀到的結果 |
+  |---|---|
+  | execute job | success。可信工具鏈為 `e4f3750`（兩個變數都還沒設定，所以用本 commit）；sudo 執行並封存；`platformSupported=true`；runId 綁定 44971433557、attempt 1；Runner 內的本機診斷為 `UNATTESTED` |
+  | job outputs | 由非 root 的獨立步驟寫入：`packageSha256=e38f098b…`、`manifestSha256=d7f4ee5d…`、`platformSupported=true`、`toolchainCommit=e4f3750` |
+  | 上傳 | `archive: false`，單一原始檔 `package-POC-001.tar`（78,336 bytes），artifact ID 14733757533，upload-artifact 回報的 digest 等於 `packageSha256` |
+  | verify job | success。依 ID 下載時記錄「Downloading raw file (non-zip)」，檔名為 `package-POC-001.tar`，download-artifact 重算的 digest 一致 |
+  | 判定 | `UNATTESTED [TRUST_ROOT_NOT_CONFIGURED]`；信任政策的原因為 `TRUSTED_TOOLCHAIN_NOT_SET`、`SIGNING_POLICY_NOT_SET`；statement `08b18248…` |
+  | 簽章 | **skipped**（不是 PASS）；交付紀錄為 `NOT_ATTEMPTED_NOT_PASS` |
+  | 診斷 | `s2-verify-POC-001`，artifact ID 14733304375，保存 30 天 |
+
+- **由判定推得的結論**：Verifier 對任何一項隔離檢查或正向控制失敗、對帳問題、run 綁定或 provenance 問題都會判 `BLOCKED`。這次的原因**只有** `TRUST_ROOT_NOT_CONFIGURED`，所以在 hosted runner 上：
+  - 22 項自我檢查與正向控制都通過；
+  - 對帳無誤；
+  - 契約比對為 MATCH；
+  - provenance 有效。
+- **證據界線**：
+  - Claude 的執行環境無法連線 artifact 下載主機（`*.blob.core.windows.net`，網路政策 403），**沒有**讀到診斷檔中 22 項檢查的原始觀察值。以上結論來自 job log 與判定的語意，不是逐項檢視。負責人或審查者可以從 run 頁面下載 artifact 14733304375 與 14733757533 核對。
+  - 這次只執行 POC-001。POC-002／008／009 尚未在 hosted 執行。
+  - A10（平台憑證）沒有逐項證據；A4、A14 的平台整合只有這次正常路徑的證據，沒有攻擊情境；A18 與實際簽章仍是 NOT_RUN。
+  - `PASS_ENABLED=false`。
+
