@@ -31,9 +31,10 @@
 
   NOTE-c：**原文缺失，待確認**（目前只有編號）。依負責人指示不推測內容、不據此修改程式，也不作為獨立阻擋條件；找到原文後再補具體要求。B3A-N5～N8 另有明確描述，與 NOTE-c 分開追蹤。NOTE ①～⑦ 的原文同樣沒有傳到 Claude 的環境。
 - 負責人決定（2026-11-21）：Q-1（D-17）、Q-2、Q-3 採 `S2B2-B3-DECISION-SUMMARY.md` B 節的推薦；分兩個 PR（PR-1 本機修正 → PR-2 B3b）；Q-3 artifact 保存 30 天。PR-2 合併後，負責人仍須設定錨定 digest、`CMN_S2_TRUSTED_TOOLCHAIN_SHA`、`CMN_S2_SIGNING_POLICY_BLOB`；完成前不得 `PASS`。
-- PR-2（PR #10）：R1 審查 CHANGES REQUESTED（PR2-REV001）→ 已修；**R1 增量複驗（Reviewed Head `6d7e90d4`）通過，PR2-REV001 關閉**。錨定 digest `fe954c3acdbb7eb9421cd23e4bd7bb91e6e390e61a267480f927211d34e15a0a`（41 檔，審查者已獨立重算）待負責人核准；`baseline-anchor` 目前仍失敗。
-- 下一位負責人：你（核對錨定清單、設定 `CMN_STAGE1_ANCHOR_SHA256`、Re-run `baseline-anchor`，確認必要檢查通過後決定是否合併）→ 合併後以實際 merge commit 做第一次 hosted 證據收集（POC-001，`PASS_ENABLED=false`，預期 `UNATTESTED`；無法執行的環節記為 NOT_RUN，不以本機模擬代替）→ 你（只改紀錄的 PR 與兩個變數）→ 打開 PASS 的 PR（新的工具鏈 commit，需重新審查、更新紀錄與指標、重新核准錨定）。
-- 最近更新：2026-11-21（臺灣）
+- PR-2（PR #10）：R1 審查 CHANGES REQUESTED（PR2-REV001）→ 已修；**R1 增量複驗（Reviewed Head `6d7e90d4`）通過，PR2-REV001 關閉**。R1 增量複驗通過時，錨定尚待負責人核准，`baseline-anchor` 尚未通過；之後已完成核准、CI 通過與合併，見下一行的最新紀錄。
+- **PR #10（B3b）已合併**：merge `e4f37509e91a66979fabb76fb6501e1e09c6cae6`；錨定 `fe954c3acdbb7eb9421cd23e4bd7bb91e6e390e61a267480f927211d34e15a0a`（41 檔）已由負責人核准，合併後 `main` 的 CI（含 `baseline-anchor`）通過。**第一次 hosted 執行**（[run 44971433557](https://github.com/hsuanyu9503/class-management-next/actions/runs/44971433557)，POC-001）：execute 與 verify 都成功，判定 `UNATTESTED [TRUST_ROOT_NOT_CONFIGURED]`，簽章 skipped。依原始 log 與 Verifier 的判定順序，這次證據通過了該版本 Verifier 的下列檢查（有限範圍的結論，見 REVIEW_LOG）：22 項自我檢查、政策要求的正向控制、對帳、契約 MATCH，以及 provenance 的格式與綁定。2026-11-22 ChatGPT 取得使用者提供的 artifact 原檔後補充複驗：digest 與日誌一致；22 項 selfCheck、12 項正向控制、終止與對帳都已逐項核對；獨立重播結果相同（`UNATTESTED [TRUST_ROOT_NOT_CONFIGURED]`、contract MATCH）。限制：部分 `observed` 被截短；Java 版本為 `unknown`；攻擊驗收與簽章沒有因此完成（見 REVIEW_LOG）。
+- 下一位負責人：你（決定是否合併 PR #11；決定是否手動觸發 POC-002／008／009；決定是否開始只改紀錄的 PR：`toolchain = e4f3750`、`signing-policy = ffaee08109f5fde9fe5734cb4ae3986b003cb21e`（`e4f3750` 中 `attest.yml` 的 blob），然後設定兩個變數）。POC-001 的 hosted artifact 原檔已由負責人提供，並經審查者逐項核對與重播（2026-11-22）。之後每次 hosted 執行，都同樣需要保留並交付 artifact 原檔；Claude 的環境無法下載。每個 run 與每個案例的證據都要獨立保存；正常案例的執行與批准紀錄的建立，**都不等於** A10 等攻擊驗收已完成。**PASS 啟用的門檻**：完成 hosted 證據與必要的攻擊驗收（A10、A4／A14 的平台攻擊情境、A18）、經獨立審查與負責人核准之後，才可以進入打開 PASS 的 PR；這個 PR 會產生新的工具鏈 commit，仍須重新批准並更新相應的指標與錨定。不能因為這次 POC-001 正常路徑成功就省略這個門檻。
+- 最近更新：2026-11-22（臺灣）
 
 ## PR #1 正式合併紀錄
 

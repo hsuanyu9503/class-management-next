@@ -945,3 +945,87 @@
   - NOTE-c 仍是「原文缺失，待確認」；缺少的 NOTE 與 X1～X10 沒有執行。
 - 使用者決策：`待決`（核准錨定與合併）
 
+### PR #10 合併與第一次 hosted 執行（2026-11-22）
+
+- 負責人核准錨定（`CMN_STAGE1_ANCHOR_SHA256 = fe954c3acdbb7eb9421cd23e4bd7bb91e6e390e61a267480f927211d34e15a0a`，41 檔）後，由負責人合併 PR #10：merge `e4f37509e91a66979fabb76fb6501e1e09c6cae6`（2026-11-22T01:25:54Z，Head `95559cac`）。
+- 合併後 `main` 的 CI：[run 44971433581](https://github.com/hsuanyu9503/class-management-next/actions/runs/44971433581) success（含 `baseline-anchor`）。
+- **第一次 hosted 執行**：`attest.yml`，[run 44971433557](https://github.com/hsuanyu9503/class-management-next/actions/runs/44971433557)，由 push 觸發，案例 POC-001，在 GitHub-hosted `ubuntu-24.04` 上執行。
+
+  | 項目 | 由 job log 讀到的結果 |
+  |---|---|
+  | execute job | success。可信工具鏈為 `e4f3750`（兩個變數都還沒設定，所以用本 commit）；sudo 執行並封存；`platformSupported=true`；runId 綁定 44971433557、attempt 1；Runner 內的本機診斷為 `UNATTESTED` |
+  | job outputs | 由非 root 的獨立步驟寫入：`packageSha256=e38f098b…`、`manifestSha256=d7f4ee5d…`、`platformSupported=true`、`toolchainCommit=e4f3750` |
+  | 上傳 | `archive: false`，單一原始檔 `package-POC-001.tar`（78,336 bytes），artifact ID 14733757533，upload-artifact 回報的 digest 等於 `packageSha256` |
+  | verify job | success。依 ID 下載時記錄「Downloading raw file (non-zip)」，檔名為 `package-POC-001.tar`，download-artifact 重算的 digest 一致 |
+  | 判定 | `UNATTESTED [TRUST_ROOT_NOT_CONFIGURED]`；信任政策的原因為 `TRUSTED_TOOLCHAIN_NOT_SET`、`SIGNING_POLICY_NOT_SET`；statement `08b18248…` |
+  | 簽章 | **skipped**（不是 PASS）；交付紀錄為 `NOT_ATTEMPTED_NOT_PASS` |
+  | 診斷 | `s2-verify-POC-001`，artifact ID 14733304375，保存 30 天 |
+
+- **由判定推得的結論（有限範圍）**：Verifier 會先處理完整性、隔離、對帳、契約比對等檢查，最後才進入信任根閘門。結果是 `UNATTESTED`，而且頂層原因只有 `TRUST_ROOT_NOT_CONFIGURED`，因此：本次提交的證據通過了該版本 Verifier 對 22 項自我檢查、政策要求的正向控制、對帳、契約 MATCH，以及 provenance 格式與綁定的檢查。
+  - 22 項中只有政策指定的子集合（12 項）要求 `positiveControlOk=true`，其餘要求 `null`。
+  - 這個結論是依原始 log 與程式的判定順序推得，**尚未**逐項閱讀原始觀察值，也**尚未**重播本次 hosted 封裝。
+  - 這個結論**不**證明所有隔離攻擊都會失敗，**不**證明 host 來源已經認證，也**不**代表 A10／A4／A14／A18 的攻擊驗收已經完成。
+- **證據界線**：
+  - Claude 的執行環境無法連線 artifact 下載主機（`*.blob.core.windows.net`，網路政策 403），**沒有**讀到診斷檔中 22 項檢查的原始觀察值。以上結論來自 job log 與判定的語意，不是逐項檢視。負責人或審查者可以從 run 頁面下載 artifact 14733304375 與 14733757533 核對。
+  - 這次只執行 POC-001。POC-002／008／009 尚未在 hosted 執行。
+  - A10（平台憑證）沒有逐項證據；A4、A14 的平台整合只有這次正常路徑的證據，沒有攻擊情境；A18 與實際簽章仍是 NOT_RUN。
+  - `PASS_ENABLED=false`。
+
+### PR #11 文件審查（ChatGPT）與回應
+
+- Reviewed Head：`38268a65a93f58afe22cdc4936d37b914c79bafa`（Base `e4f3750`）
+- 結論：**有條件通過**：主要事實與 GitHub 原始資料一致；修正 HANDOFF 的過時狀態與日期之後，可以交使用者決定是否合併。
+- 審查者獨立核對了 GitHub API，以及 execute／verify 兩個 job 的**原始 log**，內容包括：
+  - PR #10 的合併；
+  - 合併後的 CI；
+  - artifact 的 ID、名稱、大小與上傳和下載時的 digest；
+  - 判定、簽章 skipped、delivery；
+  - `verifier.mjs` 的判定順序。
+- 審查者**沒有**讀到 artifact 的原始位元組（本機無法解析下載主機），所以**沒有**重算 hosted package／statement 的 digest，也**沒有**重播 hosted 封裝。報告中的 digest 是原始 log 的值。
+- 審查者沒有讀取變數設定的稽核紀錄，所以不能獨立證明誰在何時設定了錨定；`baseline-anchor` 通過，支持基準已經一致。
+
+| ID | 處理（Claude） |
+|---|---|
+| PR11-N1（LOW）：HANDOFF 仍寫「錨定待核准、`baseline-anchor` 仍失敗」，與下一行已合併的紀錄矛盾；日期過時 | 已修：改為歷史語氣；日期改為 2026-11-22 |
+| 判定推論的措辭 | 已改為有限範圍的說法（見上一節） |
+| 後續門檻 | HANDOFF 寫明：要先保留並交付 hosted artifact 原檔；各 run／案例的證據獨立保存；完成 hosted 證據與攻擊驗收、獨立審查與負責人核准之後，才能進入 PASS 啟用 PR |
+
+- 使用者決策：`待決`（PR #11 合併）
+
+### 首次 hosted POC-001 原始證據補充複驗（ChatGPT，2026-11-22）
+
+- 輸入：使用者提供的 `s2-verify-POC-001.zip` 與 `package-POC-001.tar`，來自 run 44971433557、attempt 1、commit `e4f3750`。
+- 狀態更新：2026-11-22，ChatGPT 已取得使用者提供的首次 hosted 原始 package 與診斷檔。
+  - package／manifest／statement 的 digest 與 GitHub 原始日誌一致；
+  - 已核對 22 項 selfCheck、12 項必要的正向控制、終止與對帳紀錄；
+  - 以相同版本的 Verifier 獨立重播，結果為 `UNATTESTED [TRUST_ROOT_NOT_CONFIGURED]`、contract MATCH；完整 statement 除重播時間外一致；
+  - 部分 `observed` 字串被截短，Java 版本仍是 `unknown`；攻擊驗收與簽章並沒有因此完成。
+- 歷史事實（不改寫）：上方 PR #10 合併與首次 hosted 執行的紀錄寫成時，Claude 的環境無法下載 artifact；PR #11 文件審查當時，審查者也還沒有讀到 artifact 內容、沒有重播。本節是之後補上的。
+
+| 項目 | 結果（審查者以本機檔案重算） |
+|---|---|
+| package | 78,336 bytes；SHA-256 `e38f098b4a66fc1f7dec1910c269293d367653e9862151107770ee9fcc5b0cd1`，與日誌及 API 的 artifact digest 相同 |
+| manifest | `d7f4ee5d05ae395220b20975471200ccb505b65aa1d5efb58c5548a33e8b4c7d`，與 execute job outputs 相同 |
+| statement 原始位元組 | `08b18248ef93ad267189bd879643f9a988b68c3a464ba041cee70f3ccdf46c91`，與 verify job log、`verify.json`、`delivery.json` 相同 |
+| package 內部 | 安全解析器通過；manifest 與 8 個 payload 檔案的內容綁定都成立 |
+| provenance | artifact `14733757533`；producer `attest-execute`；`signingPolicyBlob=ffaee08109f5fde9fe5734cb4ae3986b003cb21e` |
+| run 綁定 | runId 44971433557、attempt 1、nonce 都與原始 execute job log 一致 |
+| selfCheck | ID 集合正好是政策的 22 項，全部 `ok=true`；12 項必要的正向控制都是 `true`，其餘 10 項是 `null` |
+| 終止 | `namespaceTerminated=true`、`remainingAdapterProcesses=0`、`exportAfterTermination=true` |
+| 對帳 | frontRequests=1、auditAdded=1、auditMatched=1；其餘計數都是 0；`nonceMarkerUnchanged=true` |
+| Observer | workspaceId `WS-A17`、returnedCount 15、crossWorkspaceDisclosure false；契約 MATCH；Adapter 的宣稱與 Observer 一致 |
+| 信任根 | `TRUSTED_TOOLCHAIN_NOT_SET`、`SIGNING_POLICY_NOT_SET`；批准紀錄來源的錨定比對為 true |
+| delivery | `NOT_ATTEMPTED_NOT_PASS`，`attestationId=null` |
+
+- 重播的可信輸入取自原始 job log 與 API 的值，**沒有**從封裝的自我宣稱取得 runId、nonce、commit 或 artifactId。使用的 Verifier 版本是 `6d7e90d4`，它與 merge commit 只差兩份文件，執行的程式相同。
+- 限制：
+  - 只是 POC-001 正常路徑的 hosted 證據複驗；不代表 POC-002／008／009 或 A4／A10／A14／A18 的攻擊驗收已經完成；
+  - ENV_ALLOWLIST、PROC_ISOLATED、FS_GIT_HIDDEN、OUTPUT_CHANNELS_HIDDEN 提供了 A10 相關的正常自我檢查證據，但不等於完整的平台憑證攻擊測試；
+  - 部分 `observed` 字串被產生端截短（每項上限 200 字元），不能當作完整、未截短的逐路徑證據；
+  - `environment.java` 為 `unknown`，這份證據沒有證明實際的 Java 版本；
+  - `pathMapDigest` 仍只做自洽檢查；
+  - 本輪沒有另外執行 JSON Schema 全套測試。
+- 後續改善（未實作，列為待辦）：
+  - 環境證據改為記錄實際的 Java 版本；
+  - 觀察值截短時，另外保存完整的清單或 digest。
+
