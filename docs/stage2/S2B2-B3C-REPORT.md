@@ -56,7 +56,7 @@
   - 必要目標全部 `DEFENDED`，整體才是 `DEFENDED`；
   - 攻擊者的自報**不是**判定的輸入。
 
-| 情境 | 本機結果（R1：`S2B2A10-20261122T153613Z`，commit `ff92a33` 的程式） |
+| 情境 | 本機結果（R1：`S2B2A10-20261122T154602Z`，commit `e3853d2`，工作樹乾淨） |
 |---|---|
 | A10-main（exfil，政策設定） | `DEFENDED`：必要目標全部 `DEFENDED`，等價性成立；`evidenceScope=LOCAL_WITH_SIMULATED_TARGETS` |
 | N-1 沒有嘗試，直接回報 EACCES | `DEFENDED`：結果與 main 相同，自報不影響判定 |
@@ -91,7 +91,7 @@
 | A4-2-i／ii | 在封裝中注入 `verifier.mjs` | (i) `PACKAGE_DIGEST_MISMATCH`；(ii) `PAYLOAD_SET_MISMATCH`。注入的檔案從未被執行 |
 | A4-3 | 驗證 job 的 checkout | `HEAD` 等於兩個 execute job 的工具鏈 commit；結構由 repo_policy 檢查 |
 
-**本機模擬**（R1，commit `ff92a33`）：以本機的 `run-attest-execute.mjs` 產生 A14（POC-001）與 A4-1（POC-002）的封裝，再以三種合成的平台證據執行 `attack-verify.mjs`：
+**本機模擬**（R1，commit `ff92a33`；之後只有檔名變更）：以本機的 `run-attest-execute.mjs` 產生 A14（POC-001）與 A4-1（POC-002）的封裝，再以三種合成的平台證據執行 `attack-verify.mjs`：
 
 | 平台證據（**合成**） | A14-2 | A14-3a | 整體 | exit |
 |---|---|---|---|---|
@@ -110,7 +110,7 @@
 | `npm run check` | 通過 | Claude 本機 |
 | `npm run stage1:all`，以及 `git diff --exit-code -- poc/stage1` | 通過；Stage 1 沒有變更 | Claude 本機 |
 | `npm run s2:test`（含 `c1-unit` 12 項、`a10-unit` 12 項、`attack-suite-unit` 9 項） | 138/138 通過（R1） | Claude 本機 |
-| `npm run s2:b3`（真實 Emulator、沙箱、root） | 33/33 通過（R1：新增 C1-REV004 的呼叫端檢查）。遮罩掃描 96 個檔案，以同一份清單（196 筆，含 6 筆平台憑證）掃描，0 命中。run `S2B2B3A-20261122T153459Z-5539fcb3` | Claude 本機 |
+| `npm run s2:b3`（真實 Emulator、沙箱、root） | 33/33 通過（R1：新增 C1-REV004 的呼叫端檢查）。遮罩掃描 96 個檔案，以同一份清單（196 筆，含 6 筆平台憑證）掃描，0 命中。run `S2B2B3A-20261122T154504Z-abafc73f（commit `e3853d2`，工作樹乾淨）` | Claude 本機 |
 | `npm run s2:a10` | 9/9 符合預期（R1） | Claude 本機 |
 | A10 hosted 模式的示範（本機設定 `GITHUB_ACTIONS=true`、`RUNNER_ENVIRONMENT=github-hosted`） | A10-main → `INCONCLUSIVE`：`GITHUB_OUTPUT` 與 `RUNNER_INSTALL_DIR` 不是 DEFENDED，exit 1。證明 hosted 模式不會改用替代資料 | Claude 本機 |
 | attest-attack 的本機模擬 | 見 §3 | Claude 本機 |
