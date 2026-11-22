@@ -1,6 +1,6 @@
 # Claude 開發守則｜AI Web Development Starter Kit
 
-> ⚠️ **本 PoC 適用說明**：本 Repository 是 Classroom Manager Next 技術驗證 PoC，**沒有** `pages.yml`、`release.yml`、`site/`、`scripts/build.mjs`、`scripts/package_release.py`、`scripts/verify_release.py`。本文件中關於網站建置、Pages 自動部署、Release／Tag／ZIP 的內容沿用自 Starter Kit V1.2 範本，**目前不適用**。唯一的 workflow 是 `.github/workflows/ci.yml` 的 `validate`（`check`／`test`／`stage1:all`）。另注意：GitHub Settings 已啟用 Pages（`pages-build-deployment`），若發佈來源為 `main`，合併後 Repository 檔案仍可能被公開；是否保留由專案負責人決定。
+> ⚠️ **本 PoC 適用說明**：本 Repository 是 Classroom Manager Next 技術驗證 PoC，**沒有** `pages.yml`、`release.yml`、`site/`、`scripts/build.mjs`、`scripts/package_release.py`、`scripts/verify_release.py`。本文件中關於網站建置、Pages 自動部署、Release／Tag／ZIP 的內容沿用自 Starter Kit V1.2 範本，**目前不適用**。workflow 有兩個：`.github/workflows/ci.yml`（`validate`：`check`／`test`／`stage1:all`；`baseline-anchor`），以及 S2-B2 B3b 的 `.github/workflows/attest.yml`（只在 `main` 觸發，不在 PR 執行；見 `docs/stage2/S2B2-B3B-REPORT.md`）。另注意：GitHub Settings 已啟用 Pages（`pages-build-deployment`），若發佈來源為 `main`，合併後 Repository 檔案仍可能被公開；是否保留由專案負責人決定。
 
 你是本專案的**主要程式實作與整合者**，不是產品需求的最終決策者。V1.2 沿用 GitHub PR 作為標準交付；本 PoC 沒有自動部署 workflow，但合併 main 即成為正式基準（且 Repository 已啟用 GitHub Pages，內容可能公開），所以不得擅自合併。
 
@@ -31,7 +31,7 @@
 - 本 PoC **沒有** `release.yml`：不建立 GitHub Release；不要自行創建或覆蓋 Tag。
 - 本 PoC 沒有 `scripts/package_release.py`；不得以 ZIP 名稱推定 Git 版本，一律以 Commit SHA 為準。
 - 本 PoC 的驗證命令是 `npm run check`、`npm test`、`npm run stage1:all`（Windows：`npm.cmd`）；網站／部署／發行相關範本已移至 `docs/starter-kit-reference/`，不適用。
-- 受保護檔案（鎖定基準、防護程式、測試、`ci.yml`）的變更會改變 `scripts/verify-anchor.mjs` 的 digest；`baseline-anchor` 需負責人重新核准 repository variable `CMN_STAGE1_ANCHOR_SHA256`。不得要求或代替負責人設定此變數。
+- 受保護檔案（鎖定基準、防護程式、測試、`ci.yml`、`attest.yml`、批准紀錄與 B3 的判定程式）的變更會改變 `scripts/verify-anchor.mjs` 的 digest；`baseline-anchor` 需負責人重新核准 repository variable `CMN_STAGE1_ANCHOR_SHA256`。不得要求或代替負責人設定此變數。
 
 ## 每次交付需附
 

@@ -1,0 +1,6 @@
+{
+ "policyVersion": "s2-trust-policy-v1",
+ "description": "S2-B2 trust-root approval record (S2B2-B3-PLAN v0.3 §4.2). Each record is an owner approval of a toolchain commit or of the Git blob SHA of .github/workflows/attest.yml. The owner-set repository variables CMN_S2_TRUSTED_TOOLCHAIN_SHA and CMN_S2_SIGNING_POLICY_BLOB must each name an ACTIVE record. Only the owner changes this file (PR review + anchor re-approval). Empty records = no trust root: every run is at most UNATTESTED.",
+ "freshnessHours": 24,
+ "records": []
+}

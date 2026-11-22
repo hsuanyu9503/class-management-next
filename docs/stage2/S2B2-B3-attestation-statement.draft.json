@@ -154,8 +154,15 @@
      "description": "SHA-256 of the launcher file; recomputed by the Verifier from trustedToolchainCommit."
     },
     "signingPolicyBlob": {
-     "$ref": "#/$defs/sha1Commit",
-     "description": "Git blob SHA of .github/workflows/attest.yml at the signer commit; must be an ACTIVE 'signing-policy' approval (plan 4, 7.3)."
+     "anyOf": [
+      {
+       "$ref": "#/$defs/sha1Commit"
+      },
+      {
+       "type": "null"
+      }
+     ],
+     "description": "Git blob SHA of .github/workflows/attest.yml at the signer commit; must be an ACTIVE 'signing-policy' approval (plan 4, 7.3). PR2-REV001: resolved from the commit whose workflow ran (never a placeholder); null only for the local prototype; never null for PASS."
     },
     "isolationPolicyVersion": {
      "const": "s2-isolation-policy-v1"
@@ -629,8 +636,16 @@
    "description": "Plan 3.4. Expected values come from the execution job's outputs, never from inside the package.",
    "properties": {
     "artifactId": {
-     "type": "string",
-     "pattern": "^[0-9]{1,20}$"
+     "anyOf": [
+      {
+       "type": "string",
+       "pattern": "^[0-9]{1,20}$"
+      },
+      {
+       "type": "null"
+      }
+     ],
+     "description": "PR2-REV001: the artifact ID from the execute job's outputs (never from the package). null only for the local prototype (no artifact exists); never null for PASS."
     },
     "packageSha256": {
      "$ref": "#/$defs/sha256"
@@ -640,9 +655,50 @@
     },
     "producerJob": {
      "type": "string",
-     "pattern": "^[A-Za-z0-9_-]{1,64}$"
+     "pattern": "^[A-Za-z0-9_-]{1,64}$",
+     "description": "'attest-execute' for attest.yml (fixed workflow layout); 'local-b3a' for the local prototype."
     }
    }
   }
- }
+ },
+ "allOf": [
+  {
+   "description": "PR2-REV001: a PASS statement always carries real provenance.",
+   "if": {
+    "properties": {
+     "verdict": {
+      "properties": {
+       "result": {
+        "const": "PASS"
+       }
+      },
+      "required": [
+       "result"
+      ]
+     }
+    },
+    "required": [
+     "verdict"
+    ]
+   },
+   "then": {
+    "properties": {
+     "package": {
+      "properties": {
+       "artifactId": {
+        "type": "string"
+       }
+      }
+     },
+     "toolchain": {
+      "properties": {
+       "signingPolicyBlob": {
+        "type": "string"
+       }
+      }
+     }
+    }
+   }
+  }
+ ]
 }

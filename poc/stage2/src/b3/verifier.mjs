@@ -2,8 +2,10 @@
  *  Plan v0.3 §3.4, §3.3(c), §6.3, §7.2, §7.4, §7.5. Nothing inside the package is believed: every value
  *  that matters is compared with a trusted input or recomputed with this toolchain.
  *
- *  B3a cannot produce PASS: PASS_ENABLED is false (no trust root, no hosted runner, no signing). The best
- *  local result is UNATTESTED with reasons LOCAL_UNTRUSTED_RUNNER + TRUST_ROOT_NOT_CONFIGURED. */
+ *  PASS needs ALL of: a GitHub-hosted runner, a configured trust root (approved toolchain + signing policy, see
+ *  trust-policy.mjs) and PASS_ENABLED. PASS_ENABLED stays false in B3b (owner decision 2026-11-21): it is
+ *  turned on in a separate PR only after hosted runs have shown the sandbox and self-check hold. The best
+ *  local result is UNATTESTED [LOCAL_UNTRUSTED_RUNNER, TRUST_ROOT_NOT_CONFIGURED]. */
 import { createHash } from 'node:crypto';
 import { readPackageSafe, parseStrictJson, PackageError } from './package.mjs';
 import { CHECK_IDS, POSITIVE_CONTROL_REQUIRED, POLICY_VERSION, USR_BINARIES, configDigest, sandboxConfig, pathMapDigest } from './isolation-policy.mjs';
@@ -15,7 +17,7 @@ import { verdict as contractVerdict, BLOCKED_FIELDS } from '../verdict.mjs';
 import { stableJson } from '../stable.mjs';
 
 export const PASS_ENABLED = false;
-export const VERIFIER_VERSION = 's2-verifier-b3a-2';   // -0 = 211e114; -1 = R1 (9a9450b) + F1; -2 = PR-1 (B3A-N5..N8)
+export const VERIFIER_VERSION = 's2-verifier-b3b-0';   // b3a-0 = 211e114; b3a-1 = R1 + F1; b3a-2 = PR-1; b3b-0 = PR-2 (trust-gated decision)
 /** Trusted case → actor table (from the locked matrix preconditions); not taken from Adapter code. */
 export const CASE_ACTORS = Object.freeze({ 'POC-001': 'ACTOR-TEACHER', 'POC-002': 'ACTOR-OTHER', 'POC-008': 'ACTOR-TEACHER', 'POC-009': 'ACTOR-SC01-TEACHER' });
 export const PAYLOAD = Object.freeze(['adapter-claim.json', 'isolation.json', 'run.json', 'runner-log.jsonl', 'state-post.json', 'state-pre.json', 'trace-back.jsonl', 'trace-front.jsonl']);
@@ -70,6 +72,13 @@ function verifyPackageUnguarded(packageBytes, trusted) {
   if (shapeErrors.length) blocked(`ARTIFACT_JSON_INVALID:${shapeErrors.join('|')}`);
   if (reasons.length) return out;
   if (missingTrusted.length || typeof trusted.platformSupported !== 'boolean' || trusted.caseSpec.testId !== trusted.testId || !own(CASE_ACTORS, trusted.testId)) { blocked(`TRUSTED_INPUT_MISSING:${missingTrusted.join('|') || 'caseSpec/testId'}`); return out; }
+  // PR2-REV001: on a hosted runner the statement's provenance (artifact ID, producer job, signing-policy blob)
+  // must come from trusted inputs — never from the package and never from local placeholders
+  const prov = isPlainObj(trusted.provenance) ? trusted.provenance : null;
+  const provOk = !!prov && /^[0-9]{1,20}$/.test(prov.artifactId ?? '') && /^[A-Za-z0-9_-]{1,64}$/.test(prov.producerJob ?? '') && /^[0-9a-f]{40}$/.test(prov.signingPolicyBlob ?? '');
+  if (prov && !provOk) blocked('PROVENANCE_INVALID');
+  else if (!prov && trusted.runnerKind === 'github-hosted') blocked('PROVENANCE_MISSING');
+  out.provenance = provOk ? { artifactId: prov.artifactId, producerJob: prov.producerJob, signingPolicyBlob: prov.signingPolicyBlob } : null;
   // 3. run binding (§7.2)
   for (const k of ['runId', 'runAttempt', 'attestationNonce', 'testId', 'trustedToolchainCommit', 'adapterCommit']) if (run[k] !== trusted[k]) blocked(`RUN_BINDING_MISMATCH:${k}`);
   // 4. isolation policy (§3.3(c))
@@ -127,8 +136,17 @@ function verifyPackageUnguarded(packageBytes, trusted) {
   // an observation that cannot be attributed unambiguously is not a contract failure → BLOCKED
   else if (v.contractMatch === 'MISMATCH_OR_UNOBSERVABLE') { out.result = 'BLOCKED'; reasons.push('OBSERVATION_AMBIGUOUS'); }
   else if (v.contractMatch !== 'MATCH') { out.result = 'FAIL'; reasons.push('CONTRACT_MISMATCH'); }
-  else if (!PASS_ENABLED || trusted.runnerKind !== 'github-hosted') { out.result = 'UNATTESTED'; reasons.push('LOCAL_UNTRUSTED_RUNNER', 'TRUST_ROOT_NOT_CONFIGURED'); }
-  else out.result = 'PASS';
+  else {
+    // B3b: PASS needs a GitHub-hosted runner (trusted input from the verify job's own environment) AND a
+    // configured trust root (trusted.trustRoot from evaluateTrust: approved toolchain + signing policy)
+    // AND PASS_ENABLED. Every missing condition is named; a local run keeps [LOCAL_UNTRUSTED_RUNNER, TRUST_ROOT_NOT_CONFIGURED].
+    const hosted = trusted.runnerKind === 'github-hosted';
+    const trustRoot = isPlainObj(trusted.trustRoot) && trusted.trustRoot.configured === true;
+    if (!hosted) reasons.push('LOCAL_UNTRUSTED_RUNNER');
+    if (!trustRoot) reasons.push('TRUST_ROOT_NOT_CONFIGURED');
+    if (hosted && trustRoot && !PASS_ENABLED) reasons.push('PASS_NOT_ENABLED');
+    out.result = hosted && trustRoot && PASS_ENABLED ? 'PASS' : 'UNATTESTED';
+  }
   if (out.result === 'PASS' && !PASS_ENABLED) { out.result = 'UNATTESTED'; reasons.push('TRUST_ROOT_NOT_CONFIGURED'); }
   out.statement = buildStatement({ trusted, run, iso, pkg, out, claim });
   return out;
@@ -138,10 +156,11 @@ function buildStatement({ trusted, run, iso, pkg, out, claim }) {
   const fd = (n) => { const b = pkg.files.get(n); return { path: n, sha256: sha(b), bytes: b.length }; };
   return {
     schemaVersion: 's2-attestation-v1', testId: trusted.testId, backend: 'firebase',
-    toolchain: { trustedToolchainCommit: trusted.trustedToolchainCommit, adapterCommit: trusted.adapterCommit, verifierCommit: trusted.trustedToolchainCommit, observerCommit: trusted.trustedToolchainCommit, signingPolicyBlob: '0'.repeat(40), isolationPolicyVersion: POLICY_VERSION, sandboxLauncherSha256: run.sandboxLauncherSha256, sandboxPolicyDigest: iso.sandboxPolicyDigest },
+    toolchain: { trustedToolchainCommit: trusted.trustedToolchainCommit, adapterCommit: trusted.adapterCommit, verifierCommit: trusted.trustedToolchainCommit, observerCommit: trusted.trustedToolchainCommit, signingPolicyBlob: out.provenance ? out.provenance.signingPolicyBlob : null, isolationPolicyVersion: POLICY_VERSION, sandboxLauncherSha256: run.sandboxLauncherSha256, sandboxPolicyDigest: iso.sandboxPolicyDigest },
     targets: run.targets,
     run: { runId: trusted.runId, runAttempt: trusted.runAttempt, attestationNonce: trusted.attestationNonce, ownershipNonceSha256: run.ownershipNonceSha256, nonceWrittenAt: run.nonceWrittenAt, startedAt: run.startedAt, finishedAt: run.finishedAt },
-    package: { artifactId: run.artifactId, packageSha256: trusted.packageSha256, manifestSha256: trusted.manifestSha256, producerJob: 'local-b3a' },
+    // local prototype: no artifact and no signing policy exist → null (the schema forbids null for PASS); hosted: trusted provenance only
+    package: { artifactId: out.provenance ? out.provenance.artifactId : null, packageSha256: trusted.packageSha256, manifestSha256: trusted.manifestSha256, producerJob: out.provenance ? out.provenance.producerJob : 'local-b3a' },
     environment: run.environment,
     isolation: { platformSupported: iso.platformSupported === true, selfCheck: iso.selfCheck, termination: iso.adapterTermination, pathMapDigest: typeof iso.pathMapDigest === 'string' ? iso.pathMapDigest : null },
     artifacts: { traceFront: fd('trace-front.jsonl'), traceBack: fd('trace-back.jsonl'), statePre: fd('state-pre.json'), statePost: fd('state-post.json'), runnerLog: fd('runner-log.jsonl'), evidenceFiles: [fd('adapter-claim.json'), fd('isolation.json'), fd('run.json')] },

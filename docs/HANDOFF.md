@@ -6,7 +6,7 @@
 
 - 專案：Classroom Manager Next 技術驗證 PoC
 - 階段：**PoC Stage 1 已合併**（Merged Baseline）。合併後驗收狀態依下方實際 CI 證據記錄。
-- 目前任務：**S2-B2 第 3 批 B3b 前修正 PR-1**（B3A-N5～N8）。B3a 與 F1 已合併。負責人已決定 Q-1～Q-3 採推薦、分兩個 PR、artifact 保存 30 天（見 REVIEW_LOG）。
+- 目前任務：**S2-B2 第 3 批 B3b（PR-2）**：`attest.yml`、批准紀錄 `S2B2-TRUST-POLICY.json`、受保護清單、信任根閘門。見 `docs/stage2/S2B2-B3B-REPORT.md`。PR-1（PR #9）已合併為 `bda85b2`。
 - **PR #6 合併事實**（2026-11-21）：負責人回覆「三項都同意」後，Claude 依明確批准合併 PR #6，merge `636e13088a39c3bd956461e6f8fbab75949c58c1`（Head `5876ddb0`，與 Reviewed Head 相同）。同時批准 B3a 本機範圍與 Q-4（ATTESTATION v0.3）。**未**批准 D-17、CI、錨定、repository variable、公開與保存範圍。
 - **PR #5 合併事實**（2026-11-21）：使用者合併 PR #5，Merge SHA `40c09a3fb92b0c699a2b00dda1da5b2a32b468a4`（最後 PR Head `85a0bb4b40d9cf2ff030c1d95f70513cad9a57fd`，兩者無檔案差異；最後程式審查 Head `d2dafe16ba488df60e6a2340ad9cd075c691ed2a`）。合併**不等於** D-01～D-17、G-1～G-4、Q1～Q3 已核准。
 - **PR #4 合併事實**（2026-11-21）：使用者合併 PR #4，Merge SHA `e98c46b05fe2a127f0356e66777c4484ec768ceb`（最終 Reviewed Head `ee756da8920080d4874e1f71915b97f27431576a`，兩者無檔案差異）；合併後 CI [run 44854491499](https://github.com/hsuanyu9503/class-management-next/actions/runs/44854491499) 成功。S2B2-REV-001／003 已修正；REV-002 只有認證隔離**設計**結案，隔離未實作。合併**不等於** D-01～D-17、Q1～Q3 已核准。
@@ -23,7 +23,7 @@
 - S2-B2 第 1 批狀態：已合併（PR #4）。
 - S2-B2 第 2 批狀態：PR #5。R1（Head `37546804c61c`）CHANGES REQUESTED；R1 複驗（Head `2fa78f74cd2b`）需修正（REV001／002 結案、REV003 部分結案；R1-N1～N4）；R2 修正共兩個 commit（`d17e537` 修正、`d2dafe1` 只改測試假值的寫法）；**R2 複驗（Reviewed Head `d2dafe16ba488df60e6a2340ad9cd075c691ed2a`）通過**，可交使用者驗收與合併決策。R1-N5～N7、無前綴不透明憑證、分頁拒絕仍是待辦（`docs/REVIEW_LOG.md`）。新增規格缺口 G-1～G-4 需要負責人決策（`S2B2-B2-PLAN.md` §3）。
 - 第 2 批狀態：**已合併**（PR #5）。POC-001／002／008 最多 `UNATTESTED`，POC-009 `BLOCKED`；Stage 1 的 72 筆 `NOT_RUN` 不變。R1-N5～N7、無前綴不透明憑證、分頁拒絕仍是待辦，第 3 批計畫 §10 把 N5～N7 列為 B3a 前置。
-- 第 3 批狀態：準備文件已合併（PR #6）；B3a 已合併（PR #7，merge `15a7c51f`）；後續修正 F1 已合併（PR #8，merge `322f65b0373c1fda0f040cc0d249c930da0a6a7e`）。**PR-1（B3A-N5～N8，PR #9）**：R1 審查 CHANGES REQUESTED（PR1-REV001：稽核 PATCH 內容未對帳）→ 已修並經複驗關閉；R1 複驗新發現 PR1-R1-REV001（query 參數名稱未遮罩）→ 已修；**R2 增量複驗（Reviewed Head `8ab69e1d`）通過，兩項皆關閉，可交使用者驗收與合併決策**（審查者環境的本機 HTTP 回報 `EACCES`，JSONL 端到端測試未能獨立執行；完整流程屬作者證據）：
+- 第 3 批狀態：準備文件已合併（PR #6）；B3a 已合併（PR #7，merge `15a7c51f`）；後續修正 F1 已合併（PR #8，merge `322f65b0373c1fda0f040cc0d249c930da0a6a7e`）。**PR-1（B3A-N5～N8，PR #9）已合併**（merge `bda85b2`）：R1 審查 CHANGES REQUESTED（PR1-REV001：稽核 PATCH 內容未對帳）→ 已修並經複驗關閉；R1 複驗新發現 PR1-R1-REV001（query 參數名稱未遮罩）→ 已修；**R2 增量複驗（Reviewed Head `8ab69e1d`）通過，兩項皆關閉，可交使用者驗收與合併決策**（審查者環境的本機 HTTP 回報 `EACCES`，JSONL 端到端測試未能獨立執行；完整流程屬作者證據）：
   - B3A-N5：tar 嚴格解析（重新序列化位元組相同）；
   - B3A-N6：稽核與請求的完整綁定；
   - B3A-N7：最小 rootfs（無 `/etc`、`/usr` 只含所需檔案）、掛載選項檢查、FS 隱藏強化、`pathMapDigest` 入 statement；**configDigest 改為 `18d9e21f…`**；
@@ -31,7 +31,8 @@
 
   NOTE-c：**原文缺失，待確認**（目前只有編號）。依負責人指示不推測內容、不據此修改程式，也不作為獨立阻擋條件；找到原文後再補具體要求。B3A-N5～N8 另有明確描述，與 NOTE-c 分開追蹤。NOTE ①～⑦ 的原文同樣沒有傳到 Claude 的環境。
 - 負責人決定（2026-11-21）：Q-1（D-17）、Q-2、Q-3 採 `S2B2-B3-DECISION-SUMMARY.md` B 節的推薦；分兩個 PR（PR-1 本機修正 → PR-2 B3b）；Q-3 artifact 保存 30 天。PR-2 合併後，負責人仍須設定錨定 digest、`CMN_S2_TRUSTED_TOOLCHAIN_SHA`、`CMN_S2_SIGNING_POLICY_BLOB`；完成前不得 `PASS`。
-- 下一位負責人：你（PR #9 驗收與合併決策）→ Claude（合併後以實際 merge commit 為基準開始 PR-2：B3b）。
+- PR-2（PR #10）：R1 審查 CHANGES REQUESTED（PR2-REV001）→ 已修；**R1 增量複驗（Reviewed Head `6d7e90d4`）通過，PR2-REV001 關閉**。錨定 digest `fe954c3acdbb7eb9421cd23e4bd7bb91e6e390e61a267480f927211d34e15a0a`（41 檔，審查者已獨立重算）待負責人核准；`baseline-anchor` 目前仍失敗。
+- 下一位負責人：你（核對錨定清單、設定 `CMN_STAGE1_ANCHOR_SHA256`、Re-run `baseline-anchor`，確認必要檢查通過後決定是否合併）→ 合併後以實際 merge commit 做第一次 hosted 證據收集（POC-001，`PASS_ENABLED=false`，預期 `UNATTESTED`；無法執行的環節記為 NOT_RUN，不以本機模擬代替）→ 你（只改紀錄的 PR 與兩個變數）→ 打開 PASS 的 PR（新的工具鏈 commit，需重新審查、更新紀錄與指標、重新核准錨定）。
 - 最近更新：2026-11-21（臺灣）
 
 ## PR #1 正式合併紀錄
