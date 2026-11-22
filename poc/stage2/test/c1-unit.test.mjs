@@ -182,7 +182,7 @@ test('C-1 §6.1: java -version is read from stderr; anything unrecognised is hon
 });
 
 // ----------------------------------------------------------------------------- C1-REV004 known-secret collector
-import { collectKnownSecrets, platformSecretValues, MIN_SECRET_LEN } from '../src/b3/secrets.mjs';
+import { collectKnownSecrets, platformSecretValues, MIN_SECRET_LEN } from '../src/b3/mask-list.mjs';
 test('C1-REV004: the packaging list unites issued tokens (rotated included), case tokens and platform credentials', () => {
   const env = { ACTIONS_RUNTIME_TOKEN: 'synthetic-platform-opaque-value-1', MY_DEPLOY_SECRET: 'synthetic-platform-opaque-value-2', PATH: '/usr/bin:/bin', HOME: '/root', GITHUB_TOKEN: 'short', RUNNER_TEMP: '/tmp/x' };
   const r = collectKnownSecrets({ issued: ['issued-id-token-0001-current', 'issued-id-token-0000-rotated', 'issued-id-token-0001-current'], caseTokens: ['case-token-value-00001'], env });

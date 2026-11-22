@@ -19,7 +19,7 @@ import { sandboxConfig, configDigest, POLICY_VERSION, pathMapDigest } from '../s
 import { launchSandbox, cleanupSandboxDirs, resolvePathMap } from '../src/b3/sandbox.mjs';
 import { runSelfCheck } from '../src/b3/selfcheck-host.mjs';
 import { finalizeSelfCheck } from '../src/b3/observation.mjs';
-import { collectKnownSecrets } from '../src/b3/secrets.mjs';
+import { collectKnownSecrets } from '../src/b3/mask-list.mjs';
 import { javaVersion } from '../src/b3/env-info.mjs';
 import { writePackage } from '../src/b3/package.mjs';
 import { buildCaseInput } from '../src/b3/case-input.mjs';

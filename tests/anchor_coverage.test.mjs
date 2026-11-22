@@ -40,7 +40,7 @@ test('C1-REV005: every file of the trusted call chain of attest.yml and attest-a
   const entries = [...workflowEntries('.github/workflows/attest.yml'), ...workflowEntries('.github/workflows/attest-attack.yml')];
   for (const e of ['poc/stage2/scripts/run-attest-execute.mjs', 'poc/stage2/scripts/attest-verify.mjs', 'poc/stage2/scripts/run-a10.mjs', 'poc/stage2/scripts/attack-verify.mjs', 'poc/stage2/scripts/attack-platform-evidence.mjs']) assert.ok(entries.includes(e), `entry not found in workflows: ${e}`);
   const files = closure(entries);
-  for (const must of ['poc/stage2/test/b3-run.mjs', 'poc/stage2/test/a10-run.mjs', 'poc/stage2/src/b3/selfcheck-host.mjs', 'poc/stage2/sandbox-check/selfcheck.mjs', 'poc/stage2/sandbox-check/probe-a10.mjs', 'poc/stage2/src/harness.mjs', 'poc/stage2/src/b3/secrets.mjs']) assert.ok(files.includes(must), `closure misses ${must}`);
+  for (const must of ['poc/stage2/test/b3-run.mjs', 'poc/stage2/test/a10-run.mjs', 'poc/stage2/src/b3/selfcheck-host.mjs', 'poc/stage2/sandbox-check/selfcheck.mjs', 'poc/stage2/sandbox-check/probe-a10.mjs', 'poc/stage2/src/harness.mjs', 'poc/stage2/src/b3/mask-list.mjs']) assert.ok(files.includes(must), `closure misses ${must}`);
   const missing = files.filter((f) => !f.startsWith(`${S2}/adapter-b3/`) && !anchored.has(f));
   assert.deepEqual(missing, [], `trusted files outside the anchor: ${missing.join(', ')}`);
   // the runtime configuration those programs depend on
