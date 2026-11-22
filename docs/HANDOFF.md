@@ -39,11 +39,20 @@
   - 這不是 GitHub 的正式核准。hosted 攻擊驗收與第三方簽章驗收都尚未完成；
   - 計畫 §9 的四項實作驗收備註，留待 C-1／C-2 時核對；
   - 待 ChatGPT 複驗，並由負責人決定 Q-A～Q-D；核准後依 C-1 → C-2 →（C-3）實作。
-- 下一位負責人：你。要決定兩件事：
-  - Q-A～Q-D，其中 Q-B 是流程 I 或 II；
-  - PR #12 是否合併。
-
-  四個 hosted run 的 artifact 原檔重播仍待處理，需要你提供原檔給 ChatGPT。
+- **PR #12 已合併**（2026-11-22，merge commit `0771790f9906fe22233d9156cf4c51e31aae02ad`；合併時的 Head `667ec03`）。
+  - 合併後 `main` 的 CI：[44978067608](https://github.com/hsuanyu9503/class-management-next/actions/runs/44978067608)，success。
+  - push 觸發的 `attest.yml`：run [44978067634](https://github.com/hsuanyu9503/class-management-next/actions/runs/44978067634)，POC-001 → `UNATTESTED [TRUST_ROOT_NOT_CONFIGURED]`，沒有簽章。
+    - 封裝 artifact 14736254648，digest `4f5d3dd9…`，上傳與下載一致；
+    - 診斷 artifact 14736098649；
+    - 資料來自 job log。
+- **負責人的決定（2026-11-22）**：
+  - Q-A：是；
+  - **Q-B：流程 I**；
+  - Q-C：是，Environment 只作為額外保護；
+  - Q-D：C-1 → C-2 → C-3。
+- **門檻（流程 I）**：A4／A10／A14 的 hosted 驗收、A18 的隔離測試簽章驗收（分為密碼學／身分層與 statement 政策層），以及第三方驗證腳本，**全部**完成並經獨立審查、負責人核准之後，才進入打開 PASS 的 PR。在那之前，`PASS_ENABLED=false`。
+- 下一位負責人：Claude（實作 C-1）→ ChatGPT（審查 C-1）→ 你（核准合併並重新核准錨定）。
+- 四個 hosted run 的 artifact 原檔重播仍待處理，需要你提供原檔給 ChatGPT。
 - **PASS 啟用的門檻**（依 Q-B 的選擇；**選擇之前 `PASS_ENABLED=false`**）：
   - **流程 I（保留原門檻）**：A4／A10／A14 的 hosted 驗收、A18 的隔離測試簽章驗收（分為密碼學／身分層與 statement 政策層），以及第三方驗證腳本，**全部**完成並經獨立審查、負責人核准之後，才進入打開 PASS 的 PR。
   - **流程 II（經負責人書面批准的例外）**：打開 PASS 前，先完成 A4／A10／A14 的 hosted 驗收與第三方驗證腳本，並取得負責人的書面例外批准。第一份簽章的狀態是 `ACCEPTANCE_PENDING`，要立刻完成正向與反向的第三方驗證；失敗時刪除或改指工具鏈變數、撤銷批准紀錄，並重新審查。
@@ -179,5 +188,6 @@
 | 2026-11-22 | ChatGPT → Claude | v0.3 複審 `9bca6c78c4f8`：CHANGES REQUESTED（只剩 F1、F2） | v0.4 修訂 |
 | 2026-11-22 | Claude → ChatGPT | 攻擊驗收計畫 v0.4（PR #12） | 最後一次文件複驗 |
 | 2026-11-22 | ChatGPT → Claude | v0.4 審查 `68ca03c1cfc0`：文件審查通過（設計結案、實作待驗收） | 負責人決定 Q-A～Q-D 與合併 |
+| 2026-11-22 | 負責人 | 合併 PR #12（`0771790`）；Q-A 是、Q-B 流程 I、Q-C 是、Q-D 依建議順序 | C-1 實作 |
 
 > 規格的正式變更請同步修改 SPEC／TECH，不要只在這裡留下新決策。

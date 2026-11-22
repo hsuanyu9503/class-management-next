@@ -1151,3 +1151,23 @@
 - 本段記錄是在 Reviewed Head 之後新增的文件 commit，只改 `docs/REVIEW_LOG.md` 與 `docs/HANDOFF.md`。新 Head **不是**審查者已審的版本。
 - 使用者決策：`待決`（Q-A～Q-D；PR #12 合併）
 
+### PR #12 合併與負責人的決定
+
+- 負責人（2026-11-22）：「pr12合併／q-a 是／q-b 流程1／q-c 是／q-d 依照建議順序」
+- 合併：
+  - merge commit `0771790f9906fe22233d9156cf4c51e31aae02ad`；
+  - 合併時的 Head 是 `667ec03`。它比 ChatGPT 審查的 `68ca03c` 只多一個記錄審查結果的文件 commit；
+  - 合併前的同 Head CI 44977590327：success。
+- 合併後：
+  - `main` 的 CI 44978067608：success；
+  - push 觸發的 `attest.yml` run 44978067634：POC-001 → `UNATTESTED [TRUST_ROOT_NOT_CONFIGURED]`，簽章步驟 skipped；
+  - 封裝 artifact 14736254648，digest `4f5d3dd9923697805f6415493e3b14bf02c6e78d2c3c6ccebc64d6fae676d605`，上傳與下載一致；
+  - statement SHA-256 `d0dc527c683e8a1b4c64e6330c32f59efd2caced2c5f6d15ba77b2b8a1507d5d`；
+  - 以上只來自 job log，Claude 沒有讀到 artifact 的內容。
+- 決定：
+  - Q-A 是；
+  - Q-B **流程 I**；
+  - Q-C 是：Environment 只作為額外保護；
+  - Q-D C-1 → C-2 → C-3。
+- 使用者決策：合併 `已核准`；Q-A～Q-D `已決定`
+
