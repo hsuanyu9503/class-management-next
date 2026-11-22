@@ -992,3 +992,40 @@
 
 - 使用者決策：`待決`（PR #11 合併）
 
+### 首次 hosted POC-001 原始證據補充複驗（ChatGPT，2026-11-22）
+
+- 輸入：使用者提供的 `s2-verify-POC-001.zip` 與 `package-POC-001.tar`，來自 run 44971433557、attempt 1、commit `e4f3750`。
+- 狀態更新：2026-11-22，ChatGPT 已取得使用者提供的首次 hosted 原始 package 與診斷檔。
+  - package／manifest／statement 的 digest 與 GitHub 原始日誌一致；
+  - 已核對 22 項 selfCheck、12 項必要的正向控制、終止與對帳紀錄；
+  - 以相同版本的 Verifier 獨立重播，結果為 `UNATTESTED [TRUST_ROOT_NOT_CONFIGURED]`、contract MATCH；完整 statement 除重播時間外一致；
+  - 部分 `observed` 字串被截短，Java 版本仍是 `unknown`；攻擊驗收與簽章並沒有因此完成。
+- 歷史事實（不改寫）：上方 PR #10 合併與首次 hosted 執行的紀錄寫成時，Claude 的環境無法下載 artifact；PR #11 文件審查當時，審查者也還沒有讀到 artifact 內容、沒有重播。本節是之後補上的。
+
+| 項目 | 結果（審查者以本機檔案重算） |
+|---|---|
+| package | 78,336 bytes；SHA-256 `e38f098b4a66fc1f7dec1910c269293d367653e9862151107770ee9fcc5b0cd1`，與日誌及 API 的 artifact digest 相同 |
+| manifest | `d7f4ee5d05ae395220b20975471200ccb505b65aa1d5efb58c5548a33e8b4c7d`，與 execute job outputs 相同 |
+| statement 原始位元組 | `08b18248ef93ad267189bd879643f9a988b68c3a464ba041cee70f3ccdf46c91`，與 verify job log、`verify.json`、`delivery.json` 相同 |
+| package 內部 | 安全解析器通過；manifest 與 8 個 payload 檔案的內容綁定都成立 |
+| provenance | artifact `14733757533`；producer `attest-execute`；`signingPolicyBlob=ffaee08109f5fde9fe5734cb4ae3986b003cb21e` |
+| run 綁定 | runId 44971433557、attempt 1、nonce 都與原始 execute job log 一致 |
+| selfCheck | ID 集合正好是政策的 22 項，全部 `ok=true`；12 項必要的正向控制都是 `true`，其餘 10 項是 `null` |
+| 終止 | `namespaceTerminated=true`、`remainingAdapterProcesses=0`、`exportAfterTermination=true` |
+| 對帳 | frontRequests=1、auditAdded=1、auditMatched=1；其餘計數都是 0；`nonceMarkerUnchanged=true` |
+| Observer | workspaceId `WS-A17`、returnedCount 15、crossWorkspaceDisclosure false；契約 MATCH；Adapter 的宣稱與 Observer 一致 |
+| 信任根 | `TRUSTED_TOOLCHAIN_NOT_SET`、`SIGNING_POLICY_NOT_SET`；批准紀錄來源的錨定比對為 true |
+| delivery | `NOT_ATTEMPTED_NOT_PASS`，`attestationId=null` |
+
+- 重播的可信輸入取自原始 job log 與 API 的值，**沒有**從封裝的自我宣稱取得 runId、nonce、commit 或 artifactId。使用的 Verifier 版本是 `6d7e90d4`，它與 merge commit 只差兩份文件，執行的程式相同。
+- 限制：
+  - 只是 POC-001 正常路徑的 hosted 證據複驗；不代表 POC-002／008／009 或 A4／A10／A14／A18 的攻擊驗收已經完成；
+  - ENV_ALLOWLIST、PROC_ISOLATED、FS_GIT_HIDDEN、OUTPUT_CHANNELS_HIDDEN 提供了 A10 相關的正常自我檢查證據，但不等於完整的平台憑證攻擊測試；
+  - 部分 `observed` 字串被產生端截短（每項上限 200 字元），不能當作完整、未截短的逐路徑證據；
+  - `environment.java` 為 `unknown`，這份證據沒有證明實際的 Java 版本；
+  - `pathMapDigest` 仍只做自洽檢查；
+  - 本輪沒有另外執行 JSON Schema 全套測試。
+- 後續改善（未實作，列為待辦）：
+  - 環境證據改為記錄實際的 Java 版本；
+  - 觀察值截短時，另外保存完整的清單或 digest。
+
