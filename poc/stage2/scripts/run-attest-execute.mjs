@@ -28,7 +28,7 @@ async function requireClosed(when) {
 const sup = platformSupport();
 if (!sup.supported) { console.log(`NOT_RUN: sandbox platform unsupported (${sup.reason})`); process.exit(3); }
 await requireClosed('before emulator run');
-const env = cleanEnv(process.env, { RUN_NONCE: randomBytes(16).toString('hex'), B3_SINGLE_CASE: testId, B3_SCENARIO: scenario, B3_OUT_DIR: out });
+const env = cleanEnv(process.env, { RUN_NONCE: randomBytes(16).toString('hex'), B3_SINGLE_CASE: testId, B3_SCENARIO: scenario, B3_OUT_DIR: out, ...(process.env.B3_SINGLE_ENTRY ? { B3_SINGLE_ENTRY: process.env.B3_SINGLE_ENTRY } : {}) });
 // GitHub Actions context the Runner needs (run binding, command-file paths to hide); never tokens
 for (const k of ['GITHUB_ACTIONS', 'RUNNER_ENVIRONMENT', 'GITHUB_RUN_ID', 'GITHUB_RUN_ATTEMPT', 'GITHUB_OUTPUT', 'GITHUB_ENV', 'GITHUB_PATH', 'GITHUB_STEP_SUMMARY', 'GITHUB_STATE']) if (process.env[k]) env[k] = process.env[k];
 const r = spawnSync(process.execPath, [FIREBASE_JS, 'emulators:exec', '--only', 'auth,firestore', '--project', PROJECT_ID, 'node test/b3-run.mjs'], { cwd: ROOT, env, encoding: 'utf8', timeout: 1500000, maxBuffer: 64 * 1024 * 1024 });

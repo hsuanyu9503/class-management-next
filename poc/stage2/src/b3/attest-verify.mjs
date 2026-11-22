@@ -53,7 +53,8 @@ export function runVerifyJob(io) {
       scenario: env.EXP_SCENARIO,
       // PR2-REV001: provenance from the execute job's outputs (artifact ID), the fixed workflow layout (producer)
       // and the blob of attest.yml in the commit whose workflow ran — never from the package
-      provenance: { artifactId: env.EXP_ARTIFACT_ID, producerJob: PRODUCER_JOB, signingPolicyBlob: io.workflowBlob },
+      // C-1: the no-signing attack workflow names its own producer jobs (io.producerJob); attest.yml keeps PRODUCER_JOB
+      provenance: { artifactId: env.EXP_ARTIFACT_ID, producerJob: io.producerJob || PRODUCER_JOB, signingPolicyBlob: io.workflowBlob },
     };
     verdict = verifyPackage(bytes, trusted);
   }

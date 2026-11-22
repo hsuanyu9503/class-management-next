@@ -3,6 +3,7 @@
  *  `firebase emulators:exec` (scripts/run-b3.mjs), as root on Linux. Everything here is a LOCAL, UNTRUSTED
  *  prototype: no signing, no trust root, no hosted runner → the best possible result is UNATTESTED. */
 import { mkdirSync, writeFileSync, readFileSync, mkdtempSync, rmSync, chmodSync, existsSync, appendFileSync, realpathSync } from 'node:fs';
+import * as require_fs from 'node:fs';
 import { execFileSync } from 'node:child_process';
 import { createHash, randomBytes } from 'node:crypto';
 import path from 'node:path';
@@ -34,6 +35,10 @@ const SINGLE = process.env.B3_SINGLE_CASE || null;
 // C-1 §1.2: the scenario is a TRUSTED Runner input (attest.yml: 'honest'); the local suite labels each run itself
 const SINGLE_SCENARIO = process.env.B3_SCENARIO || null;
 if (SINGLE && !SCENARIO_RE.test(SINGLE_SCENARIO || '')) throw new Error('B3_SINGLE_CASE needs a valid B3_SCENARIO (honest | attack-…)');
+// C-1 (A4-1 on a hosted runner, attest-attack.yml only): an attacker entry from a fixed allowlist, never with 'honest'
+const SINGLE_ENTRIES = Object.freeze({ 'tamper-toolchain': '/adapter/attackers/tamper-toolchain.mjs' });
+const SINGLE_ENTRY = process.env.B3_SINGLE_ENTRY ? SINGLE_ENTRIES[process.env.B3_SINGLE_ENTRY] : '/adapter/main.mjs';
+if (SINGLE && (!SINGLE_ENTRY || (SINGLE_SCENARIO === 'honest' && SINGLE_ENTRY !== '/adapter/main.mjs'))) throw new Error('B3_SINGLE_ENTRY: unknown entry, or an attacker entry with the honest scenario');
 const OUT_DIR = process.env.B3_OUT_DIR || null;
 if (SINGLE && !['POC-001', 'POC-002', 'POC-008', 'POC-009'].includes(SINGLE)) throw new Error(`B3_SINGLE_CASE: unsupported ${SINGLE}`);
 if (SINGLE && !OUT_DIR) throw new Error('B3_SINGLE_CASE needs B3_OUT_DIR');
@@ -173,7 +178,11 @@ const isLocalOnly = (x) => x.result.result === 'UNATTESTED' && stableJson([...x.
 
 // ---------------- B3b single-case mode: seal ONE honest case for the attest.yml verify job, then stop
 if (SINGLE) {
-  const x = await attestedRun(`case-${SINGLE}`, { testId: SINGLE, scenario: SINGLE_SCENARIO });
+  // A4-1 trusted evidence: the Runner's own digests of every tree mounted into the sandbox, before and after
+  const treeDigest = () => { const { readdirSync: rd, statSync: st } = require_fs; const acc = []; const walk = (d) => { for (const n of rd(d).sort()) { const p = path.join(d, n); if (st(p).isDirectory()) walk(p); else acc.push(`${sha256Hex(readFileSync(p))}  ${path.relative(ROOT, p)}`); } }; for (const d of ['adapter-b3', 'sandbox-check', 'src']) walk(path.join(ROOT, d)); return sha256Hex(acc.join('\n')); };
+  const treeBefore = treeDigest();
+  const x = await attestedRun(`case-${SINGLE}`, { testId: SINGLE, scenario: SINGLE_SCENARIO, entry: SINGLE_ENTRY });
+  const trustedTreesUnchanged = treeDigest() === treeBefore;
   const secrets = h.issuedSecrets();
   const { readdirSync, statSync } = await import('node:fs');
   const files = []; const walk = (d) => { for (const n of readdirSync(d)) { const p = path.join(d, n); if (statSync(p).isDirectory()) walk(p); else files.push(p); } }; walk(runDir);
@@ -188,7 +197,7 @@ if (SINGLE) {
   writeFileSync(packageFile, x.pkg.packageBytes);
   // values for the job outputs — written by THIS process after the Adapter's namespace was terminated
   const outputs = { testId: SINGLE, runId: x.trusted.runId, runAttempt: x.trusted.runAttempt, attestationNonce: x.trusted.attestationNonce,
-    packageSha256: x.pkg.packageSha256, manifestSha256: x.pkg.manifestSha256, platformSupported: x.trusted.platformSupported, scenario: x.scenario,
+    packageSha256: x.pkg.packageSha256, manifestSha256: x.pkg.manifestSha256, platformSupported: x.trusted.platformSupported, scenario: x.scenario, trustedTreesUnchanged,
     toolchainCommit: HEAD, packageFile: path.basename(packageFile), localDiagnostic: { result: x.result.result, reasons: x.result.reasons } };
   writeFileSync(path.join(OUT_DIR, 'execute-outputs.json'), JSON.stringify(outputs, null, 1));
   console.log(`S2B2_B3B_EXECUTE ${SINGLE} runId=${outputs.runId} attempt=${outputs.runAttempt} package=${outputs.packageSha256} local=${x.result.result}`);
@@ -229,6 +238,13 @@ x = await attestedRun('A9-platform-unsupported', { testId: 'POC-001', simulateUn
 log(x.result.result === 'UNATTESTED' && has(x, 'ISOLATION_UNVERIFIABLE'), 'A9 isolation unverifiable → UNATTESTED', R(x));
 x = await attestedRun('A11-entry-abuse', { testId: 'POC-001', entry: '/adapter/attackers/entry-abuse.mjs' });
 log(x.result.result === 'BLOCKED' && stableJson(x.result.reasons) === stableJson(['OBSERVATION_AMBIGUOUS']) && (x.claim?.attack?.statuses || []).every((s) => s === 403) && x.result.reconciliation.auditMatched === x.result.reconciliation.frontRequests, 'A11 malformed / oversized / prototype-name / credential-field requests: all 403 and reconciled; the extra session read makes the case ambiguous → BLOCKED, never a false match', `${R(x)} statuses=${JSON.stringify(x.claim?.attack?.statuses)} audits=${x.result.reconciliation.auditMatched}/${x.result.reconciliation.frontRequests}`);
+{ // C-1 A4-1: tamper with the trusted toolchain from inside; host digests of the mounted trees must not change
+  const tree = () => sha256Hex(['adapter-b3', 'sandbox-check'].map((d) => execFileSync('find', [path.join(ROOT, d), '-type', 'f', '-exec', 'sha256sum', '{}', '+'], { encoding: 'utf8' }).split('\n').sort().join('\n')).join('\n'));
+  const before = tree();
+  x = await attestedRun('A4-1-tamper-toolchain', { testId: 'POC-001', entry: '/adapter/attackers/tamper-toolchain.mjs' });
+  const writes = x.claim?.attack?.writes || {};
+  log(isLocalOnly(x) && tree() === before && Object.values(writes).length === 6 && Object.values(writes).every((v) => v === 'EROFS' || v === 'EACCES') && x.result.contract.adapterClaimAgreesWithObserver === false && x.result.verifierVersion !== 's2-verifier-FAKE-9' && x.result.observedCanonical?.returnedCount === 15,
+    'A4-1 toolchain tamper from the sandbox: writes fail, host trees unchanged, fake Verifier version / canonical / verdict in the claim are ignored', `${R(x)} writes=${JSON.stringify(writes)} verifier=${x.result.verifierVersion}`); }
 x = await attestedRun('A16-sentinel-absent', { testId: 'POC-001', startSentinel: false });
 log(x.result.result === 'BLOCKED' && has(x, 'ISOLATION_CHECK_FAILED'), 'A16 positive control: sentinel not started → "unreachable" is not accepted → BLOCKED', R(x));
 

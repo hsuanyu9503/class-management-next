@@ -31,6 +31,10 @@ export const PROTECTED = [
   S2 + 'src/b3/sandbox.mjs', S2 + 'src/b3/isolation-policy.mjs', S2 + 'src/b3/verifier.mjs', S2 + 'src/b3/reconcile.mjs',
   S2 + 'src/b3/package.mjs', S2 + 'src/b3/trust-policy.mjs', S2 + 'src/b3/attest-verify.mjs', S2 + 'scripts/attest-verify.mjs',
   S2 + 'src/observer.mjs', S2 + 'src/verdict.mjs',
+  // S2-B2 C-1 (attack-acceptance plan v0.4): the no-signing attack workflow and every file that decides an
+  // attack verdict (full-observation rules, A10 probe and judgement, A14/A4 verify suite and its CLI)
+  '.github/workflows/attest-attack.yml',
+  S2 + 'src/b3/observation.mjs', S2 + 'src/b3/a10.mjs', S2 + 'sandbox-check/probe-a10.mjs', S2 + 'src/b3/attack-suite.mjs', S2 + 'scripts/attack-verify.mjs',
 ];
 const sha = (b) => createHash('sha256').update(b).digest('hex');
 
