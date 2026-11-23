@@ -80,6 +80,10 @@ test('same-name stage: the original ID must return the sealed bytes or fail — 
     const r = runSameNameVerify(snIo({ platform }));
     assert.notEqual(sc(r, 'A14-2s').testOutcome, 'DEFENDED'); assert.equal(r.overall, 'INCONCLUSIVE');
   }
+  // control: A14-1b follows the Verifier's verdict, never assumes it — if what was fetched under the substitute ID
+  // verifies (here: the sealed bytes themselves), A14-1b must NOT be DEFENDED
+  const acceptedSub = runSameNameVerify(snIo({ sameName: { uploadOutcome: 'success', artifactId: '1004', list: one('package-POC-001.tar'), read: () => pkgA14.packageBytes } }));
+  assert.equal(sc(acceptedSub, 'A14-1b').testOutcome, 'BREACHED'); assert.doesNotMatch(sc(acceptedSub, 'A14-1b').verifierOutcome, /PACKAGE_DIGEST_MISMATCH/);
   // accepted, but the substitute could not be downloaded by its ID → INCONCLUSIVE (not DEFENDED)
   assert.equal(sc(runSameNameVerify(snIo({ sameName: { uploadOutcome: 'success', artifactId: '1004' } })), 'A14-1b').testOutcome, 'INCONCLUSIVE');
   // accepted per the step, but the listing does not show both artifacts → A14-2 INCONCLUSIVE
