@@ -102,7 +102,7 @@
       - official 混用 `REJECTED SIGNER_WORKFLOW_MISMATCH…`（exit 1）；
       - 錯誤錨定 `REJECTED ANCHOR_MISMATCH`（exit 1）。
       見報告 §10。這不是正式 PASS 的驗收；
-  11. 下一步：C-3（Environment `s2-attest`）。計畫草案是 `docs/stage2/S2B2-B3C3-PLAN.md`，請 ChatGPT 審查，並由你決定計畫 §6 的問題。Settings 一律由你操作，**而且要在合併 C-3 的 PR 之前**完成。
+  11. 下一步：C-3（Environment `s2-attest`）。計畫草案是 `docs/stage2/S2B2-B3C3-PLAN.md`。你已決定 Q1～Q3（都依建議，2026-11-23）。接下來：ChatGPT 審查計畫；你依計畫 §3 建立 `s2-attest` 並提供截圖；之後 Claude 實作。Settings 一律由你操作，**而且要在合併 C-3 的實作 PR 之前**完成。
 - 四個 hosted run 的 artifact 原檔重播仍待處理，需要你提供原檔給 ChatGPT。
 - **PASS 啟用的門檻**（依 Q-B 的選擇；**選擇之前 `PASS_ENABLED=false`**）：
   - **流程 I（保留原門檻）**：A4／A10／A14 的 hosted 驗收、A18 的隔離測試簽章驗收（分為密碼學／身分層與 statement 政策層），以及第三方驗證腳本，**全部**完成並經獨立審查、負責人核准之後，才進入打開 PASS 的 PR。

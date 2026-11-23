@@ -1645,3 +1645,14 @@
 - 這不是正式 PASS 簽章的驗收，也不授權開啟 PASS。`PASS_ENABLED=false`、POC-009 BLOCKED、Stage 1 的 72 筆 NOT_RUN 維持不變；其他歷史殘餘門檻仍依原流程處理。
 - 下一步：C-3（Environment `s2-attest`）計畫，`docs/stage2/S2B2-B3C3-PLAN.md`（草案）。
 
+### C-3 計畫 v0.1（PR #18，純文件）：負責人決定 Q1～Q3
+
+- 負責人的決定（2026-11-23）：「三項都依照妳的建議執行」。
+  - Q1：`verify` 與 `sigtest` 都引用 `s2-attest`；
+  - Q2：只允許 `main`，不要求 reviewer，不允許管理員略過；
+  - Q3：合併後做一次新的測試簽章，新增 `SIGTEST-002`，`SIGTEST-001` 正常退役。
+- 待辦：
+  - ChatGPT 審查計畫，並確認計畫 §7 的官方文件事實；
+  - 負責人依計畫 §3 建立 Environment；
+  - Claude 實作。
+

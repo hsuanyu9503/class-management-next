@@ -78,6 +78,17 @@
 
 ## 6. 需要負責人決定
 
+> **負責人的決定（2026-11-23）**：「三項都依照妳的建議執行」
+>
+> | 問題 | 決定 |
+> |---|---|
+> | Q1 | `attest.yml` 的 `verify` 與 `attest-sigtest.yml` 的 `sigtest` 都引用 `s2-attest` |
+> | Q2 | 只允許 `main`；不要求 reviewer；不勾選「允許管理員略過」 |
+> | Q3 | 合併後由負責人觸發一次新的測試簽章，以 C-2 的 CLI 驗證；新增 `SIGTEST-002`，`SIGTEST-001` 正常退役 |
+>
+> 這些決定不取代 ChatGPT 對本計畫的審查。實作 PR 要在計畫審查通過、負責人完成 §3 的 Settings 之後才能合併。
+
+
 | # | 問題 | Claude 的建議 |
 |---|---|---|
 | Q1 | 哪些 job 引用 `s2-attest`？ | **`attest.yml` 的 `verify`，加上 `attest-sigtest.yml` 的 `sigtest`**，也就是所有具有簽章權限的 job。代價：`attest-sigtest.yml` 的 blob 會改變，需要新的測試身分紀錄（Q3）。若只加 `verify`，測試簽章 workflow 就沒有這層保護 |
