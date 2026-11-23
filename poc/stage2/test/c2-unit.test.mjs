@@ -198,7 +198,12 @@ test('C-2 gh version gate (>= 2.102.0) and targets recomputation', () => {
 test('C-2 committed files: SIGTEST.txt digest, the sigtest policy approves exactly the committed workflow blob, official policy untouched', () => {
   assert.equal(sha(SIGTEST), SIGTEST_SHA256);
   const p = parseTrustPolicy(rf(root('docs/stage2/S2B2-SIGTEST-POLICY.json'), 'utf8'), { version: SIGTEST_POLICY_VERSION, kinds: ['signing-policy'] });
-  assert.deepEqual(p.records.map((r) => [r.kind, r.sha, r.status]), [['signing-policy', gitBlob(rf(root('.github/workflows/attest-sigtest.yml'))), 'active']]);
+  // C-3: exactly one ACTIVE record, for the committed workflow blob; the C-2 blob is retired normally (not invalidated)
+  const cur = gitBlob(rf(root('.github/workflows/attest-sigtest.yml')));
+  assert.deepEqual(p.records.filter((r) => r.status === 'active').map((r) => [r.approvalId, r.sha]), [['SIGTEST-002', cur]]);
+  const old = p.records.find((r) => r.approvalId === 'SIGTEST-001');
+  assert.deepEqual([old.sha, old.status, old.invalidateIssued], ['d8820ae8214c5d1b388da4597f3a6ade83ab5f54', 'revoked', false]);
+  assert.equal(old.validTo, p.records.find((r) => r.approvalId === 'SIGTEST-002').validFrom, 'one UTC cutoff: no gap and no overlap');
   assert.equal(p.freshnessHours, 24);
   assert.deepEqual(parseTrustPolicy(rf(root('docs/stage2/S2B2-TRUST-POLICY.json'), 'utf8')).records, []);
 });
@@ -278,5 +283,20 @@ test('PR17-REV001: classifyGhRun — any unfinished gh run is "not completed", n
   const mixed = judgeAttestation({ profile: 'official', verified: classifyGhRun({ status: 0, stdout: JSON.stringify([item()]) }).verified, subjectBytes: SIGTEST,
     policy: policyOf(pol(TRUST_POLICY_VERSION, [])), blobAt, targetsAt: () => { throw new Error('never'); }, nowMs: NOW });
   assert.equal(mixed.result, 'REJECTED'); assert.ok(mixed.reasons.includes('SIGNER_WORKFLOW_MISMATCH#0')); assert.ok(mixed.reasons.includes('STATEMENT_INVALID#0'));
+});
+
+// C-3: the policy switch keeps the accepted C-2 signature valid at ITS signing time, and nothing else
+test('C-3: SIGTEST-001 retirement — the C-2 signature (run 45121359992) stays valid; old blob after the cutoff and new blob before it are rejected', () => {
+  const text = rf(root('docs/stage2/S2B2-SIGTEST-POLICY.json'), 'utf8');
+  const p = parseTrustPolicy(text, { version: SIGTEST_POLICY_VERSION, kinds: ['signing-policy'] });
+  const cutoff = p.records.find((r) => r.approvalId === 'SIGTEST-002').validFrom;
+  const OLD = 'd8820ae8214c5d1b388da4597f3a6ade83ab5f54'; const NEW = gitBlob(rf(root('.github/workflows/attest-sigtest.yml')));
+  const at = (blob, t, now = '2026-11-24T00:00:00Z') => judgeAttestation({ profile: 'sigtest', verified: [item({ ts: [{ type: 'Tlog', timestamp: t }] })], subjectBytes: SIGTEST,
+    policy: policyOf(text, { fetchedAt: new Date(Date.parse(now) - 3600e3).toISOString() }), blobAt: () => blob, targetsAt: () => { throw new Error('never'); }, nowMs: Date.parse(now) });
+  assert.equal(at(OLD, '2026-11-23T06:01:22Z').result, 'SIGTEST_IDENTITY_ACCEPTED');           // the accepted C-2 signature (Tlog 14:01:22+08:00)
+  assert.ok(at(OLD, cutoff).reasons.includes('SIGNING_POLICY_NOT_VALID_AT_SIGNING_TIME#0'));     // old blob at / after the cutoff
+  assert.ok(at(NEW, new Date(Date.parse(cutoff) - 1000).toISOString()).reasons.includes('SIGNING_POLICY_NOT_VALID_AT_SIGNING_TIME#0'));   // new blob before it
+  assert.equal(at(NEW, cutoff).result, 'SIGTEST_IDENTITY_ACCEPTED');                            // new blob from the cutoff on
+  assert.ok(Date.parse(cutoff) > Date.parse('2026-11-23T06:01:22Z'), 'the cutoff is after the C-2 signature');
 });
 

@@ -6,6 +6,7 @@ name: S2 sigtest (C-2 flow I, test signature only)
 # - 不安裝依賴、不執行專案或 Adapter 的程式、不上傳其他 artifact。
 # - 測試簽章會永久留在公開的透明度日誌中。
 # - 簽章 action 與 attest.yml 使用相同的完整 commit SHA。
+# - C-3：job 使用 Environment s2-attest（只允許 main）。
 on:
   workflow_dispatch:
 
@@ -18,6 +19,8 @@ concurrency:
 jobs:
   sigtest:
     if: github.ref == 'refs/heads/main'
+    # C-3（負責人 Q1）：與 attest.yml 的 verify 相同，使用 Environment s2-attest（只允許 main；額外保護，不是安全邊界）。
+    environment: s2-attest
     runs-on: ubuntu-24.04
     timeout-minutes: 10
     permissions:

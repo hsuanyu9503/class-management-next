@@ -1619,5 +1619,101 @@
   - official 混用只有單元測試，**不是**真實簽章的證據。
 - 真實 `gh` 的狀態：用 R1 的 verifier 加已核准的錨定 `060c588e…` 重播，結果 CLI exit 3／`gh` exit 1，Sigstore 初始化失敗，原因尚未確定，**沒有**取得正向接受，兩項反向驗收也還沒完成。既有簽章（run 45121359992、attestation 70952425）仍然適用，不需要重新簽章。
 - **C-2 仍未驗收。**
-- 使用者決策：`待決`（核准錨定 `49fbdb25…`、確認 CI 全綠、合併；之後先處理驗證環境的 Sigstore 初始化問題，再做三項真實驗證）
+- 使用者決策（2026-11-23）：
+  - 負責人更新了 `CMN_STAGE1_ANCHOR_SHA256`，並指示「改好了，若 CI 全綠，合併 pr17」；
+  - 同 Head `199bcf0` 的 CI run 45130648549 attempt 2：`validate` success，`baseline-anchor` 為 `ANCHOR_OK`（`49fbdb25…`，92 檔）；
+  - PR #17 合併為 `40bd998fca16d8ae9654f5867d46dc5a95ef9e5f`；
+  - **C-2 仍未驗收**。下一步：處理驗證環境的 Sigstore 初始化問題，然後用既有簽章做三項真實驗證。
+
+### C-2 真實 sigtest 本機驗收（ChatGPT 審查負責人的交付物）：三項通過 → **C-2 本階段驗收完成**
+
+- 交付物：
+  - `out-sigtest-pos.zip`：三個輸出資料夾，各有 `result.json`、`gh-stdout.json`、`gh-stderr.txt`；
+  - 截圖：CLI 退出碼 0／1／1；
+  - 環境：`gh` 2.103.3、Node v26.13.1、win32/x64、Git 2.56.1.windows.1。
+- 版本：PR #17 合併 `40bd998`。相對已審的 `990e855`，只多了 HANDOFF 與 REVIEW_LOG 的文件改動。
+- 結果：
+  - sigtest 正向：`SIGTEST_IDENTITY_ACCEPTED`（`gh` 0／CLI 0）；
+  - official 混用：`REJECTED`，`SIGNER_WORKFLOW_MISMATCH#0`、`SIGNING_POLICY_NOT_VALID_AT_SIGNING_TIME#0`、`STATEMENT_INVALID#0`（`gh` 0／CLI 1）；
+  - 錯誤錨定：`REJECTED ANCHOR_MISMATCH`（`gh` 0／CLI 1）。
+- 審查者的證據：
+  - stdout 的 SHA-256 與 `result.json` 一致；
+  - 以 `judgeAttestation` 重播，三項結果與完整 reasons 都相同；政策 SHA-256 一致。
+  - signer commit `b8d3ba4`、blob `d8820ae8…`（`SIGTEST-001`）、run 45121359992／1、Tlog 2026-11-23T14:01:22+08:00、政策來源 `40bd998`、錨定 `49fbdb25…`。
+- 證據來源的區分：密碼學驗證成功來自負責人機器上的真實 `gh`；審查者獨立完成紀錄一致性與政策重播，**沒有**在自己的環境重新完成密碼學驗證（審查者的環境仍有初始化問題）。
+- 結論：**C-2 本階段驗收完成**。先前的 Windows `tar` 問題與 Sigstore 初始化問題，不再列為本次驗收的阻塞；但不宣稱每台機器的初始化原因都已排除。
+- 這不是正式 PASS 簽章的驗收，也不授權開啟 PASS。`PASS_ENABLED=false`、POC-009 BLOCKED、Stage 1 的 72 筆 NOT_RUN 維持不變；其他歷史殘餘門檻仍依原流程處理。
+- 下一步：C-3（Environment `s2-attest`）計畫，`docs/stage2/S2B2-B3C3-PLAN.md`（草案）。
+
+### C-3 計畫 v0.1（PR #18，純文件）：負責人決定 Q1～Q3
+
+- 負責人的決定（2026-11-23）：「三項都依照妳的建議執行」。
+  - Q1：`verify` 與 `sigtest` 都引用 `s2-attest`；
+  - Q2：只允許 `main`，不要求 reviewer，不允許管理員略過；
+  - Q3：合併後做一次新的測試簽章，新增 `SIGTEST-002`，`SIGTEST-001` 正常退役。
+- 待辦：
+  - ChatGPT 審查計畫，並確認計畫 §7 的官方文件事實；
+  - 負責人依計畫 §3 建立 Environment；
+  - Claude 實作。
+
+### C-3：負責人建立 Environment `s2-attest`（Settings 的設定證據，負責人提供截圖）
+
+- 2026-11-23，負責人在 Settings → Environments 建立了 `s2-attest`，列表顯示「1 protection rule」。另有 GitHub Pages 自動建立的 `github-pages`，與 C-3 無關。
+- 第一張詳細頁截圖中，「Allow administrators to bypass configured protection rules」是**勾選**的，與 Q2 的決定不同。Claude 指出後，負責人取消勾選。
+- 第二張截圖：
+  - 「Allow administrators to bypass」：未勾選；
+  - Deployment branches and tags：「Selected branches and tags」，「1 branch and 0 tags allowed」，只有 `main`；
+  - Environment secrets：「This environment has no secrets」；
+  - Environment variables：「This environment has no variables」。
+- 第一張截圖中：Required reviewers 未勾選，Wait timer 未勾選。
+- 限制：
+  - 截圖只能證明畫面上的狀態。「取消勾選略過」是否已按 **Save protection rules** 儲存，請負責人重新整理頁面確認；
+  - 審查者也可以用 `GET /repos/{owner}/{repo}/environments/s2-attest` 核對（`can_admins_bypass: false`、`deployment_branch_policy.custom_branch_policies: true`）。
+- 待辦：ChatGPT 審查 C-3 計畫（PR #18），之後 Claude 實作。
+
+### PR #18 增量與設定截圖的核對（ChatGPT，Head `1668d4d`）→ C-3 計畫 v0.2 與實作（Claude，待審查）
+
+- 審查者的結論：維持「C-3 計畫方向通過」，新增的設定紀錄合理地保留了「是否已儲存」的限制。這**不是** C-3 實作的驗收，也不是合併授權。
+  - CI 45155136445：`validate` 與 `baseline-anchor` 都 success；
+  - GitHub connector 不支援 environments API 的路徑，這是工具的限制，不代表 Environment 不存在。
+- 截圖核對：只允許 `main`；不允許管理員略過（以 18:19 的較新畫面為準）；不要求 reviewer；沒有 secrets／variables。**是否已儲存尚未確認**，要在合併引用 Environment 的 PR 之前補上（計畫 §3.1）。
+- 前次審查檔 `S2B2-PR18-PLAN-REVIEW-9958207-CLAUDE.md` 的**原文 Claude 沒有收到**；計畫 v0.2 依本次回報列出的六項修訂（計畫 §8）。
+- Claude 的實作（L3，報告 `S2B2-B3C3-REPORT.md`）：
+  - `verify`、`sigtest` 加上 `environment: s2-attest`；
+  - 測試身分政策換版，固定 UTC cutoff `2026-11-23T10:30:00Z`：`SIGTEST-001` 正常退役，`SIGTEST-002` 核准新 blob `a1b93f96…`；
+  - `repo_policy` 與 `c2-unit` 的測試；
+  - HANDOFF 中 C-2 的歷史阻塞標為已結案。
+- 提交者的證據（Linux）：
+  - `npm run check`、`npm test` 20/20、`stage1:all` 通過；
+  - `s2:test` 175/175；`s2:b3` 33/33（`S2B2B3A-20261123T103119Z-c1e0fe89`）；
+  - mutation：E1～E10 全部被抓到；既有各組也全部被抓到，只有 Y5 未被抓到（等價，維持原紀錄）。
+- 錨定：`caee16535e4b76d301e7f911cdb8fbd1c1dd2874636310710d3acf3532e56b13`（92 檔），**待審查與負責人核准**。相對已核准的 main `49fbdb25…`，修改了 `attest.yml`、`attest-sigtest.yml`、`S2B2-SIGTEST-POLICY.json`。
+- **C-3 尚未完成**（計畫 §4.1）：
+  - Settings 的儲存證據；
+  - 審查；錨定核准與 CI；
+  - 合併後的 hosted 部署紀錄；
+  - Q3 sigtest 的驗證。
+- 使用者決策：`待決`（見下方 C-3 實作審查）
+
+### PR #18 C-3 實作審查（ChatGPT）：審查通過；Settings 的儲存疑點關閉
+
+- Reviewed Head：`cc0c5039aae4219559df87f214ce38869c5489fc`（Base `40bd998`）。
+- 結論：**C-3 實作審查通過**，沒有需要阻擋合併的程式問題。這不是 GitHub approval，也不是合併或執行 hosted 的授權。C-3 的最終驗收還要等合併後的證據。
+- 審查者的證據：
+  - 附件 7 個原始檔的 Git blob hash 與 Head 一致；
+  - 只有 `verify` 與 `sigtest` 加了 Environment，權限、觸發條件、`main` 限制、SHA 固定都保留；判定核心與正式政策沒有變更，正式政策仍是空的；
+  - 新 blob `a1b93f96…` 與 `SIGTEST-002` 一致；cutoff 的設計正確，run 45121359992（06:01:22Z）仍有效；
+  - 在 Windows／Node v26.13.1 上，`repo_policy` 7 項、`c2-unit` 15 項，合計 22/22 通過；
+  - 錨定 92 檔 `caee1653…`，獨立計算一致；
+  - CI 45157040189：`validate` success，`baseline-anchor` 為 `ANCHOR_MISMATCH`（尚未全綠）；
+  - E1～E10 的 log 是提交者的證據；Y5 維持未被抓到。
+- Settings：負責人 18:35:27 的 API 回應截圖（repository 與 `s2-attest` 都明確）：
+  - `can_admins_bypass=false`；
+  - `protection_rules` 只有 `branch_policy`；
+  - `protected_branches=false`、`custom_branch_policies=true`；
+  - branch policies `total_count=1`，`main`／branch。
+  - 加上 18:19 的 secrets／variables 空清單截圖，**「是否已儲存」的疑點關閉**。沒有實際觀察到 Environment 擋下非 `main` 的執行。
+- cutoff 是固定的政策邊界，不是合併時間；審查**不等於**負責人已授權 `SIGTEST-002`，要以政策描述中「明確的合併指示」為準。
+- 非阻擋的文件收尾已在計畫 v0.3 完成（§3.1 的空清單證據、§5 依既定 Q3、OIDC `sub` 格式不保證固定、更新為 API 證據）。**受保護檔案沒有變更**，錨定仍是 `caee1653…`。
+- 使用者決策：`待決`（核准錨定 `caee1653…`、確認同 Head 的 CI 全綠、合併）
 

@@ -169,6 +169,7 @@
   - 若日後要把 Environment 當作第三方驗證的必要條件，必須先確認最終的 Sigstore 證據中，第三方實際可以驗證到哪個欄位。不能假定 OIDC 的 environment claim 一定以相同欄位出現。
   - 還要另外提出外部強制機制與可執行的驗證方法。在那之前，Environment 不列入任何驗收條件。
 - 殘餘風險（保留）：惡意的分支 workflow 仍可以在公開的透明度日誌中留下簽章，只是不會被接受。降低風險的方式是限制寫入權限與審查分支，屬於負責人的組織決策。
+- **C-3 實作**（2026-11-23）：`attest.yml` 的 `verify` 與 `attest-sigtest.yml` 的 `sigtest` 引用 `s2-attest`，只允許 `main`。上面的定位不變，Environment 仍不列入任何安全或第三方驗證條件。見 `S2B2-B3C3-PLAN.md`、`S2B2-B3C3-REPORT.md`。
 
 ## 5. A18：第三方驗證（回應 PR12-REV004）
 

@@ -88,16 +88,27 @@
   6. ChatGPT 已審查 `1164c40`：CHANGES REQUESTED（PR16-REV001 P1、PR16-REV002 P2）。Claude 在 R1 修正後，**R1 複審 `d6d5102` 通過，兩項 CLOSED**；
   7. **已完成**：錨定 `060c588e…`（91 檔）已核准，CI 全綠，PR #16 已合併為 `b8d3ba4`（2026-11-23）；
   8. 合併後：你已觸發 `attest-sigtest.yml`，run **45121359992** attempt 1 成功，subject `63515e7c…`，Rekor `logIndex=4050349070`。接下來：第三方以 `gh` v2.102.0 以上執行報告 §5 的正向與反向驗證，並交付 run／attempt／commit、subject digest、`gh` 的版本與參數、退出碼、`gh-stdout.json`、`result.json`；審查通過後才記錄 C-2 驗收完成；
-  9. **C-2 本機驗證受阻，尚未驗收**（2026-11-23）：
+  9. **已結案（C-2 已於 2026-11-23 驗收，見第 10 項）**。以下是當時的歷史紀錄：C-2 本機驗證受阻（2026-11-23）：
      - Windows 的 `tar` 無法解開中文檔名，三次驗證都在快照階段中斷，沒有執行 `gh`；
      - Claude 已改為不使用 `tar` 的快照，並讓環境錯誤以 `NOT_RUN`（exit 3）回報（報告 §8）；
-     - PR #17 審查（`a4e2078`）：CHANGES REQUESTED，REV001～003。已修正（報告 §9）：未完成的 `gh` 執行回報 `NOT_RUN`；`gh` 只帶 `--repo`；Windows 上的測試資料與略過都已修正。**R1 複審 `990e855` 通過，三項 CLOSED**（審查者在 Windows 實機上：`c2-snapshot` 5/5、`c2-unit` 14/14、`c2-cli` 正確略過）。新錨定 `49fbdb250364aaa3f2f81d41f3bef3a4e65e1046601a68ba40e06e3c48327455`（92 檔）待你核准，`e2701771…` 已作廢；
+     - PR #17 審查（`a4e2078`）：CHANGES REQUESTED，REV001～003。已修正（報告 §9）：未完成的 `gh` 執行回報 `NOT_RUN`；`gh` 只帶 `--repo`；Windows 上的測試資料與略過都已修正。**R1 複審 `990e855` 通過，三項 CLOSED**（審查者在 Windows 實機上：`c2-snapshot` 5/5、`c2-unit` 14/14、`c2-cli` 正確略過）。錨定 `49fbdb250364aaa3f2f81d41f3bef3a4e65e1046601a68ba40e06e3c48327455`（92 檔）**已核准**，CI 全綠，**PR #17 已合併為 `40bd998`**（2026-11-23）；
      - 修正合併後，請在 Windows 上：
        1. 執行 `node --test test/c2-snapshot.test.mjs`（在 `poc/stage2` 中）；
        2. 用既有的簽章（run 45121359992）重跑三次驗證，保留退出碼、`result.json`、`gh-stdout.json` 與 `gh --version`；
        3. `--anchor` 使用屆時**已核准**的錨定值；
      - 三次結果經 ChatGPT 逐項核對後，才記錄 C-2 驗收完成；
-  10. 之後：C-3（Environment `s2-attest`，Settings 由你操作）。
+  10. **C-2 本階段驗收完成**（2026-11-23）。負責人在 Windows 上，用既有簽章（run 45121359992）跑三項真實驗證，ChatGPT 核對原檔並重播政策：
+      - 正向 `SIGTEST_IDENTITY_ACCEPTED`（exit 0）；
+      - official 混用 `REJECTED SIGNER_WORKFLOW_MISMATCH…`（exit 1）；
+      - 錯誤錨定 `REJECTED ANCHOR_MISMATCH`（exit 1）。
+      見報告 §10。這不是正式 PASS 的驗收；
+  11. 下一步：C-3（Environment `s2-attest`）。計畫草案是 `docs/stage2/S2B2-B3C3-PLAN.md`。你已決定 Q1～Q3（都依建議，2026-11-23）。接下來：ChatGPT 審查計畫；你已建立 `s2-attest`。18:35 的 API 回應證明伺服器端狀態：`can_admins_bypass=false`，只有 `main`；secrets 與 variables 都是空的。**C-3 實作已在 PR #18 完成，審查通過**（Head `cc0c503`）。
+      - 接下來：你核准錨定 `caee16535e4b76d301e7f911cdb8fbd1c1dd2874636310710d3acf3532e56b13`（92 檔），確認同 Head 的 CI 全綠後，決定是否合併；
+      - 合併後：
+        1. 收集自動觸發的 `attest.yml` run：run、attempt、commit、`verify` 的 `s2-attest` 部署紀錄、UNATTESTED、簽章步驟沒有執行；
+        2. 你觸發一次新的 `attest-sigtest.yml`；
+        3. 第三方用 CLI 驗證，結果應為 `SIGTEST_IDENTITY_ACCEPTED`、exit 0，而且採用 `SIGTEST-002`；記錄憑證中是否出現 Environment；
+      - 以上核對通過後，才記錄 C-3 完成。Settings 一律由你操作，**而且要在合併 C-3 的實作 PR 之前**完成。
 - 四個 hosted run 的 artifact 原檔重播仍待處理，需要你提供原檔給 ChatGPT。
 - **PASS 啟用的門檻**（依 Q-B 的選擇；**選擇之前 `PASS_ENABLED=false`**）：
   - **流程 I（保留原門檻）**：A4／A10／A14 的 hosted 驗收、A18 的隔離測試簽章驗收（分為密碼學／身分層與 statement 政策層），以及第三方驗證腳本，**全部**完成並經獨立審查、負責人核准之後，才進入打開 PASS 的 PR。

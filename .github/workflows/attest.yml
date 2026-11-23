@@ -89,6 +89,9 @@ jobs:
 
   verify:
     needs: execute
+    # C-3（docs/stage2/S2B2-B3C3-PLAN.md；負責人 Q-C／Q1）：簽章 job 使用 Environment s2-attest（只允許 main）。
+    # 這只是合作 workflow 的額外保護，不是安全邊界，也不是 PASS 或第三方驗證的條件（攻擊計畫 §4.2）。
+    environment: s2-attest
     runs-on: ubuntu-24.04
     timeout-minutes: 20
     permissions:

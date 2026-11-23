@@ -32,6 +32,10 @@ test('attest.yml：只在 main 觸發、逐 job 最小權限、action 以完整 
   assert.deepEqual(runLines(av), ['node poc/stage2/scripts/attest-availability.mjs']);
   assert.equal((w.match(/github\.token/g) || []).length, 1); assert.match(av, /GITHUB_TOKEN: \$\{\{ github\.token \}\}/);   // the token only here
   assert.doesNotMatch(ve, /actions: read|github\.token/);                                         // the signing job gains nothing
+  // C-3 (plan v0.2; owner Q-C / Q1): the signing job uses Environment s2-attest — extra protection only, not a security boundary
+  assert.match(ve, /\n    needs: execute\n(?:    #.*\n)*    environment: s2-attest\n/);
+  for (const [n, j] of [['execute', ex], ['availability', av]]) assert.doesNotMatch(j.split('\n').filter((l) => !/^\s*#/.test(l)).join('\n'), /environment:/, n);
+  assert.equal((w.match(/^    environment: /gm) || []).length, 1);
   assert.match(ve, /needs: execute/);
   assert.match(ex, /permissions:\s*\n\s*contents: read\s*\n\s*env:/);
   assert.doesNotMatch(ex, /id-token|attestations: write|attest-build-provenance/);
@@ -74,6 +78,7 @@ test('attest-attack.yml：只能手動觸發、只在 main、沒有任何簽章�
   assert.match(onBlock, /^\non:\n  workflow_dispatch:\n/); assert.doesNotMatch(onBlock, /push|pull_request|schedule|workflow_run|workflow_call/);
   assert.match(w, /^permissions: \{\}$/m);
   assert.doesNotMatch(w, /id-token|attestations|attest-build-provenance|secrets\./);
+  assert.doesNotMatch(w, /environment:/);   // C-3: the attack workflow (no signing permissions) does not use s2-attest
   const jobs = jobsOf(w);
   assert.deepEqual(Object.keys(jobs).sort(), ['a10', 'execute-a14', 'execute-a4', 'probe-original', 'same-name', 'verify-attack', 'verify-same-name']);
   // hosted run 45088076830: a same-named artifact shadows the original ID → the same-name upload must come AFTER the
@@ -129,6 +134,7 @@ test('attest-sigtest.yml：只能手動觸發、只在 main、只有一個簽章
   assert.deepEqual(Object.keys(jobs), ['sigtest']);
   const j = jobs.sigtest;
   assert.match(j, /\n    if: github\.ref == 'refs\/heads\/main'\n/);
+  assert.match(j, /\n    environment: s2-attest\n/); assert.equal((w.match(/^    environment: /gm) || []).length, 1);   // C-3 (Q1)
   assert.match(j, /\n    permissions:\n      contents: read\n      id-token: write\n      attestations: write\n    steps:/);
   assert.deepEqual(runLines(w), []);                                                              // no run step at all
   const uses = w.match(/uses: .+/g);
