@@ -112,6 +112,8 @@ test('C-2 validity at signing time: interval boundaries, normal retirement, inva
   assert.equal(validAt(rec({ status: 'revoked' }), Date.parse(T0)), false);                       // revoked without validTo
   assert.equal(validAt(rec({ validTo: '2026-11-23T00:00:00Z' }), Date.parse(T0)), false);         // empty interval
   assert.equal(validAt(rec({ status: 'suspended' }), Date.parse(T0)), false);
+  assert.equal(validAt(rec({ invalidateIssued: true }), Date.parse(T0)), false);                  // invalidated: never, even inside the interval
+  assert.equal(validAt(rec({ status: 'revoked', validTo: '2026-11-25T00:00:00Z', invalidateIssued: false }), Date.parse(T0)), true);
   assert.equal(validAt(rec({ validFrom: 'soon' }), Date.parse(T0)), false);
   assert.equal(validAt(rec(), NaN), false); assert.equal(validAt(null, Date.parse(T0)), false);
   // the parser now rejects an empty interval (validTo ≤ validFrom)
