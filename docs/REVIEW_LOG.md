@@ -1671,3 +1671,27 @@
   - 審查者也可以用 `GET /repos/{owner}/{repo}/environments/s2-attest` 核對（`can_admins_bypass: false`、`deployment_branch_policy.custom_branch_policies: true`）。
 - 待辦：ChatGPT 審查 C-3 計畫（PR #18），之後 Claude 實作。
 
+### PR #18 增量與設定截圖的核對（ChatGPT，Head `1668d4d`）→ C-3 計畫 v0.2 與實作（Claude，待審查）
+
+- 審查者的結論：維持「C-3 計畫方向通過」，新增的設定紀錄合理地保留了「是否已儲存」的限制。這**不是** C-3 實作的驗收，也不是合併授權。
+  - CI 45155136445：`validate` 與 `baseline-anchor` 都 success；
+  - GitHub connector 不支援 environments API 的路徑，這是工具的限制，不代表 Environment 不存在。
+- 截圖核對：只允許 `main`；不允許管理員略過（以 18:19 的較新畫面為準）；不要求 reviewer；沒有 secrets／variables。**是否已儲存尚未確認**，要在合併引用 Environment 的 PR 之前補上（計畫 §3.1）。
+- 前次審查檔 `S2B2-PR18-PLAN-REVIEW-9958207-CLAUDE.md` 的**原文 Claude 沒有收到**；計畫 v0.2 依本次回報列出的六項修訂（計畫 §8）。
+- Claude 的實作（L3，報告 `S2B2-B3C3-REPORT.md`）：
+  - `verify`、`sigtest` 加上 `environment: s2-attest`；
+  - 測試身分政策換版，固定 UTC cutoff `2026-11-23T10:30:00Z`：`SIGTEST-001` 正常退役，`SIGTEST-002` 核准新 blob `a1b93f96…`；
+  - `repo_policy` 與 `c2-unit` 的測試；
+  - HANDOFF 中 C-2 的歷史阻塞標為已結案。
+- 提交者的證據（Linux）：
+  - `npm run check`、`npm test` 20/20、`stage1:all` 通過；
+  - `s2:test` 175/175；`s2:b3` 33/33（`S2B2B3A-20261123T103119Z-c1e0fe89`）；
+  - mutation：E1～E10 全部被抓到；既有各組也全部被抓到，只有 Y5 未被抓到（等價，維持原紀錄）。
+- 錨定：`caee16535e4b76d301e7f911cdb8fbd1c1dd2874636310710d3acf3532e56b13`（92 檔），**待審查與負責人核准**。相對已核准的 main `49fbdb25…`，修改了 `attest.yml`、`attest-sigtest.yml`、`S2B2-SIGTEST-POLICY.json`。
+- **C-3 尚未完成**（計畫 §4.1）：
+  - Settings 的儲存證據；
+  - 審查；錨定核准與 CI；
+  - 合併後的 hosted 部署紀錄；
+  - Q3 sigtest 的驗證。
+- 使用者決策：`待決`（補上 Settings 的儲存證據、審查、核准錨定、合併；合併後觸發 sigtest）
+
