@@ -84,7 +84,11 @@
   2. 你已決定 C-2 計畫 §8 的 Q1～Q4（都依建議）。Claude 已實作 C-1f（報告 §13），和 C-2 計畫草案放在同一個 PR；
   3. ChatGPT 已審查 PR #15（Reviewed Head `dbe6562`）：**C-1f 程式審查通過**；C-2 計畫方向可採用，4 項備註已納入計畫 v0.2；
   4. **已完成**：錨定 `d07dfc54…`（85 檔）已核准，CI 全綠，PR #15 已合併為 `da25061`（2026-11-23）；
-  5. 合併後，Claude 依計畫 v0.2 實作 C-2，送新的 PR 審查。
+  5. **C-2 已實作**（負責人 2026-11-23 指示），送新的 PR 審查（L3），見 `docs/stage2/S2B2-B3C2-REPORT.md`；
+  6. ChatGPT：審查 C-2；
+  7. 你：核准錨定 `afa0dcd3bf824a17de45d5af883666d3f93be2b8352be1e831f8aacf2469822d`（90 檔），確認 CI 全綠後決定是否合併；
+  8. 合併後：你手動觸發 `attest-sigtest.yml` 一次；第三方以 `gh` v2.102.0 以上執行報告 §5 的正向與反向驗證；
+  9. 之後：C-3（Environment `s2-attest`，Settings 由你操作）。
 - 四個 hosted run 的 artifact 原檔重播仍待處理，需要你提供原檔給 ChatGPT。
 - **PASS 啟用的門檻**（依 Q-B 的選擇；**選擇之前 `PASS_ENABLED=false`**）：
   - **流程 I（保留原門檻）**：A4／A10／A14 的 hosted 驗收、A18 的隔離測試簽章驗收（分為密碼學／身分層與 statement 政策層），以及第三方驗證腳本，**全部**完成並經獨立審查、負責人核准之後，才進入打開 PASS 的 PR。

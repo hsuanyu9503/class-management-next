@@ -1447,3 +1447,23 @@
   - 同 Head `586ccbf` 的 CI run 45101877596 attempt 2：`validate` success，`baseline-anchor` 為 `ANCHOR_OK`（`d07dfc54…`，85 檔）；
   - PR #15 合併為 `da25061103bf25ca5f75494031198359849b3a9c`。
 
+### C-2（第三方驗證 A18 與流程 I 的測試簽章）：Claude 實作，待審查
+
+- 負責人指示（2026-11-23）：「開始C-2實作」。依計畫 v0.2 實作，詳見 `docs/stage2/S2B2-B3C2-REPORT.md`。
+- 內容：
+  - `trust-policy.mjs`：新增 `validAt`，parser 檢查 `validTo > validFrom`；
+  - `third-party.mjs`（判定核心）、`verify-attestation.mjs`（CLI）；
+  - `attest-sigtest.yml`、固定的 `SIGTEST.txt`、測試身分政策 `S2B2-SIGTEST-POLICY.json`（依 Q3 提出紀錄 `SIGTEST-001`）；
+  - 攻擊計畫 §5.2 的措辭更正。
+- 提交者的證據（審查者尚未重跑）：
+  - `npm run check`、`npm test` 20/20、`stage1:all` 通過；
+  - `s2:test` 160/160（含 `c2-unit` 11 項）；
+  - mutation X1～X36 全部被抓到；既有 56 項與 W1～W16 也全部被抓到；
+  - 以假 `gh` 與本機 bare repo 做的端到端模擬。**這不是密碼學驗證**。
+- 錨定：`afa0dcd3bf824a17de45d5af883666d3f93be2b8352be1e831f8aacf2469822d`（90 檔），需要負責人重新核准。
+- 送審重點（報告 §3）：
+  - targets 的 `anchorDigest` 由已核准工具鏈 commit 自己的錨定腳本算出，只在 toolchain 紀錄有效後才執行；
+  - subject 要求「至少一個」相符；
+  - 測試身分政策的 `reviewRef` 與 `validFrom`。
+- 使用者決策：`待決`（審查、核准錨定、合併；合併後手動觸發 `attest-sigtest.yml`）
+
