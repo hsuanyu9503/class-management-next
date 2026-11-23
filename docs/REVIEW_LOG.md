@@ -1333,5 +1333,8 @@
   2. **正常 `attest.yml` 的可用性診斷**：下載失敗時保存有上限的 ID／清單／錯誤診斷，並評估同一個 run 重跑或新增上傳者時的同名情況。
 - 仍未完成：修正後的 hosted 執行；run 45088076830 原檔的核對。
 - 本段記錄是在 Reviewed Head 之後新增的文件 commit，只改 `docs/REVIEW_LOG.md` 與 `docs/HANDOFF.md`。新 Head **不是**審查者已審的版本。
-- 使用者決策：`待決`（核准錨定 `7c4303b1…`、合併、合併後觸發 hosted）
+- 使用者決策（2026-11-23）：
+  - 負責人更新了 `CMN_STAGE1_ANCHOR_SHA256`。CI run 45093716207 attempt 2 的結果是 `ANCHOR_OK`（`7c4303b1…`，83 檔），`validate` 也通過；
+  - 負責人明確指示「pr14合併」。PR #14 於 Head `7223ff5` 合併為 `2f78f9b72fe8492ae3b3aaba8d06ff234a1fe73f`；
+  - 修正後的 hosted `attest-attack.yml` 待負責人觸發。
 

@@ -75,11 +75,12 @@
   - R1 已修正：shadowing 只在有證據時才記錄，見 REPORT §11；
   - 錨定 `7c4303b1…`（83 檔）。`d0b815ea…` 已作廢。
   - **`d2c1c09`：程式複審通過**。PR14-REV001 已關閉；hosted 驗收仍待完成。
+  - **已合併**（2026-11-23，負責人指示）：Head `7223ff5` → main `2f78f9b`，合併前 `ANCHOR_OK` `7c4303b1…`。
 - 非阻擋的追蹤項目：
   1. A14-1b 在工具鏈不符等前置條件錯誤時判 `BREACHED`，應改為 `INCONCLUSIVE`（保留 reason code，仍以非零狀態退出）；
   2. 正常 `attest.yml` 的可用性診斷：下載失敗時保存有上限的診斷，並評估同一個 run 重跑或新增上傳者時的同名情況。
 - 下一位負責人：
-  1. 你：核准錨定 `7c4303b1d0e1906bf7b1bf8022ceaa72020667b91f59682bd62c8c3798205101`，確認同 Head 的 CI 全綠後決定是否合併 PR #14，之後重新觸發 `attest-attack.yml`；
+  1. 你：手動觸發 `attest-attack.yml`（錨定已核准，PR #14 已合併），填入 `previousRunId = 45087498469`、`previousArtifactId = 14780101081`；
   2. ChatGPT：以原檔做 hosted 驗收。需要交付：
      - run ID 與 attempt、實際的工具鏈版本；
      - `s2-attack-a10`、`s2-attack-summary`、`s2-attack-summary-same-name`；
