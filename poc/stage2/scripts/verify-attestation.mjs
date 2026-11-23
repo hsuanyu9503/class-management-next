@@ -10,8 +10,9 @@
  *   1. `gh --version` must be >= 2.102.0 (GHSA-wjmr-j3rp-mh2g, GHSA-4mq3-hpgx-9cx8), otherwise exit 2 without verifying;
  *   2. fetch main into the clone; record the commit and the ACTUAL fetch time; extract that tree; recompute its anchor
  *      digest; read the profile's FIXED policy file from it (no option can point elsewhere);
- *   3. `gh attestation verify <subject> --repo … --signer-workflow <repo>/<fixed path> --source-ref refs/heads/main
- *      --format json` — the output is parsed ONLY when gh exits 0; version, arguments, exit code and output are kept;
+ *   3. `gh attestation verify <subject> --repo <repo> --format json` (PR17-REV001: the signer workflow and refs are checked
+ *      exactly by the core, not as gh filters). Only exit 0 with a JSON array is a verification result; any other gh
+ *      outcome is NOT_RUN (verification not completed). Version, arguments, exit code, stdout and stderr are kept;
  *   4. blobs at the signer commit via `git rev-parse <commit>:<path>` in the clone;
  *   5. (official) targets of the approved toolchain commit, recomputed with THIS verifier's own code from that commit's
  *      files: its Stage 1 oracle / fixture files and anchorListing() over its tree with ITS path list (data,
@@ -25,7 +26,7 @@ import { mkdirSync, mkdtempSync, readFileSync, writeFileSync, rmSync, existsSync
 import { createHash } from 'node:crypto';
 import os from 'node:os';
 import path from 'node:path';
-import { judgeAttestation, computeTargets, parseGhVersion, ghVersionOk, PROFILES, REPO, SOURCE_REF, MIN_GH } from '../src/b3/third-party.mjs';
+import { judgeAttestation, computeTargets, parseGhVersion, ghVersionOk, ghVerifyArgs, classifyGhRun, PROFILES, MIN_GH } from '../src/b3/third-party.mjs';
 import { anchorListing } from '../../../scripts/verify-anchor.mjs';
 import { materializeCommit } from '../src/b3/git-snapshot.mjs';
 
@@ -83,12 +84,14 @@ try {
     // 3. gh attestation verify (parsed only on exit 0)
     const subject = path.resolve(args['--subject']);
     const subjectBytes = existsSync(subject) ? readFileSync(subject) : null;
-    const ghArgs = ['attestation', 'verify', subject, '--repo', REPO, '--signer-workflow', `${REPO}/${P.workflowPath}`, '--source-ref', SOURCE_REF, '--format', 'json'];
+    const ghArgs = ghVerifyArgs(subject);                          // PR17-REV001: workflow / refs are checked by the core
     const gh = spawnSync('gh', ghArgs, { encoding: 'utf8', maxBuffer: 64 << 20 });
-    if (gh.error) env('gh-spawn', gh.error);                       // gh could not be started at all (not a verification result)
     writeFileSync(path.join(outDir, 'gh-stdout.json'), gh.stdout || '');
-    let verified = null;
-    if (gh.status === 0) { try { const j = JSON.parse(gh.stdout); verified = Array.isArray(j) ? j : null; } catch { verified = null; } }
+    writeFileSync(path.join(outDir, 'gh-stderr.txt'), gh.stderr || '');
+    // PR17-REV001: only exit 0 with a JSON array is a verification result; anything else → NOT_RUN (exit 3)
+    const ghRun = classifyGhRun(gh);
+    if (ghRun.issue) env(ghRun.issue.stage, ghRun.issue.error);
+    const verified = ghRun.verified;
 
     // 4. / 5. facts from the clone
     const blobAt = (commit, p) => {
@@ -115,13 +118,13 @@ try {
       } catch { return null; }
     };
 
-    // 6. judge
-    const r = judgeAttestation({ profile, verified, subjectBytes, policy, blobAt, targetsAt, nowMs: Date.now() });
+    // 6. judge — only over a COMPLETED gh verification (PR17-REV001: no policy result is produced for a run gh did not finish)
+    const r = envIssues.length ? null : judgeAttestation({ profile, verified, subjectBytes, policy, blobAt, targetsAt, nowMs: Date.now() });
     const record = { toolchainTrees: [...trees].map(([commit, t]) => ({ commit, ok: t.ok, anchorDigest: t.anchorDigest ?? null, error: t.error ?? null })),
       gh: { version: ghVersion.join('.'), args: ghArgs, exitCode: gh.status, spawnError: gh.error ? String(gh.error.code || gh.error.message) : null, stdoutSha256: sha(gh.stdout || ''), stderr: String(gh.stderr || '').slice(0, 2000) },
       clock: { verifiedAt: iso(), source: 'local system clock of the verifier' }, platform: `${process.platform}/${process.arch} node ${process.version}` };
     if (envIssues.length) {
-      writeResult(notRun({ policyResult: r, ...record }));
+      writeResult(notRun({ ...(r ? { policyResult: r } : {}), ...record }));
       console.error(`S2_THIRD_PARTY profile=${profile} result=NOT_RUN ENVIRONMENT_ERROR ${envIssues.map((d) => `${d.stage}: ${d.error}`).join(' | ')}`);
       process.exitCode = 3;
     } else {

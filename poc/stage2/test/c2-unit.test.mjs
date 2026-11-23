@@ -6,7 +6,7 @@ import { readFileSync as rf } from 'node:fs';
 import { createHash } from 'node:crypto';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath as f2p } from 'node:url';
-import { judgeAttestation, computeTargets, parseGhVersion, ghVersionOk, parseSignerUri, PROFILES, REPO, SIGTEST_SHA256 } from '../src/b3/third-party.mjs';
+import { judgeAttestation, computeTargets, parseGhVersion, ghVersionOk, parseSignerUri, ghVerifyArgs, classifyGhRun, PROFILES, REPO, SIGTEST_SHA256 } from '../src/b3/third-party.mjs';
 import { parseTrustPolicy, validAt, TRUST_POLICY_VERSION, SIGTEST_POLICY_VERSION } from '../src/b3/trust-policy.mjs';
 import { readPackageSafe } from '../src/b3/package.mjs';
 
@@ -254,5 +254,29 @@ test('PR16-REV002: attestations sharing a toolchain commit are judged once per (
   let calls = 0;
   const fail = judgeAttestation({ profile: 'official', verified: [v, v], subjectBytes: stBytes(), policy: policyOf(pol(TRUST_POLICY_VERSION, offRecs())), blobAt, targetsAt: () => { calls++; return null; }, nowMs: NOW });
   assert.deepEqual(fail.reasons, ['TARGETS_UNAVAILABLE#0', 'TARGETS_UNAVAILABLE#1']); assert.equal(calls, 1);
+});
+
+// PR17-REV001 (cross-platform; no gh needed): only a completed gh run is a verification result
+test('PR17-REV001: classifyGhRun — any unfinished gh run is "not completed", never a policy input', () => {
+  const ok = classifyGhRun({ status: 0, stdout: JSON.stringify([item()]), stderr: '' });
+  assert.equal(ok.issue, undefined); assert.equal(ok.verified.length, 1);
+  assert.deepEqual(classifyGhRun({ status: 0, stdout: '[]', stderr: '' }), { verified: [] });          // completed, zero attestations → the core's NO_ATTESTATIONS
+  const init = classifyGhRun({ status: 1, stdout: '', stderr: 'error creating Sigstore verifier: no valid Sigstore verifiers could be initialized\n' });
+  assert.equal(init.verified, null); assert.equal(init.issue.stage, 'gh-verify'); assert.equal(init.issue.exitCode, 1);
+  assert.match(init.issue.error, /^gh exited 1 — verification not completed \(not a policy decision\): error creating Sigstore verifier/);
+  for (const r of [{ status: 1, stdout: '', stderr: 'HTTP 401: Bad credentials' }, { status: 1, stdout: '', stderr: 'dial tcp: lookup tuf-repo-cdn.sigstore.dev: no such host' },
+    { status: 1, stdout: '', stderr: '✗ Verification failed' }, { status: 2, stdout: '[]', stderr: '' }, { status: 1, stdout: '', stderr: '' }, { status: null, stdout: '', stderr: '', signal: 'SIGKILL' }])
+    assert.equal(classifyGhRun(r).issue.stage, 'gh-verify', JSON.stringify(r));                       // no non-zero exit is ever treated as a result
+  assert.equal(classifyGhRun({ status: null, error: Object.assign(new Error('spawn gh ENOENT'), { code: 'ENOENT' }) }).issue.stage, 'gh-spawn');
+  assert.equal(classifyGhRun(null).issue.stage, 'gh-spawn');
+  assert.equal(classifyGhRun({ status: 0, stdout: 'oops' }).issue.stage, 'gh-output');
+  assert.equal(classifyGhRun({ status: 0, stdout: '{"a":1}' }).issue.stage, 'gh-output');
+  // gh only gets the repository; workflow and refs are judged exactly by the core
+  assert.deepEqual(ghVerifyArgs('/x/SIGTEST.txt'), ['attestation', 'verify', '/x/SIGTEST.txt', '--repo', REPO, '--format', 'json']);
+  assert.ok(!ghVerifyArgs('f').some((a) => /signer|source-ref|workflow/.test(a)));
+  // the official profile on the TEST signature, as gh returns it with only --repo: a specific policy rejection
+  const mixed = judgeAttestation({ profile: 'official', verified: classifyGhRun({ status: 0, stdout: JSON.stringify([item()]) }).verified, subjectBytes: SIGTEST,
+    policy: policyOf(pol(TRUST_POLICY_VERSION, [])), blobAt, targetsAt: () => { throw new Error('never'); }, nowMs: NOW });
+  assert.equal(mixed.result, 'REJECTED'); assert.ok(mixed.reasons.includes('SIGNER_WORKFLOW_MISMATCH#0')); assert.ok(mixed.reasons.includes('STATEMENT_INVALID#0'));
 });
 

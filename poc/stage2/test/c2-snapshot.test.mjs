@@ -23,15 +23,28 @@ const gs = (cwd, args, o) => g(cwd, args, o).toString('utf8').trim();
 const HEAD = gs(ROOT, ['rev-parse', 'HEAD']);
 let n = 0; const dest = () => path.join(tmp, `s${n++}`);
 
-/** a commit built with plumbing only (works on every platform, even for names the OS cannot create) */
+/** PR17-REV002: a commit built from tree objects with `git mktree -z` (plumbing only; no index, no checkout). Unlike
+ *  `update-index`, mktree does not apply core.protectNTFS / protectHFS path filters, so on Windows the tree really
+ *  contains names the OS cannot create (a:b.txt, CON.md, "x ") — exactly what the snapshot must reject. Only this
+ *  throw-away repository is used; no global or user configuration is read or changed. */
 const repo = path.join(tmp, 'plumb'); execFileSync('git', ['init', '-q', repo]);
-const commitOf = (entries) => {
-  const idx = path.join(tmp, `index-${n++}`);
-  const lines = entries.map((e) => { const oid = gs(repo, ['hash-object', '-w', '--stdin'], { input: e.content ?? '' }); return `${e.mode || '100644'} ${e.oid || oid}\t${e.path}`; }).join('\n') + '\n';
-  g(repo, ['update-index', '--index-info'], { input: lines, env: { ...process.env, GIT_INDEX_FILE: idx } });
-  const tree = gs(repo, ['write-tree'], { env: { ...process.env, GIT_INDEX_FILE: idx } });
-  return gs(repo, ['commit-tree', tree, '-m', 'test'], { env: { ...process.env, GIT_AUTHOR_NAME: 't', GIT_AUTHOR_EMAIL: 't@localhost', GIT_COMMITTER_NAME: 't', GIT_COMMITTER_EMAIL: 't@localhost' } });
+const blobOf = (content) => gs(repo, ['hash-object', '-w', '--stdin'], { input: content ?? '' });
+const mktree = (node) => {
+  const lines = Object.entries(node).map(([name, v]) => v.__entry ? `${v.mode} ${v.type} ${v.oid}\t${name}` : `040000 tree ${mktree(v)}\t${name}`);
+  return gs(repo, ['mktree', '-z', '--missing'], { input: lines.join('\0') + '\0' });
 };
+const commitOf = (entries) => {
+  const root = {};
+  for (const e of entries) {
+    const parts = e.path.split('/'); let node = root;
+    for (const dir of parts.slice(0, -1)) node = node[dir] ??= {};
+    const mode = e.mode || '100644';
+    node[parts.at(-1)] = { __entry: true, mode, type: mode === '160000' ? 'commit' : 'blob', oid: e.oid || blobOf(e.content) };
+  }
+  return gs(repo, ['commit-tree', mktree(root), '-m', 'test'], { env: { ...process.env, GIT_AUTHOR_NAME: 't', GIT_AUTHOR_EMAIL: 't@localhost', GIT_COMMITTER_NAME: 't', GIT_COMMITTER_EMAIL: 't@localhost' } });
+};
+/** the raw tree as git stores it (independent of git-snapshot.mjs): [{ mode, path }] */
+const rawTree = (c) => g(repo, ['ls-tree', '-r', '-z', '--full-tree', c]).toString('utf8').split('\0').filter(Boolean).map((l) => ({ mode: l.split(' ')[0], path: l.slice(l.indexOf('\t') + 1) }));
 
 test('snapshot of HEAD: every file byte-identical to the committed blob, UTF-8 (Chinese) names included', () => {
   const d = dest(); const r = materializeCommit(ROOT, HEAD, d);
@@ -83,19 +96,23 @@ test('byte fidelity: CRLF, BOM, binary, empty and executable files are written u
 test('fail closed with a diagnostic: symbolic links, submodules, unsafe or colliding names, bad commit IDs', () => {
   const blob = gs(repo, ['hash-object', '-w', '--stdin'], { input: 'x' });
   const cases = {
-    'symbolic link': [{ path: 'link', mode: '120000', content: '/etc/passwd' }],
-    'submodule': [{ path: 'sub', mode: '160000', oid: HEAD }],
-    'colon (Windows-reserved)': [{ path: 'a:b.txt' }],
-    'reserved device name': [{ path: 'docs/CON.md' }],
-    'trailing dot': [{ path: 'dir./x' }],
-    'trailing space': [{ path: 'x ' }],
-    'backslash': [{ path: 'a\\b' }],
-    'case collision': [{ path: 'Readme.md' }, { path: 'README.md' }],
-    'normalisation collision': [{ path: 'café' }, { path: 'café' }],
+    'symbolic link': [[{ path: 'link', mode: '120000', content: '/etc/passwd' }], /\[entry\]: link: mode 120000/],
+    'submodule': [[{ path: 'sub', mode: '160000', oid: HEAD }], /\[entry\]: sub: mode 160000/],
+    'colon (Windows-reserved)': [[{ path: 'a:b.txt' }], /\[path\]: a:b\.txt: reserved or control character/],
+    'reserved device name': [[{ path: 'docs/CON.md' }], /\[path\]: docs\/CON\.md: reserved name/],
+    'trailing dot': [[{ path: 'dir./x' }], /\[path\]: dir\.\/x: segment ends in/],
+    'trailing space': [[{ path: 'x ' }], /\[path\]: x : segment ends in/],
+    'backslash': [[{ path: 'a\\b' }], /\[path\]: a\\b: reserved or control character/],
+    'case collision': [[{ path: 'Readme.md' }, { path: 'README.md' }], /\[path\]: .* collides with/],
+    'normalisation collision': [[{ path: 'caf\u00e9' }, { path: 'cafe\u0301' }], /\[path\]: .* collides with/],
   };
-  for (const [name, entries] of Object.entries(cases)) {
+  for (const [name, [entries, why]] of Object.entries(cases)) {
     const c = commitOf(entries.map((e) => ({ content: 'x', ...e })));
-    assert.throws(() => materializeCommit(repo, c, dest()), (e) => e instanceof SnapshotError && /^SNAPSHOT_FAILED\[(entry|path)\]/.test(e.message), name);
+    // PR17-REV002: first prove the fixture really contains the entry under test (path AND mode) — on every platform
+    const raw = rawTree(c);
+    for (const e of entries) assert.ok(raw.some((t) => t.path === e.path && t.mode === (e.mode || '100644')), `${name}: fixture lacks ${JSON.stringify(e.path)} ${e.mode || '100644'} (got ${JSON.stringify(raw)})`);
+    assert.equal(raw.length, entries.length, `${name}: fixture has extra or missing entries`);
+    assert.throws(() => materializeCommit(repo, c, dest()), (e) => e instanceof SnapshotError && why.test(e.message), name);   // the SPECIFIC reason
   }
   void blob;
   for (const bad of ['HEAD', HEAD.slice(0, 12), 'x'.repeat(40)]) assert.throws(() => listTree(ROOT, bad), SnapshotError, bad);
