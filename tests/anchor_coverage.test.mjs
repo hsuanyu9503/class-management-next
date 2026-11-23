@@ -6,7 +6,9 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync, existsSync } from 'node:fs';
-import { resolve, dirname, relative, join } from 'node:path';
+import { resolve, dirname, relative, join, sep, posix } from 'node:path';
+// repository-relative paths are always POSIX ('/'), on every platform (the PR #16 review ran this on Windows)
+const rel = (p) => p.split(sep).join('/');
 import { anchorListing, PROTECTED_TREES } from '../scripts/verify-anchor.mjs';
 
 const root = resolve(import.meta.dirname, '..');
@@ -18,7 +20,7 @@ function workflowEntries(file) {
   for (let i = 0; i < L.length; i++) {
     const m = /^\s*run: (.*node (\S+\.mjs).*)$/.exec(L[i]); if (!m) continue;
     let wd = '.'; for (let j = i - 1; j >= 0 && !/^\s+- name:/.test(L[j]); j--) { const w = /^\s*working-directory: (\S+)/.exec(L[j]); if (w) wd = w[1]; }
-    out.push(join(wd, m[2]));
+    out.push(posix.join(wd, m[2]));
   }
   return out;
 }
@@ -28,10 +30,10 @@ function closure(entries) {
     const f = stack.pop(); if (seen.has(f)) continue; seen.add(f);
     const src = readFileSync(join(root, f), 'utf8');
     const specs = [...src.matchAll(/(?:\bfrom\s+|\bimport\s*\(\s*)['"](\.{1,2}\/[^'"]+)['"]/g)].map((m) => m[1]);
-    for (const s of specs) { const t = relative(root, resolve(root, dirname(f), s)); assert.ok(existsSync(join(root, t)), `${f} imports missing ${t}`); stack.push(t); }
+    for (const s of specs) { const t = rel(relative(root, resolve(root, dirname(f), s))); assert.ok(existsSync(join(root, t)), `${f} imports missing ${t}`); stack.push(t); }
     // spawned Runner programs and in-sandbox trusted entries
-    for (const m of src.matchAll(/'node (test\/[a-z0-9-]+\.mjs)'/g)) stack.push(join(S2, m[1]));
-    for (const m of src.matchAll(/'\/check\/([a-z0-9-]+\.mjs)'/g)) stack.push(join(S2, 'sandbox-check', m[1]));
+    for (const m of src.matchAll(/'node (test\/[a-z0-9-]+\.mjs)'/g)) stack.push(posix.join(S2, m[1]));
+    for (const m of src.matchAll(/'\/check\/([a-z0-9-]+\.mjs)'/g)) stack.push(posix.join(S2, 'sandbox-check', m[1]));
   }
   return [...seen].sort();
 }
