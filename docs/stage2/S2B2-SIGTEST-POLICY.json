@@ -1,6 +1,6 @@
 {
  "policyVersion": "s2-sigtest-policy-v1",
- "description": "S2-B2 C-2 flow I TEST identity policy (C-2 plan v0.2 §3.2). Separate from the official S2B2-TRUST-POLICY.json, which this file never affects. Each record approves the Git blob SHA of .github/workflows/attest-sigtest.yml as a TEST signer. A signature accepted under this policy is reported as SIGTEST_IDENTITY_ACCEPTED only — never as PASS or as an accepted statement. Proposed by Claude in the C-2 PR; it takes effect only through the owner's explicit merge instruction (owner decision Q3, 2026-11-23). Only the owner changes this file (PR review + anchor re-approval).",
+ "description": "S2-B2 C-2 flow I TEST identity policy (C-2 plan v0.2 §3.2). Separate from the official S2B2-TRUST-POLICY.json, which this file never affects. Each record approves the Git blob SHA of .github/workflows/attest-sigtest.yml as a TEST signer. A signature accepted under this policy is reported as SIGTEST_IDENTITY_ACCEPTED only — never as PASS or as an accepted statement. Proposed by Claude in the C-2 PR; it takes effect only through the owner's explicit merge instruction (owner decision Q3, 2026-11-23). Only the owner changes this file (PR review + anchor re-approval). C-3 (2026-11-23): attest-sigtest.yml gained environment: s2-attest, so its blob changed. SIGTEST-001 is retired normally (revoked, validTo = the UTC cutoff, invalidateIssued false): signatures made by the old blob BEFORE the cutoff, e.g. run 45121359992, stay valid at their signing time. SIGTEST-002 approves the new blob from the same cutoff. The cutoff is fixed in the reviewed commit; signatures of the old blob after it, and of the new blob before it, are not accepted.",
  "freshnessHours": 24,
  "records": [
   {
@@ -10,8 +10,20 @@
    "approvedAt": "2026-11-23T00:00:00Z",
    "approvedBy": "hsuanyu9503 (repository owner, by explicit merge instruction)",
    "reviewRef": "PR #16 (C-2)",
+   "status": "revoked",
+   "validFrom": "2026-11-23T00:00:00Z",
+   "validTo": "2026-11-23T10:30:00Z",
+   "invalidateIssued": false
+  },
+  {
+   "approvalId": "SIGTEST-002",
+   "kind": "signing-policy",
+   "sha": "a1b93f9637ba6f9b0c4ef81e835c6408cda561ed",
+   "approvedAt": "2026-11-23T10:30:00Z",
+   "approvedBy": "hsuanyu9503 (repository owner, by explicit merge instruction)",
+   "reviewRef": "PR #18 (C-3)",
    "status": "active",
-   "validFrom": "2026-11-23T00:00:00Z"
+   "validFrom": "2026-11-23T10:30:00Z"
   }
  ]
 }
