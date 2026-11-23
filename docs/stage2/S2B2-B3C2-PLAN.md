@@ -1,7 +1,8 @@
-# S2-B2 第 3 批 C-2｜第三方驗證（A18）與隔離的測試簽章：計畫 v0.1（草案）
+# S2-B2 第 3 批 C-2｜第三方驗證（A18）與隔離的測試簽章：計畫 v0.2（草案）
 
 > 狀態：**草案，尚未核准實作**。依 `S2B2-B3C-ATTACK-PLAN.md` v0.4 §5 與負責人的決定 Q-B「流程 I」（2026-11-22）。
 > 本計畫不授權開啟 PASS、簽章、更改 Settings 或觸發任何 workflow。`PASS_ENABLED=false` 維持不變。
+> v0.2：納入 PR #15 審查（Reviewed Head `dbe6562`）的 C-2 實作備註與官方來源，見 §10。審查者認為方向可採用；這**不是** C-2 的程式或真實簽章驗收。
 
 ## 0. 前提與範圍
 
@@ -23,7 +24,7 @@
 | 批准紀錄 | `S2B2-TRUST-POLICY.json` 目前沒有任何紀錄（`records: []`）。`trust-policy.mjs` 的 parser 要求 `revoked` 有 `validTo`、`active` 沒有 `validTo` | 需要新增「簽章時間有效」的判定（§2.3）。parser 目前**沒有**檢查 `validTo > validFrom`，要補上 |
 | `gh` 版本 | 本環境是 `gh` 2.89.0，低於 v2.102.0（GHSA-wjmr-j3rp-mh2g）。另外，本 session 規則限定 `gh` 只能用於搜尋 | Claude **無法**在本環境執行真正的 `gh attestation verify`。腳本的 `gh` 呼叫層只能用單元測試涵蓋（注入假的執行結果）。真實驗證由第三方（審查者或負責人）用 v2.102.0 以上的 `gh` 執行 |
 | `gh attestation verify --format json` 的欄位 | Claude 無法連線查官方文件 | §2.2 列出預定使用的欄位，**需要審查者以官方文件確認**，再開始實作 |
-| 錨定 | `scripts/verify-anchor.mjs` 計算 83 個受保護檔案的 digest | 第三方腳本重用同一個函式。被比對的核准值要怎麼取得，屬於決策（Q2） |
+| 錨定 | `scripts/verify-anchor.mjs` 計算受保護檔案的 digest（C-1f 之後為 85 檔；C-2 新增檔案後重新計算） | 第三方腳本重用同一個函式。被比對的核准值要怎麼取得，屬於決策（Q2） |
 
 ## 2. `verify-attestation.mjs` 的設計
 
@@ -53,26 +54,27 @@
     5. 在 `main` 的 checkout 上計算受保護檔案的 digest，與核准值比對；
   - 都不執行 artifact 或 statement 的內容。
 
-### 2.2 預定使用的 `gh` JSON 欄位（**待審查者以官方文件確認**）
+### 2.2 使用的 `gh` JSON 欄位（v0.2：審查者已依官方文件確認欄位名稱與階層，見 §10）
 
 | 用途 | 欄位（陣列中的每一份） |
 |---|---|
 | signer workflow 與 ref | `verificationResult.signature.certificate.buildSignerURI`：形式為 `https://github.com/<repo>/<path>@<ref>` |
 | signer commit | `verificationResult.signature.certificate.buildSignerDigest` |
 | source ref／repo | `…certificate.sourceRepositoryRef`、`…certificate.sourceRepositoryURI` |
-| 簽章時間 | `verificationResult.verifiedTimestamps[].timestamp`（透明度日誌的時間） |
-| subject | `verificationResult.statement.subject[].digest.sha256` |
+| 可信時間 | `verificationResult.verifiedTimestamps[].timestamp`。來源可能是透明度日誌或 timestamp authority；實作時記錄每一筆的 type／來源 |
+| subject | `verificationResult.statement.subject[].digest.sha256`。digest 的演算法鍵依實際 artifact 而定，本專案明確要求 `sha256` |
 
 - 欄位缺少、型別不符、無法解析時，一律 `REJECTED`。
-- 若官方格式與上表不同，以官方為準修正本表，並在 R1 對應表記錄。
+- 身分只取自憑證（`signature.certificate`）與可信時間。predicate 的內容可能受 workflow 影響，**不得**用來判定身分。
 
 ### 2.3 判定規則（對應攻擊計畫 §5.1）
 
 1. **多份證據**：
+   - 對 `gh` 回傳、已驗證的證據集合**逐筆**檢查。這是本專案的保守政策，不宣稱已窮舉平台上所有可能的證據；
    - 陣列至少一份；
    - **每一份**都要通過 2～6，任何一份不符就整體 `REJECTED`。
 2. **身分**：
-   - 從 `buildSignerURI` 解析出 repo、路徑與 ref。路徑必須**完全等於** `.github/workflows/attest.yml`（字串相等，不做前綴比對），ref 必須是 `refs/heads/main`；
+   - 從 `buildSignerURI` 解析出 repo、路徑與 ref。路徑必須**完全等於** `.github/workflows/attest.yml`（字串相等，不做前綴比對），ref 必須**大小寫一致地**等於 `refs/heads/main`。`gh` v2.102.0 已修正前綴與大小寫問題，核心仍自己做完整比對；
    - `sourceRepositoryRef` 也必須是 `refs/heads/main`；
    - repo 必須是 `hsuanyu9503/class-management-next`。
 3. **簽章政策**：signer commit 中 `attest.yml` 的 blob，必須對應一筆 `signing-policy` 紀錄，而且在**簽章時間有效**（第 5 點）。
@@ -89,12 +91,22 @@
    - `validFrom ≤ t`；有 `validTo` 時 `t < validTo`；
    - `invalidateIssued: true` → 一律拒絕；
    - 格式錯誤（缺少 `validTo` 的 `revoked`、時間無法解析、`validTo ≤ validFrom`）→ 拒絕；
-   - **時間戳有多個時，每一個都必須落在有效區間內**（fail closed）。這一點計畫 v0.4 沒有明定，列為審查重點。
+   - **可信時間**（v0.2；Q4）：
+     - `verifiedTimestamps` 必須是**非空**陣列。空陣列一律 `REJECTED`，不得用空集合的 `every()` 結果當作有效；
+     - 每一筆的 `timestamp` 都必須存在且可以解析，否則 `REJECTED`；
+     - **每一筆**都必須落在有效區間內（fail closed）；
+     - 記錄採用的每一筆時間與它的 type／來源；
+     - 這些是可信的觀測時間，不宣稱等於實際簽署的瞬間。
 6. **政策的來源與新鮮度**：
+   - 核准的錨定值由外部參數 `--anchor` 提供（Q2），**不得**從待驗證的 checkout 自行取得；
    - 政策取自已錨定的 `main`，錨定比對失敗 → `REJECTED`；
-   - 記錄政策檔的 SHA-256、來源 commit、取得時間；
+   - 記錄：核准值的來源、政策檔的 SHA-256、政策來源 commit、實際取得時間、驗證時使用的時鐘；
+   - 取得時間是實際從遠端取得 `main` 的時間。讀取已存在的舊 checkout，**不**當成剛取得的新政策；
    - 超過 `freshnessHours` → `REVOCATION_STATUS_UNKNOWN`。
 7. **反向測試**只修改本機的政策複本，不修改正式的批准紀錄。
+   - 政策複本只能透過明確的**測試介面**注入（純函式核心的參數，或只供測試的入口）；
+   - 一般 CLI 參數**不能**改掉正式 profile 寫死的政策來源與路徑限制。
+8. **交付紀錄**：保存實際的 `gh` 版本、參數、退出碼與輸出，供審查。
 
 `trust-policy.mjs` 的改動：
 
@@ -106,8 +118,14 @@
 
 - 預期路徑改為 `.github/workflows/attest-sigtest.yml`；
 - 政策改用測試身分政策（§3.2）；
-- subject 是固定的測試檔，不做 statement 層（第 4 點）。
-- 輸出標籤是 `SIGTEST_IDENTITY_ACCEPTED`／`REJECTED`，**不得**出現 `PASS` 或「正式 statement 被接受」。
+- **檔案綁定**（v0.2）：
+  - 驗證的對象是已核准的固定 `SIGTEST.txt` 的位元組，它的 SHA-256 寫死在程式中；
+  - `gh` 必須對這個實際檔案完成驗證，核心再確認 subject digest 等於該值；
+  - 不做的只有**正式業務 statement** 的欄位檢查（第 4 點的 PASS／honest／targets 等），subject 綁定照做。
+- 其餘仍然要求：正確的 signer workflow blob、測試政策、可信時間（第 5 點）、新鮮度與錨定（第 6 點）。
+- 輸出只有三種：`SIGTEST_IDENTITY_ACCEPTED`、`REJECTED`、`REVOCATION_STATUS_UNKNOWN`。
+  - 只有 `SIGTEST_IDENTITY_ACCEPTED` 以狀態 0 退出，其他兩種都以非零狀態退出；
+  - **不得**出現 `PASS` 或「正式 statement 被接受」。
 - 正式 profile 與 sigtest profile 的政策檔、預期路徑都寫死在程式中，不能用參數混用。
 
 ## 3. `attest-sigtest.yml`（流程 I）
@@ -176,6 +194,11 @@
     - `validTo ≤ validFrom`；
     - sigtest 標籤不會出現 PASS；
     - 兩個 profile 不能混用。
+    - v0.2：`verifiedTimestamps` 為空陣列、缺少欄位、時間無法解析、多筆中有一筆在區間外、區間邊界；
+    - v0.2：sigtest 的檔案 digest 不符；sigtest 三種輸出的退出碼；
+    - v0.2：`--anchor` 缺少或不符；ref 大小寫不同（`refs/heads/Main`）；
+    - v0.2：一般 CLI 參數無法改掉正式 profile 的政策與路徑；
+    - v0.2：parser 用官方格式的輸出樣本測試（合成資料，不等於真實驗證）。
 - **`repo_policy`**：
   - `attest-sigtest.yml` 只有 `workflow_dispatch`、只在 `main` 執行；
   - 權限集合固定；
@@ -228,8 +251,29 @@
 
 ## 9. 未驗證與限制
 
-- `gh` 的 JSON 欄位（§2.2）、`--signer-workflow` 與 `--source-ref` 的實際行為、GHSA-wjmr-j3rp-mh2g 的修正版本，都需要審查者以官方文件確認。Claude 的環境無法連線。
-- 真實的 `gh attestation verify` 只能由第三方執行（§1）。
+- 官方文件的事實由審查者查核（§10），Claude 的環境無法連線。查核的是文件與格式，不是執行 `gh attestation verify`。
+- 真實的 `gh attestation verify` 只能由第三方執行（§1）。官方輸出樣本可以用於 parser 的單元測試，但合成 JSON 的測試**不等於**真實的密碼學驗證；正向與反向驗收仍需要已修補版本的 `gh` 與真實的測試簽章。
 - 流程 I 的 sigtest 只驗證密碼學與身分層。它**不是**正式 PASS statement 被接受的證據。
 - C-2 完成後，PASS 仍然關閉。打開 PASS 需要另一個 PR、新的工具鏈 commit、批准紀錄、兩個指標與錨定，並重新審查。
 - N5、N7、main 摘要、NOTE-c（原文缺失，待確認）、POC-009 BLOCKED、Stage 1 的 72 筆 NOT_RUN 都不受影響。
+
+## 10. v0.2 對應表（PR #15 審查，Reviewed Head `dbe6562`）
+
+審查者依官方文件確認（文件與格式查核，不是執行驗證）：
+- `gh` v2.102.0 修正 `--signer-workflow` 的前綴比對與 `--source-ref` 的大小寫比對：
+  - https://github.com/cli/cli/releases/tag/v2.102.0
+  - GHSA-wjmr-j3rp-mh2g、GHSA-4mq3-hpgx-9cx8
+- `--format json` 成功時輸出陣列，每筆有 `attestation` 與 `verificationResult`；後者包含 `signature.certificate`、`verifiedTimestamps`、`statement`。predicate 可能受 workflow 影響，不能用來判定身分：
+  - https://cli.github.com/manual/gh_attestation_verify
+- `buildSignerURI`、`buildSignerDigest`、`sourceRepositoryURI`、`sourceRepositoryRef`、`verifiedTimestamps[].timestamp` 的名稱與階層：
+  - https://github.com/sigstore/sigstore-go/blob/main/docs/verification.md
+
+| 備註 | 處理 | 位置 |
+|---|---|---|
+| 1. 時間戳的語義與空集合 | 來源可能是透明度日誌或 TSA；陣列必須非空；每筆可解析；每筆都在區間內；記錄 type／來源；不宣稱等於實際簽署瞬間 | §2.2、§2.3 第 5 點；§5 測試 |
+| 2. sigtest 的檔案綁定與結果狀態 | 固定 `SIGTEST.txt` 的 digest 綁定照做；三種輸出；只有接受以狀態 0 退出 | §2.4 |
+| 3. 政策取得與錨定 | 外部 `--anchor`；記錄來源、hash、commit、取得時間、時鐘；舊 checkout 不算新取得；政策複本只能透過測試介面注入；83 檔更新為 85 檔 | §1、§2.3 第 6～7 點 |
+| 4. 真實驗證與單元測試的分層 | 逐筆檢查是保守政策，不宣稱窮舉；保存 `gh` 的版本、參數、退出碼與輸出；合成 JSON 不等於真實驗證 | §2.3 第 1、8 點；§9 |
+| 非阻擋：A14-1b 的語義 | 現在非 BLOCKED 的結果也包含 Verifier 的 FAIL。之後擴充攻擊資料時，依該案例受測的不變條件解釋，不一律寫成「已正式接受」 | 記錄於 REVIEW_LOG；不改程式 |
+| 非阻擋：診斷的大小 | 輸出有上限，但讀取 log 時的位元組數沒有上限，列為後續強化 | 記錄於 REVIEW_LOG；不改程式 |
+

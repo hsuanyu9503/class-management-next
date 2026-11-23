@@ -1413,3 +1413,33 @@
 - 錨定會改變（85 檔，新增 `scripts/attest-availability.mjs`、`src/b3/availability.mjs`），需要負責人重新核准。
 - 同一個 PR 也帶入 C-2 計畫草案 v0.1，請一併審查；C-2 尚未實作。
 
+### PR #15 審查（ChatGPT）：C-1f 程式審查通過；C-2 計畫方向可採用
+
+- Reviewed Head：`dbe65627b59761832e95a79adbab4b51804c0d35`（Base `2f78f9b…`）
+- 結論：
+  - **C-1f 程式審查通過**，沒有需要阻擋的缺陷，可以交給負責人決定錨定核准與合併；
+  - C-2 計畫的方向可以採用，另有 4 項實作備註；
+  - 這不是 C-2 程式或真實簽章的驗收，不是 GitHub approval，也不授權觸發簽章 workflow。
+- 審查者的證據：
+  - 遠端 Head 與 Base 和證據包一致，共 13 個檔案；ZIP 中的 7 份原始碼與測試和 Head 逐字一致；
+  - 在 Windows、Node 26.13.1 上執行：`attack-suite-unit` 14/14、`availability-unit` 4/4、`repo_policy` 6/6，合計 24/24；
+  - 獨立重算錨定 85 檔 `d07dfc54…`，與 PR 及 CI log 一致；
+  - CI 45101256252：`validate` success；`baseline-anchor` 為預期的 `ANCHOR_MISMATCH`。
+- 審查者**沒有**獨立執行，仍是提交者的證據：
+  - `s2:b3`、`s2:a10`（Linux／root／emulator）；
+  - `s2:test` 149/149；
+  - mutation 16+56；
+  - availability job 沒有在 hosted 執行，也不為驗收而製造失敗。
+- 非阻擋的提醒：
+  - A14-1b 的「非 BLOCKED」也包含 Verifier 的 FAIL。註解只舉 PASS／UNATTESTED。之後擴充攻擊資料時，依該案例受測的不變條件解釋，不一律寫成「已正式接受」；
+  - 診斷的**輸出**有上限，但讀取 log 時的位元組數沒有上限，列為後續強化；
+  - 這次的診斷實作不代表消除了同名 artifact 的可用性風險。
+- C-2 的備註已納入計畫 v0.2（§2.2～§2.4、§5、§9、§10）：
+  - 時間戳必須非空且可解析，記錄來源；
+  - sigtest 照做檔案 digest 綁定，有三種輸出與對應的退出碼；
+  - 外部 `--anchor`、政策取得紀錄、只能透過測試介面注入政策複本；
+  - 合成 JSON 不等於真實驗證；
+  - 官方來源已列入計畫 §10。
+- 本段之後的 commit 只改文件（REVIEW_LOG、HANDOFF、C-2 計畫），錨定仍是 `d07dfc54…`。
+- 使用者決策：`待決`（核准錨定 `d07dfc54…`、合併 PR #15）
+
