@@ -3,9 +3,9 @@ import assert from 'node:assert/strict';
 import { readFile, readdir } from 'node:fs/promises';
 const read = (p) => readFile(new URL(`../${p}`, import.meta.url), 'utf8');
 
-test('PoC 未導入自動部署與發行 workflow（B3b 的 attest.yml；C-1 的無簽章 attest-attack.yml）', async () => {
+test('PoC 未導入自動部署與發行 workflow（B3b 的 attest.yml；C-1 的無簽章 attest-attack.yml；C-2 的測試簽章 attest-sigtest.yml）', async () => {
   const files = await readdir(new URL('../.github/workflows/', import.meta.url));
-  assert.deepEqual(files.sort(), ['attest-attack.yml', 'attest.yml', 'ci.yml']);
+  assert.deepEqual(files.sort(), ['attest-attack.yml', 'attest-sigtest.yml', 'attest.yml', 'ci.yml']);
 });
 const jobsOf = (w) => Object.fromEntries(w.slice(w.indexOf('\njobs:\n') + 7).split(/\n(?=  [a-z][a-z0-9-]*:\n)/).map((t) => [t.trim().split(':')[0], t]));
 /** every line of every run step (single-line and block scalars) */
@@ -115,5 +115,32 @@ test('attest-attack.yml：只能手動觸發、只在 main、沒有任何簽章�
   assert.ok(jobs['same-name'].indexOf('id: control') > 0 && jobs['same-name'].indexOf('id: control') < jobs['same-name'].indexOf('id: up'));
   // the same-name upload must not overwrite, and its failure is expected (recorded, not fatal)
   assert.match(jobs['same-name'], /continue-on-error: true\n\s+uses: actions\/upload-artifact@[0-9a-f]{40} # v7\.0\.2\n\s+with:\n(?:.*\n)*?\s+overwrite: false/);
+});
+
+// C-2（C-2 plan v0.2 §3.1；負責人 Q-B 流程 I）：隔離的測試簽章 workflow 只簽固定的測試檔
+test('attest-sigtest.yml：只能手動觸發、只在 main、只有一個簽章步驟、subject 固定、不執行任何程式', async () => {
+  const raw = await read('.github/workflows/attest-sigtest.yml');
+  const w = raw.split('\n').filter((l) => !/^\s*#/.test(l)).join('\n');
+  const a = await read('.github/workflows/attest.yml');
+  const onBlock = w.slice(w.indexOf('\non:'), w.indexOf('\npermissions:'));
+  assert.match(onBlock, /^\non:\n  workflow_dispatch:\n$/); assert.doesNotMatch(onBlock, /push|pull_request|schedule|workflow_run|workflow_call|inputs/);
+  assert.match(w, /^permissions: \{\}$/m);
+  const jobs = jobsOf(w);
+  assert.deepEqual(Object.keys(jobs), ['sigtest']);
+  const j = jobs.sigtest;
+  assert.match(j, /\n    if: github\.ref == 'refs\/heads\/main'\n/);
+  assert.match(j, /\n    permissions:\n      contents: read\n      id-token: write\n      attestations: write\n    steps:/);
+  assert.deepEqual(runLines(w), []);                                                              // no run step at all
+  const uses = w.match(/uses: .+/g);
+  assert.deepEqual(uses.map((u) => u.split('@')[0]), ['uses: actions/checkout', 'uses: actions/attest-build-provenance']);
+  for (const u of uses) assert.ok(a.includes(u), `not the SHA pinned in attest.yml: ${u}`);        // same pinned SHAs as attest.yml
+  assert.equal((w.match(/attest-build-provenance/g) || []).length, 1);
+  assert.match(w, /\n          subject-path: poc\/stage2\/sigtest\/SIGTEST\.txt\n?$/);
+  assert.equal((w.match(/subject-/g) || []).length, 1);
+  assert.doesNotMatch(w, /\$\{\{|secrets\.|github\.token|upload-artifact|download-artifact|setup-node|npm|node /);
+  assert.match(w, /persist-credentials: false/);
+  // the fixed subject: line endings never converted (its digest is pinned in the verifier)
+  assert.match(await read('.gitattributes'), /^poc\/stage2\/sigtest\/\*\* -text$/m);
+  assert.match(await read('poc/stage2/sigtest/SIGTEST.txt'), /NOT an attestation statement/);
 });
 

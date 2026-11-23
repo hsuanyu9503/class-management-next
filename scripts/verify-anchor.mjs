@@ -34,6 +34,8 @@ export const PROTECTED = [
   S2 + 'src/observer.mjs', S2 + 'src/verdict.mjs',
   // S2-B2 C-1 (attack-acceptance plan v0.4): the no-signing attack workflow
   '.github/workflows/attest-attack.yml',
+  // C-2 (plan v0.2 §3, §4): the flow I test-signing workflow, its fixed subject and its TEST identity policy
+  '.github/workflows/attest-sigtest.yml', S2 + 'sigtest/SIGTEST.txt', 'docs/stage2/S2B2-SIGTEST-POLICY.json',
   // C1-REV005: the whole TRUSTED call chain from both attest workflows to every verdict / evidence output — not a
   // hand-picked subset. With no trust root set the workflows check out github.sha, so the anchor (not the
   // toolchain variable) is what pins these files:
@@ -45,7 +47,7 @@ export const PROTECTED = [
   // Not protected by design: adapter-b3/ (the Adapter UNDER TEST — untrusted; A4-1 checks its tree from the host)
   // and unit tests. tests/anchor_coverage.test.mjs proves the static import closure of every entry is covered.
   S2 + 'scripts/run-attest-execute.mjs', S2 + 'scripts/attest-outputs.mjs', S2 + 'scripts/attest-delivery.mjs',
-  S2 + 'scripts/run-a10.mjs', S2 + 'scripts/attack-verify.mjs', S2 + 'scripts/attack-platform-evidence.mjs', S2 + 'scripts/attest-availability.mjs',
+  S2 + 'scripts/run-a10.mjs', S2 + 'scripts/attack-verify.mjs', S2 + 'scripts/attack-platform-evidence.mjs', S2 + 'scripts/attest-availability.mjs', S2 + 'scripts/verify-attestation.mjs',
   S2 + 'test/b3-run.mjs', S2 + 'test/a10-run.mjs', S2 + 'test/smoke.mjs',   // smoke.mjs: named by src/orchestrator.mjs
   S2 + 'package.json', S2 + 'package-lock.json', S2 + 'firebase.json', S2 + 'firestore.rules',
 ];

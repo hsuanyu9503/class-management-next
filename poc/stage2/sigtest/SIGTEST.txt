@@ -1,0 +1,6 @@
+Classroom Manager Next - S2-B2 C-2 flow I test signing subject.
+
+This file is a TEST subject for .github/workflows/attest-sigtest.yml only.
+It is NOT an attestation statement, carries no verdict, and signing it NEVER means PASS.
+A signature over this file proves only the signer identity layer (workflow path, ref, blob, time).
+Do not edit: its SHA-256 is fixed in poc/stage2/src/b3/third-party.mjs.

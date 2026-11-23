@@ -1,0 +1,35 @@
+name: S2 sigtest (C-2 flow I, test signature only)
+
+# S2-B2 第 3 批 C-2（docs/stage2/S2B2-B3C2-PLAN.md v0.2 §3；負責人 2026-11-22 Q-B 流程 I）。
+# - 只能由負責人手動觸發，只在 main 上執行；絕不使用 push／pull_request／pull_request_target。
+# - 只簽一個固定的測試檔 poc/stage2/sigtest/SIGTEST.txt（說明文字，不是 statement，不代表任何 PASS）。
+# - 不安裝依賴、不執行專案或 Adapter 的程式、不上傳其他 artifact。
+# - 測試簽章會永久留在公開的透明度日誌中。
+# - 簽章 action 與 attest.yml 使用相同的完整 commit SHA。
+on:
+  workflow_dispatch:
+
+permissions: {}
+
+concurrency:
+  group: s2-sigtest
+  cancel-in-progress: false
+
+jobs:
+  sigtest:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      id-token: write
+      attestations: write
+    steps:
+      - name: Checkout（只為了取得固定的測試檔）
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: 測試簽章（subject = 固定的 SIGTEST.txt）
+        uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
+        with:
+          subject-path: poc/stage2/sigtest/SIGTEST.txt
