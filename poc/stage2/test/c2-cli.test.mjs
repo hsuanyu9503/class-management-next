@@ -134,6 +134,14 @@ test('environment errors are NOT_RUN ENVIRONMENT_ERROR (exit 3), never REJECTED'
   assert.equal(b.status, 3, b.stderr); assert.equal(b.result.result, 'NOT_RUN'); assert.equal(b.result.environment[0].stage, 'snapshot-main');
   assert.match(b.result.environment[0].error, /SNAPSHOT_FAILED\[entry\]: docs\/link: mode 120000/);
   assert.ok(!existsSync(SENTINEL));
+  // 3. main whose anchor path list is invalid → anchor-main (environment), not a policy ANCHOR_MISMATCH
+  const w3 = path.join(tmp, 'work-anchor'); execFileSync('git', ['clone', '-q', '-b', 'main', origin, w3]);
+  g(w3, 'reset', '-q', '--hard', B); writeFileSync(path.join(w3, 'scripts/anchor-paths.json'), '{"version":"v0"}\n');
+  g(w3, 'commit', '-qam', 'TEST ONLY: invalid anchor path list'); g(w3, 'push', '-q', '--force', 'origin', 'HEAD:refs/heads/main');
+  const c3 = path.join(tmp, 'clone-anchor'); execFileSync('git', ['clone', '-q', origin, c3]);
+  const c = runIn(c3);
+  assert.equal(c.status, 3, c.stderr); assert.equal(c.result.result, 'NOT_RUN'); assert.equal(c.result.environment[0].stage, 'anchor-main');
+  assert.match(c.result.environment[0].error, /anchor path list invalid/);
   g(work, 'push', '-q', '--force', 'origin', `${B}:refs/heads/main`);   // restore main = B for any later test
 });
 

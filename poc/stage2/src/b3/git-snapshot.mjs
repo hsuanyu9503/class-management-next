@@ -76,6 +76,11 @@ export function readBlobs(repoDir, oids) {
   let raw;
   try { raw = execFileSync('git', ['-C', repoDir, 'cat-file', '--batch'], { input: uniq.join('\n') + '\n', maxBuffer: 1 << 30 }); }
   catch (e) { throw new SnapshotError('cat-file', `git cat-file failed: ${String(e.stderr || e.message).trim().slice(0, 300)}`); }
+  return parseBatch(raw, uniq);
+}
+
+/** Parses `git cat-file --batch` output for exactly these object IDs, re-hashing every blob. @returns Map(oid → Buffer) */
+export function parseBatch(raw, uniq) {
   const out = new Map(); let i = 0;
   for (const want of uniq) {
     const nl = raw.indexOf(10, i); if (nl < 0) throw new SnapshotError('cat-file', `truncated output before ${want}`);

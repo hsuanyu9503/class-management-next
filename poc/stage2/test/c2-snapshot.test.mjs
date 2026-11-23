@@ -7,12 +7,12 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
-import { mkdtempSync, readFileSync, existsSync, rmSync, readdirSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, existsSync, rmSync, readdirSync } from 'node:fs';
 import { createHash } from 'node:crypto';
 import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { materializeCommit, listTree, pathProblem, SnapshotError } from '../src/b3/git-snapshot.mjs';
+import { materializeCommit, listTree, pathProblem, parseBatch, SnapshotError } from '../src/b3/git-snapshot.mjs';
 import { anchorListing, anchorPaths } from '../../../scripts/verify-anchor.mjs';
 
 const ROOT = path.resolve(fileURLToPath(new URL('../../../', import.meta.url)));
@@ -103,8 +103,20 @@ test('fail closed with a diagnostic: symbolic links, submodules, unsafe or colli
   assert.throws(() => listTree(path.join(tmp, 'not-a-repo'), HEAD), /SNAPSHOT_FAILED\[ls-tree\]/);
   // a non-empty destination is refused (a snapshot directory is used once)
   const d = dest(); materializeCommit(ROOT, HEAD, d); assert.throws(() => materializeCommit(ROOT, HEAD, d), /SNAPSHOT_FAILED\[write\]/);
+  { const d2 = dest(); mkdirSync(d2); writeFileSync(path.join(d2, 'stray.txt'), 'x'); assert.throws(() => materializeCommit(ROOT, HEAD, d2), /destination not empty/); }   // even without a name clash
   for (const [p, ok] of [['poc/stage1/docs/官方參考與版本假設.md', true], ['a/b', true], ['../x', false], ['/x', false], ['a//b', false], ['a/./b', false], ['nul', false], ['COM1.txt', false], ['a?b', false], ['tab\tx', false]])
     assert.equal(pathProblem(p) === null, ok, p);
+});
+
+test('integrity: every blob from cat-file is re-hashed against its object ID; truncation and substitution fail', () => {
+  const body = Buffer.from('payload\r\n'); const oid = createHash('sha1').update(Buffer.concat([Buffer.from(`blob ${body.length}\0`), body])).digest('hex');
+  const frame = (id, b) => Buffer.concat([Buffer.from(`${id} blob ${b.length}\n`), b, Buffer.from('\n')]);
+  assert.deepEqual(parseBatch(frame(oid, body), [oid]).get(oid), body);
+  assert.throws(() => parseBatch(frame(oid, Buffer.from('payload\n\n')), [oid]), /SNAPSHOT_FAILED\[integrity\]/);            // same size, other bytes
+  assert.throws(() => parseBatch(frame(oid, body).subarray(0, 20), [oid]), /SNAPSHOT_FAILED\[cat-file\]/);                      // truncated
+  { const f = frame(oid, body); assert.throws(() => parseBatch(f.subarray(0, f.length - 3), [oid]), /SNAPSHOT_FAILED\[cat-file\]: truncated blob/); }   // header complete, body short
+  assert.throws(() => parseBatch(Buffer.from(`${oid} missing\n`), [oid]), /SNAPSHOT_FAILED\[cat-file\]/);                    // object missing
+  assert.throws(() => parseBatch(frame('f'.repeat(40), body), [oid]), /SNAPSHOT_FAILED\[cat-file\]/);                        // another object
 });
 
 test.after(() => rmSync(tmp, { recursive: true, force: true }));
