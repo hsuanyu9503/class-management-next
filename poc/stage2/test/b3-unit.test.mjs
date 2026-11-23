@@ -132,7 +132,7 @@ const fixOut = JSON.parse(rf(`${FIX}job-outputs.json`, 'utf8'));
 const fixFiles = Object.fromEntries([...readPackageSafe(fixBytes).files].filter(([n]) => n !== 'manifest.json').map(([n, b]) => [n, b.toString('utf8')]));
 const fixRun = JSON.parse(fixFiles['run.json']);
 const caseSpec001 = JSON.parse(rf(f2p(new URL('../../stage1/contracts/canonical-oracles-v1.0.json', import.meta.url)), 'utf8')).cases.find((c) => c.testId === 'POC-001');
-const trustedBase = { runId: fixRun.runId, runAttempt: fixRun.runAttempt, attestationNonce: fixRun.attestationNonce, testId: 'POC-001', trustedToolchainCommit: fixRun.trustedToolchainCommit, adapterCommit: fixRun.adapterCommit, caseSpec: caseSpec001, runnerKind: 'local-untrusted', platformSupported: true };
+const trustedBase = { runId: fixRun.runId, runAttempt: fixRun.runAttempt, attestationNonce: fixRun.attestationNonce, testId: 'POC-001', scenario: 'honest', trustedToolchainCommit: fixRun.trustedToolchainCommit, adapterCommit: fixRun.adapterCommit, caseSpec: caseSpec001, runnerKind: 'local-untrusted', platformSupported: true };
 /** Repackage with modified payload text; digests are supplied consistently (simulating a Runner that produced it). */
 const verifyMod = (mods = {}, trustedMods = {}) => { const p = writePackage({ ...fixFiles, ...mods }); return verifyPackage(p.packageBytes, { ...trustedBase, packageSha256: p.packageSha256, manifestSha256: p.manifestSha256, ...trustedMods }); };
 const isoMod = (fn) => { const v = JSON.parse(fixFiles['isolation.json']); fn(v); return { 'isolation.json': JSON.stringify(v) }; };
@@ -212,9 +212,9 @@ test('B3A-N3 (P5): positive controls must be exactly true where required and exa
 });
 
 test('B3A-N4: platformSupported comes from the trusted input; the unverifiable branch still checks digests, protocol, READY and termination', () => {
-  const lie = verifyMod(isoMod((i) => { i.platformSupported = false; i.selfCheck = null; }));
+  const lie = verifyMod(isoMod((i) => { i.platformSupported = false; i.selfCheck = null; i.selfCheckFull = null; }));
   assert.equal(lie.result, 'BLOCKED'); assert.ok(codes(lie).includes('ISOLATION_PLATFORM_MISMATCH'));
-  const unsupported = (fn = () => {}) => verifyMod(isoMod((i) => { i.platformSupported = false; i.selfCheck = null; fn(i); }), { platformSupported: false });
+  const unsupported = (fn = () => {}) => verifyMod(isoMod((i) => { i.platformSupported = false; i.selfCheck = null; i.selfCheckFull = null; fn(i); }), { platformSupported: false });
   const ok = unsupported();
   assert.equal(ok.result, 'UNATTESTED'); assert.deepEqual(ok.reasons, ['ISOLATION_UNVERIFIABLE']);
   const bad = {
@@ -224,7 +224,7 @@ test('B3A-N4: platformSupported comes from the trusted input; the unverifiable b
     'termination unverified': [(i) => { i.adapterTermination.remainingAdapterProcesses = 1; }, 'ADAPTER_TERMINATION_UNVERIFIED'],
   };
   for (const [n, [fn, c]] of Object.entries(bad)) { const r = unsupported(fn); assert.equal(r.result, 'BLOCKED', n); assert.ok(codes(r).includes(c), n); }
-  const wrongRunDigest = verifyMod({ ...isoMod((i) => { i.platformSupported = false; i.selfCheck = null; }), 'run.json': JSON.stringify({ ...fixRun, adapterSandboxPolicyDigest: '1'.repeat(64) }) }, { platformSupported: false });
+  const wrongRunDigest = verifyMod({ ...isoMod((i) => { i.platformSupported = false; i.selfCheck = null; i.selfCheckFull = null; }), 'run.json': JSON.stringify({ ...fixRun, adapterSandboxPolicyDigest: '1'.repeat(64) }) }, { platformSupported: false });
   assert.equal(wrongRunDigest.result, 'BLOCKED'); assert.ok(codes(wrongRunDigest).includes('SANDBOX_CONFIG_MISMATCH'));
   const missing = verifyMod({}, { platformSupported: undefined });
   assert.equal(missing.result, 'BLOCKED'); assert.ok(codes(missing).includes('TRUSTED_INPUT_MISSING'));
@@ -258,9 +258,9 @@ test('B3A-N5: every non-canonical serialisation of a valid payload is refused (h
 // ======================================================================= F1 (B3A-R1-N1, NOTE-a, NOTE-b)
 import { VERIFIER_VERSION } from '../src/b3/verifier.mjs';
 
-test('NOTE-b: Verifier version is s2-verifier-b3b-0 (PR-2)', () => {
-  assert.equal(VERIFIER_VERSION, 's2-verifier-b3b-0');
-  assert.equal(verifyMod().verifierVersion, 's2-verifier-b3b-0');
+test('NOTE-b: Verifier version is s2-verifier-b3c-0 (C-1)', () => {
+  assert.equal(VERIFIER_VERSION, 's2-verifier-b3c-0');
+  assert.equal(verifyMod().verifierVersion, 's2-verifier-b3c-0');
 });
 
 test('B3A-R1-N1: non-object top-level JSON is BLOCKED with a named reason and never throws', () => {
@@ -392,7 +392,7 @@ test('B3A-N7: pathMapDigest covers every host source and file digest; the Verifi
   };
   for (const [n, fn] of Object.entries(bad)) { const r = verifyMod(isoMod(fn)); assert.equal(r.result, 'BLOCKED', n); assert.ok(codes(r).includes('PATH_MAP_INVALID'), n); }
   // unsupported platform: no path map is required (still UNATTESTED ISOLATION_UNVERIFIABLE)
-  const un = verifyMod(isoMod((i) => { i.platformSupported = false; i.selfCheck = null; i.pathMap = null; i.pathMapDigest = null; }), { platformSupported: false });
+  const un = verifyMod(isoMod((i) => { i.platformSupported = false; i.selfCheck = null; i.selfCheckFull = null; i.pathMap = null; i.pathMapDigest = null; }), { platformSupported: false });
   assert.equal(un.result, 'UNATTESTED'); assert.deepEqual(un.reasons, ['ISOLATION_UNVERIFIABLE']);
   // statement carries the digest
   assert.equal(verifyMod().statement.isolation.pathMapDigest, iso.pathMapDigest);
@@ -598,7 +598,7 @@ test('B3b trust policy: both pointers must name ACTIVE records and match what ac
 // verify job on the committed honest fixture (local evidence replayed with the hosted decision logic)
 const vjEnv = (o = {}) => ({ GITHUB_ACTIONS: 'true', RUNNER_ENVIRONMENT: 'github-hosted', GITHUB_RUN_ID: fixRun.runId, GITHUB_RUN_ATTEMPT: String(fixRun.runAttempt),
   EXP_TEST_ID: 'POC-001', EXP_ARTIFACT_ID: '123456', EXP_PACKAGE_SHA256: fixOut.packageSha256, EXP_MANIFEST_SHA256: fixOut.manifestSha256, EXP_ATTESTATION_NONCE: fixRun.attestationNonce,
-  EXP_PLATFORM_SUPPORTED: 'true', EXP_TOOLCHAIN_COMMIT: fixRun.trustedToolchainCommit, CMN_STAGE1_ANCHOR_SHA256: 'a'.repeat(64), ...o });
+  EXP_PLATFORM_SUPPORTED: 'true', EXP_TOOLCHAIN_COMMIT: fixRun.trustedToolchainCommit, EXP_SCENARIO: 'honest', CMN_STAGE1_ANCHOR_SHA256: 'a'.repeat(64), ...o });
 const HEAD_F = fixRun.trustedToolchainCommit;
 const vj = ({ env = vjEnv(), entries = [{ name: 'package-POC-001.tar', isFile: true }], bytes = fixBytes, policy = { text: policyText([]), commit: 'f'.repeat(40), anchorDigest: 'a'.repeat(64) }, workflowBlob = B1, head = HEAD_F } = {}) =>
   runVerifyJob({ env, head, workflowBlob, policy, caseSpecs: { 'POC-001': caseSpec001 }, listDownload: () => entries, readDownload: () => bytes, now: () => new Date(NOW) });

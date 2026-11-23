@@ -10,6 +10,7 @@ const rules = { testId: (v) => v === testId, attestationNonce: (v) => /^[0-9a-f]
   manifestSha256: (v) => /^[0-9a-f]{64}$/.test(v), platformSupported: (v) => typeof v === 'boolean', toolchainCommit: (v) => /^[0-9a-f]{40}$/.test(v),
   runId: (v) => v === process.env.GITHUB_RUN_ID, runAttempt: (v) => String(v) === process.env.GITHUB_RUN_ATTEMPT };
 for (const [k, ok] of Object.entries(rules)) if (!ok(o[k])) { console.log(`OUTPUTS_INVALID ${k}`); process.exit(1); }
-const lines = ['testId', 'attestationNonce', 'packageSha256', 'manifestSha256', 'platformSupported', 'toolchainCommit'].map((k) => `${k}=${o[k]}`);
+if (typeof o.trustedTreesUnchanged !== 'boolean') { console.log('OUTPUTS_INVALID trustedTreesUnchanged'); process.exit(1); }
+const lines = ['testId', 'attestationNonce', 'packageSha256', 'manifestSha256', 'platformSupported', 'toolchainCommit', 'trustedTreesUnchanged'].map((k) => `${k}=${o[k]}`);
 appendFileSync(process.env.GITHUB_OUTPUT, lines.join('\n') + '\n');
 console.log(`OUTPUTS ${lines.join(' ')} (local diagnostic: ${o.localDiagnostic.result})`);

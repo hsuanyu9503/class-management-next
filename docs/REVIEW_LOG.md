@@ -1151,3 +1151,119 @@
 - 本段記錄是在 Reviewed Head 之後新增的文件 commit，只改 `docs/REVIEW_LOG.md` 與 `docs/HANDOFF.md`。新 Head **不是**審查者已審的版本。
 - 使用者決策：`待決`（Q-A～Q-D；PR #12 合併）
 
+### PR #12 合併與負責人的決定
+
+- 負責人（2026-11-22）：「pr12合併／q-a 是／q-b 流程1／q-c 是／q-d 依照建議順序」
+- 合併：
+  - merge commit `0771790f9906fe22233d9156cf4c51e31aae02ad`；
+  - 合併時的 Head 是 `667ec03`。它比 ChatGPT 審查的 `68ca03c` 只多一個記錄審查結果的文件 commit；
+  - 合併前的同 Head CI 44977590327：success。
+- 合併後：
+  - `main` 的 CI 44978067608：success；
+  - push 觸發的 `attest.yml` run 44978067634：POC-001 → `UNATTESTED [TRUST_ROOT_NOT_CONFIGURED]`，簽章步驟 skipped；
+  - 封裝 artifact 14736254648，digest `4f5d3dd9923697805f6415493e3b14bf02c6e78d2c3c6ccebc64d6fae676d605`，上傳與下載一致；
+  - statement SHA-256 `d0dc527c683e8a1b4c64e6330c32f59efd2caced2c5f6d15ba77b2b8a1507d5d`；
+  - 以上只來自 job log，Claude 沒有讀到 artifact 的內容。
+- 決定：
+  - Q-A 是；
+  - Q-B **流程 I**；
+  - Q-C 是：Environment 只作為額外保護；
+  - Q-D C-1 → C-2 → C-3。
+- 使用者決策：合併 `已核准`；Q-A～Q-D `已決定`
+
+### C-1：hosted 攻擊驗收的實作（Claude 送審）
+
+- 依據：攻擊驗收計畫 v0.4；負責人 2026-11-22 的 Q-A～Q-D（Q-D：先做 C-1）。
+- 基準：`main` = `0771790`。PR 與 Head 見 PR 描述與審查請求。
+- 初評風險：**L3**。理由：
+  - 修改受保護的 `attest.yml`、Verifier、`attest-verify.mjs`、沙箱啟動器；
+  - 新增一個 workflow，其中 verify-attack job 有 `actions: read`；
+  - 錨定 digest 改變。
+- 內容摘要：
+  - C-1a：scenario 綁定與完整觀察值；
+  - C-1b：A10 可信探測與判定；
+  - C-1c：A14／A4 驗證端的攻擊測試組，以及無簽章的 `attest-attack.yml`；
+  - 詳見 `docs/stage2/S2B2-B3C-REPORT.md`。
+- 證據（全部是 Claude 本機的結果）：
+  - `npm test` 17/17；`check`；`stage1:all` 且 Stage 1 沒有變更；
+  - `s2:test` 129/129；`s2:b3` 32/32（遮罩 0 命中）；`s2:a10` 9/9；
+  - attest-attack 的本機模擬：平台層的結果是手動餵入的；
+  - mutation 17/17。
+- **沒有**的證據：hosted 的 `attest-attack.yml`（NOT_RUN）、獨立審查、負責人核准。
+- 錨定：`e2149bd9ff0781ce710d920e62ee8bf16495eaeba1f661eb49fd10eccf1eb976`（47 檔）。需要負責人重新核准；Claude 沒有設定任何變數。
+- 使用者決策：`待決`（C-1 合併與重新核准錨定）
+
+### PR #13 審查（ChatGPT）與 R1 回應
+
+- Reviewed Head：`9e4db47d9343827c6d4290d14ff9019538718fbe`
+- 結論：**CHANGES REQUESTED**，有五項 P2：C1-REV001～005。這不代表已觀察到實際外洩。
+- 審查者的證據：
+  - 已核對 Head、CI（`validate` success；`baseline-anchor` 為 `ANCHOR_MISMATCH`，屬待核准狀態）與附件的 SHA-256；
+  - 以最小重現確認了 REV002 的 UNKNOWN_OP／ERROR／EMFILE、REV003 的模擬目標、REV004 的合成值，以及 REV005 的未涵蓋檔案；
+  - 在 Windows 上 `a10-unit` 有兩項因 POSIX 路徑假設失敗，不列為缺陷；
+  - **沒有**重跑 Linux／root 的整合測試；hosted 仍是 NOT_RUN。
+- R1（Claude）：逐項修正與驗證見 `docs/stage2/S2B2-B3C-REPORT.md` §7。
+  - 本機結果：`npm test` 19/19；`s2:test` 138/138；`s2:b3` 33/33；`s2:a10` 9/9；hosted 模式的示範；attest-attack 的本機模擬（平台證據是合成的）；mutation 31/31。
+  - `a10.mjs` 改用 `path.posix`，路徑與平台無關。
+- 錨定：`fb0f85b06bf435e7314d1deb95fbdc6833ffba031ea15bdea336b2f7c160a738`（83 檔）。送審時的 `e2149bd9…` 已作廢。需要負責人在複審通過後重新核准；Claude 沒有設定任何變數。
+- 使用者決策：`待決`（R1 複審之後才決定合併與重新核准錨定）
+
+### PR #13 R1 複審（ChatGPT）與 R2 回應
+
+- Reviewed Head：`d0ab942897ff82f8337029c556c80dd742c811f3`
+- 結論：**CHANGES REQUESTED**，只剩兩項收尾。
+  - 本輪結案：C1-REV002、003、005，以及 REV001 中的 A14-2 與退出碼；
+  - 仍開啟：REV001 的 A14-3a（沒有證明測到的是有效的外部 artifact）、REV004（短於 12 字元的已知秘密被排除）。
+- 審查者的證據：
+  - 獨立重算 83 檔的錨定 `fb0f85b0…`，與附件一致；
+  - 核對 fixture 原檔；
+  - 在 Windows 上重跑三組單元測試，33/33 通過；
+  - 兩個最小重現：任意的外部 ID 判為 DEFENDED；短秘密沒被遮罩，掃描也沒命中；
+  - **沒有**重跑 Linux／root 的整合測試或 mutation；hosted 仍是 NOT_RUN。
+- R2（Claude）：
+  - A14-3a 必須先以 artifact API 確認該 ID 存在、未過期，而且屬於另一個 run（等於給定的 `previousRunId`）；
+  - 已知秘密不再依長度過濾，平台環境依名稱與用途分類；
+  - 逐項說明見 `docs/stage2/S2B2-B3C-REPORT.md` §8；
+  - 本機結果：`npm test` 19/19；`s2:test` 141/141；`s2:b3` 33/33；`s2:a10` 9/9；本機模擬（合成證據）；mutation 38/38。
+- 錨定：`f79ade1e95fdf78d6f5f2d0f0e2bf4e5fd5ffb99f70a253511aab24e5bf5664e`（83 檔）。`e2149bd9…` 與 `fb0f85b0…` 都已作廢。
+- 使用者決策：`待決`
+
+### PR #13 R2 複審（ChatGPT）與 R3 回應
+
+- Reviewed Head：`e4aee0dbef229007bec91a8574faa0ef580fa912`
+- 結論：**CHANGES REQUESTED**，只剩 C1-REV001 的一個欄位驗證缺口。
+  - C1-REV004：本輪結案；
+  - C1-REV002、003、005：維持結案。
+- 審查者的證據：
+  - 獨立重算 83 檔的錨定 `f79ade1e…`，與附件一致；
+  - 在 Windows 上重跑三組單元測試，36/36 通過；
+  - 合成的重現：所屬 run 為 null、undefined、`'not-a-run'` 時，都判為 DEFENDED；
+  - **沒有**重跑整合測試或 mutation；hosted 仍是 NOT_RUN。
+- R3（Claude）：
+  - 新增 `foreignEvidenceFrom()`，缺少或型別錯誤的欄位一律保持未知；
+  - A14-3a 必須有明確的 `expired: false` 與合法的所屬 run ID，否則判 `INCONCLUSIVE`；
+  - 逐項說明見 REPORT §9；
+  - 本機結果：`npm test` 19/19；`s2:test` 143/143；`s2:b3` 33/33；`s2:a10` 9/9；本機模擬（合成證據）；mutation 43/43。
+- 錨定：`31c23e4dc7bafdf80943581e459576bd0afef9a9f495fc6d046911a36fadb8d3`（83 檔，保護範圍不變）。先前三個 digest 都已作廢。
+- 使用者決策：`待決`
+
+### PR #13 R3 審查（ChatGPT）：程式審查通過
+
+- Reviewed Head：`60169cfaf9b3155fe911adb0cebeb6f751a7f1aa`
+- 結論：**程式審查通過**。C1-REV001～005 全部結案，本輪沒有新的阻擋項，hosted 驗收仍待完成。這不是 GitHub 的正式核准、不是合併授權，也不代表 PASS 可以啟用。
+- 審查者的證據：
+  - 增量為 6 個檔案（+123／−17），只涉及三份文件、平台證據收集器、攻擊判定與對應測試；
+  - CI 45044919834：`validate` success；`baseline-anchor` 為 `ANCHOR_MISMATCH`，屬待核准狀態；
+  - 獨立重算 83 檔的錨定 `31c23e4dc7bafdf80943581e459576bd0afef9a9f495fc6d046911a36fadb8d3`，與附件及 CI log 一致；
+  - 在 Windows 上重跑單元測試 38/38；
+  - **沒有**重跑 Linux／root 的整合測試或 mutation；這些數字仍是提交者的證據。
+- 殘餘風險（審查者列出）：
+  - hosted 的 attest-attack 仍是 NOT_RUN，包括 409 訊息、artifact API、實際下載與 Linux 沙箱的行為；
+  - A14-3a／3b 需要有效的其他 run artifact；
+  - exit 0 或 `DEFENDED_WHERE_RUN` 不代表所有案例都已執行，要逐項核對 `notRun`；
+  - A10 的結論限於列出的操作與目標；
+  - 四個正常路徑 hosted run 的原檔重播仍待完成。
+- 作廢的 digest：`e2149bd9…`、`fb0f85b0…`、`f79ade1e…`。
+- 本段記錄是在 Reviewed Head 之後新增的文件 commit，只改 `docs/REVIEW_LOG.md` 與 `docs/HANDOFF.md`。新 Head **不是**審查者已審的版本。
+- 使用者決策：`待決`（核准錨定 `31c23e4d…`、合併、合併後觸發 hosted 攻擊驗收）
+

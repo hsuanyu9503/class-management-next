@@ -3,6 +3,7 @@
  *  `firebase emulators:exec` (scripts/run-b3.mjs), as root on Linux. Everything here is a LOCAL, UNTRUSTED
  *  prototype: no signing, no trust root, no hosted runner → the best possible result is UNATTESTED. */
 import { mkdirSync, writeFileSync, readFileSync, mkdtempSync, rmSync, chmodSync, existsSync, appendFileSync, realpathSync } from 'node:fs';
+import * as require_fs from 'node:fs';
 import { execFileSync } from 'node:child_process';
 import { createHash, randomBytes } from 'node:crypto';
 import path from 'node:path';
@@ -17,9 +18,12 @@ import { createHarness } from '../src/harness.mjs';
 import { sandboxConfig, configDigest, POLICY_VERSION, pathMapDigest } from '../src/b3/isolation-policy.mjs';
 import { launchSandbox, cleanupSandboxDirs, resolvePathMap } from '../src/b3/sandbox.mjs';
 import { runSelfCheck } from '../src/b3/selfcheck-host.mjs';
+import { finalizeSelfCheck } from '../src/b3/observation.mjs';
+import { collectKnownSecrets } from '../src/b3/mask-list.mjs';
+import { javaVersion } from '../src/b3/env-info.mjs';
 import { writePackage } from '../src/b3/package.mjs';
 import { buildCaseInput } from '../src/b3/case-input.mjs';
-import { verifyPackage, PAYLOAD, CASE_ACTORS } from '../src/b3/verifier.mjs';
+import { verifyPackage, PAYLOAD, CASE_ACTORS, SCENARIO_RE } from '../src/b3/verifier.mjs';
 import { stableJson, sha256Hex } from '../src/stable.mjs';
 import { executeCase } from '../../stage1/src/runner.mjs';
 import { createFixtureHash } from '../../stage1/src/common.mjs';
@@ -29,6 +33,13 @@ const ROOT = path.resolve(HERE, '..');
 const REPO = path.resolve(ROOT, '../..');
 // B3b: single-case mode for the attest.yml execute job (one honest case, sealed package, no attack scenarios)
 const SINGLE = process.env.B3_SINGLE_CASE || null;
+// C-1 §1.2: the scenario is a TRUSTED Runner input (attest.yml: 'honest'); the local suite labels each run itself
+const SINGLE_SCENARIO = process.env.B3_SCENARIO || null;
+if (SINGLE && !SCENARIO_RE.test(SINGLE_SCENARIO || '')) throw new Error('B3_SINGLE_CASE needs a valid B3_SCENARIO (honest | attack-…)');
+// C-1 (A4-1 on a hosted runner, attest-attack.yml only): an attacker entry from a fixed allowlist, never with 'honest'
+const SINGLE_ENTRIES = Object.freeze({ 'tamper-toolchain': '/adapter/attackers/tamper-toolchain.mjs' });
+const SINGLE_ENTRY = process.env.B3_SINGLE_ENTRY ? SINGLE_ENTRIES[process.env.B3_SINGLE_ENTRY] : '/adapter/main.mjs';
+if (SINGLE && (!SINGLE_ENTRY || (SINGLE_SCENARIO === 'honest' && SINGLE_ENTRY !== '/adapter/main.mjs'))) throw new Error('B3_SINGLE_ENTRY: unknown entry, or an attacker entry with the honest scenario');
 const OUT_DIR = process.env.B3_OUT_DIR || null;
 if (SINGLE && !['POC-001', 'POC-002', 'POC-008', 'POC-009'].includes(SINGLE)) throw new Error(`B3_SINGLE_CASE: unsupported ${SINGLE}`);
 if (SINGLE && !OUT_DIR) throw new Error('B3_SINGLE_CASE needs B3_OUT_DIR');
@@ -53,7 +64,7 @@ const anchorDigest = (execFileSync(process.execPath, [path.join(REPO, 'scripts/v
 const md5 = (p) => { try { return createHash('md5').update(readFileSync(p)).digest('hex'); } catch { return null; } };
 const environment = {
   osImage: (readFileSync('/etc/os-release', 'utf8').match(/PRETTY_NAME="([^"]+)"/) || [])[1] || 'unknown', node: process.version,
-  java: (() => { try { return execFileSync('java', ['-version'], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] }) || ''; } catch (e) { return String(e.stderr || ''); } })().match(/openjdk version "([^"]+)"/)?.[1] || 'unknown',
+  java: javaVersion(),   // C-1 §6.1: java -version writes to stderr; anything unrecognised is recorded as 'unknown'
   firebaseTools: JSON.parse(readFileSync(path.join(ROOT, 'node_modules/firebase-tools/package.json'), 'utf8')).version,
   firestoreJarMd5: md5(path.join(process.env.HOME || '/root', '.cache/firebase/emulators/cloud-firestore-emulator-v1.22.0.jar')) || '0'.repeat(32),
   stage2LockfileSha256: sha256Hex(readFileSync(path.join(ROOT, 'package-lock.json'))), runnerKind: RUNNER_KIND,
@@ -77,10 +88,17 @@ const outputChannels = [outputChannel, ...['GITHUB_OUTPUT', 'GITHUB_ENV', 'GITHU
 // B3A-N7: node binary only; /usr = USR_BINARIES + ldd closure (copied); digest recorded in isolation.json + statement
 const pathMap = process.platform === 'linux' ? resolvePathMap({ nodeBinary: process.execPath, adapterDir: path.join(ROOT, 'adapter-b3'), checkDir: path.join(ROOT, 'sandbox-check'), entryDir }) : null;
 let runCounter = Number(BigInt('0x' + ownNonce.slice(0, 8)) % 100000n) * 1000;
+// C1-REV004: ONE known-secret list for masking AND for the pre-hand-over leak scan — issued tokens (rotated
+// included), every token value actually written into a case.json, and the Runner's visible platform credentials
+const caseTokenValues = [];
+const packagingSecrets = () => collectKnownSecrets({ issued: h.issuedSecrets(), caseTokens: caseTokenValues, env: process.env });
+// local suite only: a synthetic platform credential in the Runner's environment, to prove it reaches the list
+const SYNTHETIC_PLATFORM_TOKEN = SINGLE ? null : `synthetic-platform-opaque-${randomBytes(12).toString('hex')}`;
+if (SYNTHETIC_PLATFORM_TOKEN) process.env.S2_SYNTHETIC_PLATFORM_TOKEN = SYNTHETIC_PLATFORM_TOKEN;
 const isoSec = () => new Date().toISOString().replace(/\.\d{3}Z$/, 'Z');
 
 /** One attested-style case run (plan §5 T0–T5, §6, §3.4). Options are attack variants (test only). */
-async function attestedRun(label, { testId, entry = '/adapter/main.mjs', cfg = sandboxConfig(), startSentinel = true, skipKill = false, duringCase = null, simulateUnsupported = false, attackHints = null } = {}) {
+async function attestedRun(label, { testId, entry = '/adapter/main.mjs', cfg = sandboxConfig(), startSentinel = true, skipKill = false, duringCase = null, simulateUnsupported = false, attackHints = null, scenario = entry === '/adapter/main.mjs' && !duringCase && !skipKill && !simulateUnsupported && startSentinel ? 'honest' : `attack-${label.toLowerCase().replace(/[^a-z0-9]+/g, '-').slice(0, 40).replace(/-+$/, '')}` } = {}) {
   // hosted single-case runs are bound to the workflow run (the verify job's trusted runId / runAttempt)
   const runId = SINGLE && process.env.GITHUB_RUN_ID ? process.env.GITHUB_RUN_ID : String(++runCounter);
   const runAttempt = SINGLE && process.env.GITHUB_RUN_ATTEMPT ? Number(process.env.GITHUB_RUN_ATTEMPT) : 1;
@@ -93,14 +111,16 @@ async function attestedRun(label, { testId, entry = '/adapter/main.mjs', cfg = s
   const sock = path.join(entryDir, 'front.sock'); rmSync(sock, { force: true });
   const frontFile = path.join(dir, 'trace-front.jsonl'), backFile = path.join(dir, 'trace-back.jsonl');
   const stack = await h.startStack({ frontFile, backFile, frontSocketPath: sock });
-  const iso = simulateUnsupported ? { platformSupported: false, reason: 'simulated (A9)', selfCheck: null, sandboxPolicyDigest: configDigest(cfg) }
+  const iso = simulateUnsupported ? { platformSupported: false, reason: 'simulated (A9)', selfCheckRaw: null, sandboxPolicyDigest: configDigest(cfg) }
     : await runSelfCheck({ cfg, pathMap, hostPaths, outputChannels, workDir, startSentinel });
   rl('setup', 'isolation-self-check');
   const inputDir = path.join(workDir, `input-${runId}`); mkdirSync(inputDir, { recursive: true }); chmodSync(inputDir, 0o755);
   // B3A-N8: the Adapter receives ONLY the token of this case's actor (trusted CASE_ACTORS table), never the others
   writeFileSync(path.join(inputDir, 'case.json'), JSON.stringify(buildCaseInput({ testId, fixtures, users, attackHints, caseActors: CASE_ACTORS })));
   chmodSync(path.join(inputDir, 'case.json'), 0o644);
-  const caseTokenActors = Object.keys(JSON.parse(readFileSync(path.join(inputDir, 'case.json'), 'utf8')).tokens);   // as written (N8)
+  const caseTokensWritten = JSON.parse(readFileSync(path.join(inputDir, 'case.json'), 'utf8')).tokens;
+  const caseTokenActors = Object.keys(caseTokensWritten);   // as written (N8)
+  for (const v of Object.values(caseTokensWritten)) if (typeof v === 'string') caseTokenValues.push(v);
   let sbx = null; let ready = false; let doneOk = false; let term = null; let nonceWrittenAt = null; let pre = null; let caseStartedAt = null; let caseEndedAt = null;
   const caseSpec = caseSpecs[testId];
   const sandboxAdapter = { mode: 'BACKEND_REAL', backend: 'firebase', execute: async () => {
@@ -127,15 +147,19 @@ async function attestedRun(label, { testId, entry = '/adapter/main.mjs', cfg = s
   cleanupSandboxDirs(); rmSync(inputDir, { recursive: true, force: true });
   const finishedAt = isoSec();
   const run = {
-    runId, runAttempt, attestationNonce, testId, trustedToolchainCommit: HEAD, adapterCommit: HEAD, adapterEntry: entry,
+    runId, runAttempt, attestationNonce, testId, scenario, trustedToolchainCommit: HEAD, adapterCommit: HEAD, adapterEntry: entry,
     adapterSandboxPolicyDigest: configDigest(cfg), sandboxLauncherSha256: launcherSha, nonceWrittenAt, caseStartedAt, caseEndedAt, startedAt, finishedAt,
     ownershipMarkerPath: `${MARKER_COLLECTION}/${ownNonce}`, ownershipNonceSha256: sha256Hex(ownNonce),
     targets: { caseSpecDigest: sha256Hex(stableJson(caseSpec)), oracleFileSha256: sha256Hex(oracleBytes), fixtureFileSha256: fileSha256, fixtureHash: createFixtureHash(fixtures), anchorDigest },
     environment, gitDirty,
   };
   const { pathMapDigest: pmd = null, ...pathMapRecord } = pathMap || {};
+  // C-1 §6.2: mask → serialise → size-limit → summarise NOW, with the complete in-memory secret list of the run
+  // (every token issued so far, rotated ones included; the list itself is never written — only its size)
+  const known = packagingSecrets(); const secretValues = known.values;
+  const { selfCheck, selfCheckFull } = finalizeSelfCheck(iso.selfCheckRaw, { fixtureNames: names, secretValues });
   const isolation = { isolationPolicyVersion: POLICY_VERSION, platformSupported: iso.platformSupported, platformReason: iso.reason ?? null, sandboxPolicyDigest: iso.sandboxPolicyDigest,
-    pathMap: pathMap ? pathMapRecord : null, pathMapDigest: pmd, selfCheck: iso.selfCheck, selfCheckTermination: iso.termination ?? null,
+    pathMap: pathMap ? pathMapRecord : null, pathMapDigest: pmd, selfCheck, selfCheckFull, maskSecretCount: secretValues.length, maskSecretSources: known.counts, selfCheckTermination: iso.termination ?? null,
     adapterTermination: term ? { namespaceTerminated: term.namespaceTerminated, remainingAdapterProcesses: term.remainingAdapterProcesses, exportAfterTermination: true } : null,
     adapterReady: ready, adapterDone: doneOk, controlViolations: sbx ? sbx.output().violations : [] };
   const files = {
@@ -146,25 +170,30 @@ async function attestedRun(label, { testId, entry = '/adapter/main.mjs', cfg = s
   };
   const pkg = writePackage(files);
   // "job outputs": the trusted channel (here: Runner memory), never read back from the package
-  const trusted = { packageSha256: pkg.packageSha256, manifestSha256: pkg.manifestSha256, runId, runAttempt, attestationNonce, testId, trustedToolchainCommit: HEAD, adapterCommit: HEAD, caseSpec, runnerKind: 'local-untrusted', platformSupported: iso.platformSupported === true };   // in-run check is always local; the verify job re-verifies with its own trusted inputs   // B3A-N4: from Runner memory
+  const trusted = { packageSha256: pkg.packageSha256, manifestSha256: pkg.manifestSha256, runId, runAttempt, attestationNonce, testId, scenario, trustedToolchainCommit: HEAD, adapterCommit: HEAD, caseSpec, runnerKind: 'local-untrusted', platformSupported: iso.platformSupported === true };   // in-run check is always local; the verify job re-verifies with its own trusted inputs   // B3A-N4: from Runner memory
   const result = verifyPackage(pkg.packageBytes, trusted);
   writeFileSync(path.join(dir, 'package.tar'), pkg.packageBytes);
   writeFileSync(path.join(dir, 'job-outputs.json'), JSON.stringify({ runId, runAttempt, packageSha256: pkg.packageSha256, manifestSha256: pkg.manifestSha256, attestationNonce }, null, 1));
   writeFileSync(path.join(dir, 'statement.json'), stableJson(result.statement));
   writeFileSync(path.join(dir, 'verify.json'), JSON.stringify({ ...result, statement: undefined, stage1Runner: { status: stage1.status, attested: stage1.attested } }, null, 1));
-  return { label, testId, result, pkg, files, trusted, claim: adapterOutput, term, iso, stage1, caseTokenActors };
+  return { label, testId, scenario, result, pkg, files, trusted, claim: adapterOutput, term, iso: { ...iso, selfCheck }, stage1, caseTokenActors };
 }
 
 const results = []; const log = (ok, name, detail) => { results.push({ name, ok, detail }); console.log(`${ok ? 'OK  ' : 'FAIL'} ${name}${detail ? ' — ' + detail : ''}`); };
 const R = (x) => `${x.result.result} [${x.result.reasons.join(',')}]`;
 const has = (x, ...codes) => codes.every((c) => x.result.reasons.some((r) => r.split(':')[0] === c));
 const LOCAL = ['LOCAL_UNTRUSTED_RUNNER', 'TRUST_ROOT_NOT_CONFIGURED'];
-const isLocalOnly = (x) => x.result.result === 'UNATTESTED' && stableJson([...x.result.reasons].sort()) === stableJson([...LOCAL].sort());
+// C-1 §1.2: an attack-scenario run additionally carries SCENARIO_NOT_HONEST (never PASS)
+const isLocalOnly = (x) => x.result.result === 'UNATTESTED' && stableJson([...x.result.reasons].sort()) === stableJson([...LOCAL, ...(x.scenario === 'honest' ? [] : ['SCENARIO_NOT_HONEST'])].sort());
 
 // ---------------- B3b single-case mode: seal ONE honest case for the attest.yml verify job, then stop
 if (SINGLE) {
-  const x = await attestedRun(`case-${SINGLE}`, { testId: SINGLE });
-  const secrets = h.issuedSecrets();
+  // A4-1 trusted evidence: the Runner's own digests of every tree mounted into the sandbox, before and after
+  const treeDigest = () => { const { readdirSync: rd, statSync: st } = require_fs; const acc = []; const walk = (d) => { for (const n of rd(d).sort()) { const p = path.join(d, n); if (st(p).isDirectory()) walk(p); else acc.push(`${sha256Hex(readFileSync(p))}  ${path.relative(ROOT, p)}`); } }; for (const d of ['adapter-b3', 'sandbox-check', 'src']) walk(path.join(ROOT, d)); return sha256Hex(acc.join('\n')); };
+  const treeBefore = treeDigest();
+  const x = await attestedRun(`case-${SINGLE}`, { testId: SINGLE, scenario: SINGLE_SCENARIO, entry: SINGLE_ENTRY });
+  const trustedTreesUnchanged = treeDigest() === treeBefore;
+  const secrets = packagingSecrets().values;
   const { readdirSync, statSync } = await import('node:fs');
   const files = []; const walk = (d) => { for (const n of readdirSync(d)) { const p = path.join(d, n); if (statSync(p).isDirectory()) walk(p); else files.push(p); } }; walk(runDir);
   const leaks = files.map((f) => ({ f: path.relative(runDir, f), l: findLeaks(readFileSync(f, 'latin1') + readFileSync(f, 'utf8'), { names, secrets }) })).filter((r) => r.l.length);
@@ -178,7 +207,7 @@ if (SINGLE) {
   writeFileSync(packageFile, x.pkg.packageBytes);
   // values for the job outputs — written by THIS process after the Adapter's namespace was terminated
   const outputs = { testId: SINGLE, runId: x.trusted.runId, runAttempt: x.trusted.runAttempt, attestationNonce: x.trusted.attestationNonce,
-    packageSha256: x.pkg.packageSha256, manifestSha256: x.pkg.manifestSha256, platformSupported: x.trusted.platformSupported,
+    packageSha256: x.pkg.packageSha256, manifestSha256: x.pkg.manifestSha256, platformSupported: x.trusted.platformSupported, scenario: x.scenario, trustedTreesUnchanged,
     toolchainCommit: HEAD, packageFile: path.basename(packageFile), localDiagnostic: { result: x.result.result, reasons: x.result.reasons } };
   writeFileSync(path.join(OUT_DIR, 'execute-outputs.json'), JSON.stringify(outputs, null, 1));
   console.log(`S2B2_B3B_EXECUTE ${SINGLE} runId=${outputs.runId} attempt=${outputs.runAttempt} package=${outputs.packageSha256} local=${x.result.result}`);
@@ -219,6 +248,13 @@ x = await attestedRun('A9-platform-unsupported', { testId: 'POC-001', simulateUn
 log(x.result.result === 'UNATTESTED' && has(x, 'ISOLATION_UNVERIFIABLE'), 'A9 isolation unverifiable → UNATTESTED', R(x));
 x = await attestedRun('A11-entry-abuse', { testId: 'POC-001', entry: '/adapter/attackers/entry-abuse.mjs' });
 log(x.result.result === 'BLOCKED' && stableJson(x.result.reasons) === stableJson(['OBSERVATION_AMBIGUOUS']) && (x.claim?.attack?.statuses || []).every((s) => s === 403) && x.result.reconciliation.auditMatched === x.result.reconciliation.frontRequests, 'A11 malformed / oversized / prototype-name / credential-field requests: all 403 and reconciled; the extra session read makes the case ambiguous → BLOCKED, never a false match', `${R(x)} statuses=${JSON.stringify(x.claim?.attack?.statuses)} audits=${x.result.reconciliation.auditMatched}/${x.result.reconciliation.frontRequests}`);
+{ // C-1 A4-1: tamper with the trusted toolchain from inside; host digests of the mounted trees must not change
+  const tree = () => sha256Hex(['adapter-b3', 'sandbox-check'].map((d) => execFileSync('find', [path.join(ROOT, d), '-type', 'f', '-exec', 'sha256sum', '{}', '+'], { encoding: 'utf8' }).split('\n').sort().join('\n')).join('\n'));
+  const before = tree();
+  x = await attestedRun('A4-1-tamper-toolchain', { testId: 'POC-001', entry: '/adapter/attackers/tamper-toolchain.mjs' });
+  const writes = x.claim?.attack?.writes || {};
+  log(isLocalOnly(x) && tree() === before && Object.values(writes).length === 6 && Object.values(writes).every((v) => v === 'EROFS' || v === 'EACCES') && x.result.contract.adapterClaimAgreesWithObserver === false && x.result.verifierVersion !== 's2-verifier-FAKE-9' && x.result.observedCanonical?.returnedCount === 15,
+    'A4-1 toolchain tamper from the sandbox: writes fail, host trees unchanged, fake Verifier version / canonical / verdict in the claim are ignored', `${R(x)} writes=${JSON.stringify(writes)} verifier=${x.result.verifierVersion}`); }
 x = await attestedRun('A16-sentinel-absent', { testId: 'POC-001', startSentinel: false });
 log(x.result.result === 'BLOCKED' && has(x, 'ISOLATION_CHECK_FAILED'), 'A16 positive control: sentinel not started → "unreachable" is not accepted → BLOCKED', R(x));
 
@@ -268,7 +304,14 @@ for (const [n, text] of Object.entries(variants)) {
   log(x.result.result === 'BLOCKED' && has(x, 'ARTIFACT_NONCANONICAL'), 'N5 bytes appended after the end-of-archive marker (consistent digest) → BLOCKED ARTIFACT_NONCANONICAL', R(x)); }
 
 // ---------------- masking scan of every artifact with every issued secret (R1-N7)
-const secrets = h.issuedSecrets();
+const secrets = packagingSecrets().values;
+{ // C1-REV004 through the REAL call-site assembly: the synthetic platform credential and the last case token are
+  // in the packaging list, and a raw observation carrying them under neutral keys comes out masked
+  const known = packagingSecrets(); const lastCaseToken = caseTokenValues[caseTokenValues.length - 1];
+  const probe = finalizeSelfCheck({ NO_CAPS: { ok: true, observedRaw: { observed: SYNTHETIC_PLATFORM_TOKEN, nested: [`x=${lastCaseToken};`] }, positiveControlOk: null } }, { fixtureNames: names, secretValues: known.values });
+  const full = probe.selfCheckFull.NO_CAPS.observedFull;
+  log(known.values.includes(SYNTHETIC_PLATFORM_TOKEN) && known.values.includes(lastCaseToken) && known.counts.platform >= 1 && !full.includes(SYNTHETIC_PLATFORM_TOKEN) && !full.includes(lastCaseToken) && findLeaks(full, { secrets: known.values }).length === 0,
+    'C1-REV004 packaging secret list = issued + case tokens + platform credentials; masking and leak scan use the same list', `counts=${JSON.stringify(known.counts)}`); }
 const { readdirSync, statSync } = await import('node:fs');
 const files = []; const walk = (d) => { for (const n of readdirSync(d)) { const p = path.join(d, n); if (statSync(p).isDirectory()) walk(p); else files.push(p); } }; walk(runDir);
 const leaks = files.map((f) => ({ f: path.relative(runDir, f), l: findLeaks(readFileSync(f, 'latin1') + readFileSync(f, 'utf8'), { names, secrets }) })).filter((r) => r.l.length);

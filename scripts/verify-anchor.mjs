@@ -9,9 +9,9 @@
 //   node scripts/verify-anchor.mjs           compare with env CMN_STAGE1_ANCHOR_SHA256 (fails if unset)
 //
 // Residual risk (documented, not solvable inside the PR): a PR that edits this file,
-// .github/workflows/ci.yml or .github/workflows/attest.yml can skip the comparison. Both are in the anchored set, so the
+// .github/workflows/ci.yml, attest.yml or attest-attack.yml can skip the comparison. Both are in the anchored set, so the
 // digest changes; such diffs need the owner's review before the variable is updated.
-import { readFileSync, existsSync } from 'node:fs';
+import { readFileSync, existsSync, readdirSync, statSync } from 'node:fs';
 import { createHash } from 'node:crypto';
 import { resolve, join } from 'node:path';
 
@@ -26,17 +26,37 @@ export const PROTECTED = [
   POC + 'test/runner.test.mjs', POC + 'test/contract-guard.test.mjs', POC + 'test/mock-adapter.mjs',
   // S2-B2 B3b (plan v0.3 §9.5): the signing workflow, the approval record, and every file that launches the
   // sandbox or decides the verdict. Any change here changes the digest → the owner re-approves the anchor.
-  // (Everything else the toolchain runs is pinned by the approved toolchain commit, CMN_S2_TRUSTED_TOOLCHAIN_SHA.)
+  // (C1-REV005: this list alone is NOT the whole trusted chain — see the C-1 block below. A configured
+  //  CMN_S2_TRUSTED_TOOLCHAIN_SHA pins the toolchain commit too, but while it is unset the workflows run github.sha.)
   '.github/workflows/attest.yml', 'docs/stage2/S2B2-TRUST-POLICY.json',
   S2 + 'src/b3/sandbox.mjs', S2 + 'src/b3/isolation-policy.mjs', S2 + 'src/b3/verifier.mjs', S2 + 'src/b3/reconcile.mjs',
   S2 + 'src/b3/package.mjs', S2 + 'src/b3/trust-policy.mjs', S2 + 'src/b3/attest-verify.mjs', S2 + 'scripts/attest-verify.mjs',
   S2 + 'src/observer.mjs', S2 + 'src/verdict.mjs',
+  // S2-B2 C-1 (attack-acceptance plan v0.4): the no-signing attack workflow
+  '.github/workflows/attest-attack.yml',
+  // C1-REV005: the whole TRUSTED call chain from both attest workflows to every verdict / evidence output — not a
+  // hand-picked subset. With no trust root set the workflows check out github.sha, so the anchor (not the
+  // toolchain variable) is what pins these files:
+  //  - entry scripts the workflows run, and the Runner programs they spawn (b3-run, a10-run produce the sealed
+  //    evidence, positive controls, equivalence, masking inputs and summaries);
+  //  - the Stage 2 package / lock / emulator config those programs depend on;
+  //  - PROTECTED_TREES below: every file of src/ (Verifier, Observer, harness, traces, masking, sandbox, self-check
+  //    host, A10, attack suite, secret collector …) and sandbox-check/ (in-sandbox self-check and A10 probe).
+  // Not protected by design: adapter-b3/ (the Adapter UNDER TEST — untrusted; A4-1 checks its tree from the host)
+  // and unit tests. tests/anchor_coverage.test.mjs proves the static import closure of every entry is covered.
+  S2 + 'scripts/run-attest-execute.mjs', S2 + 'scripts/attest-outputs.mjs', S2 + 'scripts/attest-delivery.mjs',
+  S2 + 'scripts/run-a10.mjs', S2 + 'scripts/attack-verify.mjs', S2 + 'scripts/attack-platform-evidence.mjs',
+  S2 + 'test/b3-run.mjs', S2 + 'test/a10-run.mjs', S2 + 'test/smoke.mjs',   // smoke.mjs: named by src/orchestrator.mjs
+  S2 + 'package.json', S2 + 'package-lock.json', S2 + 'firebase.json', S2 + 'firestore.rules',
 ];
+/** C1-REV005: directories protected file by file (every regular file, recursively, sorted). */
+export const PROTECTED_TREES = [S2 + 'src', S2 + 'sandbox-check'];
+const treeFiles = (base, rel) => { const out = []; const walk = (r) => { for (const n of readdirSync(join(base, r)).sort()) { const q = `${r}/${n}`; if (statSync(join(base, q)).isDirectory()) walk(q); else out.push(q); } }; walk(rel); return out; };
 const sha = (b) => createHash('sha256').update(b).digest('hex');
 
 export function anchorListing(base = root) {
   const lock = JSON.parse(readFileSync(join(base, POC, 'contracts/stage1-baseline-lock.json'), 'utf8'));
-  const paths = [...new Set([...PROTECTED, ...lock.fixed.map((f) => POC + f.path)])].sort();
+  const paths = [...new Set([...PROTECTED, ...PROTECTED_TREES.flatMap((t) => treeFiles(base, t)), ...lock.fixed.map((f) => POC + f.path)])].sort();
   const missing = paths.filter((p) => !existsSync(join(base, p)));
   if (missing.length) throw new Error(`anchored file missing: ${missing.join(', ')}`);
   const lines = paths.map((p) => `${sha(readFileSync(join(base, p)))}  ${p}`);

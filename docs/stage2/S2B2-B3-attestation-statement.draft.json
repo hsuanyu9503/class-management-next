@@ -8,6 +8,7 @@
  "required": [
   "schemaVersion",
   "testId",
+  "scenario",
   "backend",
   "toolchain",
   "targets",
@@ -115,6 +116,11 @@
   "testId": {
    "type": "string",
    "pattern": "^POC-[0-9]{3}$"
+  },
+  "scenario": {
+   "type": "string",
+   "pattern": "^(honest|attack-[a-z0-9][a-z0-9-]{0,39})$",
+   "description": "C-1 (attack-acceptance plan v0.4 §1.2): from a TRUSTED input only (attest.yml fixes honest; attest-attack.yml fixes attack-*); compared with run.json (SCENARIO_MISMATCH); missing → BLOCKED SCENARIO_MISSING; anything but honest is never PASS (SCENARIO_NOT_HONEST)."
   },
   "backend": {
    "const": "firebase"
@@ -696,6 +702,33 @@
         "type": "string"
        }
       }
+     }
+    }
+   }
+  },
+  {
+   "description": "C-1 §1.2: a PASS statement is always the honest scenario.",
+   "if": {
+    "properties": {
+     "verdict": {
+      "properties": {
+       "result": {
+        "const": "PASS"
+       }
+      },
+      "required": [
+       "result"
+      ]
+     }
+    },
+    "required": [
+     "verdict"
+    ]
+   },
+   "then": {
+    "properties": {
+     "scenario": {
+      "const": "honest"
      }
     }
    }

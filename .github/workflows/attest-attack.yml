@@ -1,0 +1,366 @@
+name: S2 attack acceptance (C-1, no signing)
+
+# S2-B2 batch 3 C-1 (docs/stage2/S2B2-B3C-ATTACK-PLAN.md v0.4; owner decisions 2026-11-22: Q-A yes, Q-D C-1 first).
+# Hosted acceptance of A10 (platform credentials), A14 (artifact selection) and A4 (toolchain tamper).
+# - NO job has id-token or attestations permission, and no signing action is used: nothing here can sign.
+# - Only on main, only by manual dispatch (the owner). Never pull_request / pull_request_target / push.
+# - Every scenario is a TRUSTED input fixed in this file (attack-a14, attack-a4-tamper); the Verifier never
+#   gives PASS to a non-honest scenario. A10 is judged by the trusted Runner (probe + host controls).
+# - Only safe diagnostics are uploaded (codes, IDs, digests); the attacker's output never reaches the log.
+# - Actions pinned to the same full commit SHAs as attest.yml (docs/stage2/S2B2-B3B-REPORT.md).
+on:
+  workflow_dispatch:
+    inputs:
+      previousRunId:
+        description: A14-3b — run ID of an earlier attest / attack run whose package artifact still exists (optional)
+        type: string
+        default: ''
+      previousArtifactId:
+        description: A14-3a/3b — that run's package artifact ID (optional; empty → A14-3 NOT_RUN)
+        type: string
+        default: ''
+
+permissions: {}
+
+concurrency:
+  group: s2-attest-attack
+  cancel-in-progress: false
+
+jobs:
+  a10:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 40
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout 可信工具鏈
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ vars.CMN_S2_TRUSTED_TOOLCHAIN_SHA || github.sha }}
+          persist-credentials: false
+      - name: Node.js 22
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: '22'
+      - name: Java 21（runner image 內建）
+        run: |
+          if [ -n "${JAVA_HOME_21_X64:-}" ]; then echo "$JAVA_HOME_21_X64/bin" >> "$GITHUB_PATH"; fi
+      - name: 安裝 Stage 2 依賴（鎖檔）
+        working-directory: poc/stage2
+        run: npm ci --no-audit --no-fund
+      - name: A10（root：可信探測與攻擊者各自一個沙箱實例；只有安全診斷離開這一步）
+        working-directory: poc/stage2
+        env:
+          A10_OUT_DIR: ${{ runner.temp }}/s2-a10
+        run: sudo -E env "PATH=$PATH" HOME=/root node scripts/run-a10.mjs
+      - name: 收回檔案擁有權
+        if: always()
+        run: sudo chown -R "$(id -u):$(id -g)" "$GITHUB_WORKSPACE" "$RUNNER_TEMP" || true
+      - name: 上傳 A10 安全診斷（保存 30 天）
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: s2-attack-a10
+          path: ${{ runner.temp }}/s2-a10
+          retention-days: 30
+          if-no-files-found: error
+          overwrite: false
+
+  execute-a14:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 40
+    permissions:
+      contents: read
+    env:
+      TEST_ID: POC-001
+    outputs:
+      testId: ${{ steps.out.outputs.testId }}
+      attestationNonce: ${{ steps.out.outputs.attestationNonce }}
+      packageSha256: ${{ steps.out.outputs.packageSha256 }}
+      manifestSha256: ${{ steps.out.outputs.manifestSha256 }}
+      platformSupported: ${{ steps.out.outputs.platformSupported }}
+      toolchainCommit: ${{ steps.out.outputs.toolchainCommit }}
+      artifactId: ${{ steps.up.outputs.artifact-id }}
+      decoyArtifactId: ${{ steps.decoy.outputs.artifact-id }}
+    steps:
+      - name: Checkout 可信工具鏈
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ vars.CMN_S2_TRUSTED_TOOLCHAIN_SHA || github.sha }}
+          persist-credentials: false
+      - name: Node.js 22
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: '22'
+      - name: Java 21（runner image 內建）
+        run: |
+          if [ -n "${JAVA_HOME_21_X64:-}" ]; then echo "$JAVA_HOME_21_X64/bin" >> "$GITHUB_PATH"; fi
+      - name: 安裝 Stage 2 依賴（鎖檔）
+        working-directory: poc/stage2
+        run: npm ci --no-audit --no-fund
+      - name: 執行並封存 A14 用的案例（誠實 Adapter；scenario 固定為 attack-a14）
+        working-directory: poc/stage2
+        env:
+          B3_SINGLE_CASE: ${{ env.TEST_ID }}
+          B3_SCENARIO: attack-a14
+          B3_OUT_DIR: ${{ runner.temp }}/s2-out
+        run: sudo -E env "PATH=$PATH" HOME=/root node scripts/run-attest-execute.mjs
+      - name: 收回檔案擁有權
+        if: always()
+        run: sudo chown -R "$(id -u):$(id -g)" "$GITHUB_WORKSPACE" "$RUNNER_TEMP" || true
+      - name: 交出 job outputs
+        id: out
+        working-directory: poc/stage2
+        env:
+          B3_SINGLE_CASE: ${{ env.TEST_ID }}
+          B3_OUT_DIR: ${{ runner.temp }}/s2-out
+        run: node scripts/attest-outputs.mjs
+      - name: 上傳封裝檔
+        id: up
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          path: ${{ runner.temp }}/s2-out/package-${{ env.TEST_ID }}.tar
+          archive: false
+          retention-days: 30
+          if-no-files-found: error
+          overwrite: false
+      - name: A14-1 建立誘餌（同一個 run、不同檔名、隨機內容）
+        run: |
+          mkdir -p "$RUNNER_TEMP/s2-decoy"
+          head -c 4096 /dev/urandom > "$RUNNER_TEMP/s2-decoy/decoy-$TEST_ID.tar"
+      - name: A14-1 上傳誘餌
+        id: decoy
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          path: ${{ runner.temp }}/s2-decoy/decoy-${{ env.TEST_ID }}.tar
+          archive: false
+          retention-days: 30
+          if-no-files-found: error
+          overwrite: false
+
+  execute-a4:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 40
+    permissions:
+      contents: read
+    env:
+      TEST_ID: POC-002
+    outputs:
+      testId: ${{ steps.out.outputs.testId }}
+      attestationNonce: ${{ steps.out.outputs.attestationNonce }}
+      packageSha256: ${{ steps.out.outputs.packageSha256 }}
+      manifestSha256: ${{ steps.out.outputs.manifestSha256 }}
+      platformSupported: ${{ steps.out.outputs.platformSupported }}
+      toolchainCommit: ${{ steps.out.outputs.toolchainCommit }}
+      trustedTreesUnchanged: ${{ steps.out.outputs.trustedTreesUnchanged }}
+      artifactId: ${{ steps.up.outputs.artifact-id }}
+    steps:
+      - name: Checkout 可信工具鏈
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ vars.CMN_S2_TRUSTED_TOOLCHAIN_SHA || github.sha }}
+          persist-credentials: false
+      - name: Node.js 22
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: '22'
+      - name: Java 21（runner image 內建）
+        run: |
+          if [ -n "${JAVA_HOME_21_X64:-}" ]; then echo "$JAVA_HOME_21_X64/bin" >> "$GITHUB_PATH"; fi
+      - name: 安裝 Stage 2 依賴（鎖檔）
+        working-directory: poc/stage2
+        run: npm ci --no-audit --no-fund
+      - name: A4-1 攻擊者 Adapter 嘗試竄改可信工具鏈（scenario 固定為 attack-a4-tamper）
+        working-directory: poc/stage2
+        env:
+          B3_SINGLE_CASE: ${{ env.TEST_ID }}
+          B3_SCENARIO: attack-a4-tamper
+          B3_SINGLE_ENTRY: tamper-toolchain
+          B3_OUT_DIR: ${{ runner.temp }}/s2-out
+        run: sudo -E env "PATH=$PATH" HOME=/root node scripts/run-attest-execute.mjs
+      - name: 收回檔案擁有權
+        if: always()
+        run: sudo chown -R "$(id -u):$(id -g)" "$GITHUB_WORKSPACE" "$RUNNER_TEMP" || true
+      - name: 交出 job outputs
+        id: out
+        working-directory: poc/stage2
+        env:
+          B3_SINGLE_CASE: ${{ env.TEST_ID }}
+          B3_OUT_DIR: ${{ runner.temp }}/s2-out
+        run: node scripts/attest-outputs.mjs
+      - name: 上傳封裝檔
+        id: up
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          path: ${{ runner.temp }}/s2-out/package-${{ env.TEST_ID }}.tar
+          archive: false
+          retention-days: 30
+          if-no-files-found: error
+          overwrite: false
+
+  same-name:
+    # A14-2: a second artifact with the A14 package's name in the same run (expected: the platform rejects it)
+    needs: execute-a14
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions: {}
+    outputs:
+      outcome: ${{ steps.up.outcome }}
+      artifactId: ${{ steps.up.outputs.artifact-id }}
+      controlOutcome: ${{ steps.control.outcome }}
+    steps:
+      - name: 建立同名檔案與控制檔（隨機內容）
+        run: |
+          mkdir -p "$RUNNER_TEMP/s2-sn" "$RUNNER_TEMP/s2-sn-control"
+          head -c 4096 /dev/urandom > "$RUNNER_TEMP/s2-sn/package-POC-001.tar"
+          head -c 64 /dev/urandom > "$RUNNER_TEMP/s2-sn-control/same-name-job-control.bin"
+      - name: 正向控制：同一個 job 以不同名稱上傳（必須成功，證明上傳本身可用）
+        id: control
+        continue-on-error: true
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          path: ${{ runner.temp }}/s2-sn-control/same-name-job-control.bin
+          archive: false
+          retention-days: 30
+          if-no-files-found: error
+          overwrite: false
+      - name: 以同名上傳（overwrite false；預期被平台拒絕）
+        id: up
+        continue-on-error: true
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          path: ${{ runner.temp }}/s2-sn/package-POC-001.tar
+          archive: false
+          retention-days: 30
+          if-no-files-found: error
+          overwrite: false
+
+  verify-attack:
+    needs: [execute-a14, execute-a4, same-name]
+    if: always() && github.ref == 'refs/heads/main' && needs.execute-a14.result == 'success'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    permissions:
+      contents: read
+      actions: read
+    steps:
+      - name: Checkout 可信工具鏈（不 checkout Adapter 或 artifact 的任何內容）
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ vars.CMN_S2_TRUSTED_TOOLCHAIN_SHA || github.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Checkout 目前的 main（只讀批准紀錄）
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: main
+          path: policy-main
+          persist-credentials: false
+      - name: Node.js 22
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: '22'
+      - name: A14 正向控制：依本次 ID 下載
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          artifact-ids: ${{ needs.execute-a14.outputs.artifactId }}
+          path: ${{ runner.temp }}/s2-a14
+      - name: A14-1 依誘餌 ID 下載
+        if: needs.execute-a14.outputs.decoyArtifactId != ''
+        continue-on-error: true
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          artifact-ids: ${{ needs.execute-a14.outputs.decoyArtifactId }}
+          path: ${{ runner.temp }}/s2-decoy
+      - name: A14-1b 平台若接受了同名上傳，依該 ID 下載
+        if: needs.same-name.outputs.artifactId != ''
+        continue-on-error: true
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          artifact-ids: ${{ needs.same-name.outputs.artifactId }}
+          path: ${{ runner.temp }}/s2-sn
+      - name: A14-3a 在本次 run 下載其他 run 的 artifact ID（預期找不到）
+        id: foreign
+        if: inputs.previousArtifactId != ''
+        continue-on-error: true
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          artifact-ids: ${{ inputs.previousArtifactId }}
+          path: ${{ runner.temp }}/s2-foreign
+      - name: A14-3b 取得其他 run 的封裝位元組（受控測試；需要 actions read）
+        id: prev
+        if: inputs.previousArtifactId != '' && inputs.previousRunId != ''
+        continue-on-error: true
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          artifact-ids: ${{ inputs.previousArtifactId }}
+          run-id: ${{ inputs.previousRunId }}
+          github-token: ${{ github.token }}
+          path: ${{ runner.temp }}/s2-prev
+      - name: A4-1 下載攻擊者案例的封裝
+        if: needs.execute-a4.result == 'success'
+        continue-on-error: true
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          artifact-ids: ${{ needs.execute-a4.outputs.artifactId }}
+          path: ${{ runner.temp }}/s2-a4
+      - name: 平台證據（本 run 的 artifact 清單與 same-name job 的錯誤行；唯讀 token）
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          OUT_FILE: ${{ runner.temp }}/s2-platform.json
+          SAMENAME_CONTROL_OUTCOME: ${{ needs.same-name.outputs.controlOutcome }}
+          FOREIGN_ARTIFACT_ID: ${{ inputs.previousArtifactId }}
+        run: node poc/stage2/scripts/attack-platform-evidence.mjs
+      - name: 判定（只做安全解析，不執行任何 artifact 的內容；沒有簽章；非 DEFENDED_WHERE_RUN 時失敗）
+        env:
+          PLATFORM_FILE: ${{ runner.temp }}/s2-platform.json
+          OUT_DIR: ${{ runner.temp }}/s2-attack
+          POLICY_DIR: ${{ github.workspace }}/policy-main
+          WORKFLOW_SHA: ${{ github.workflow_sha }}
+          CMN_STAGE1_ANCHOR_SHA256: ${{ vars.CMN_STAGE1_ANCHOR_SHA256 }}
+          CMN_S2_TRUSTED_TOOLCHAIN_SHA: ${{ vars.CMN_S2_TRUSTED_TOOLCHAIN_SHA }}
+          CMN_S2_SIGNING_POLICY_BLOB: ${{ vars.CMN_S2_SIGNING_POLICY_BLOB }}
+          A14_SCENARIO: attack-a14
+          A14_TEST_ID: ${{ needs.execute-a14.outputs.testId }}
+          A14_ARTIFACT_ID: ${{ needs.execute-a14.outputs.artifactId }}
+          A14_PACKAGE_SHA256: ${{ needs.execute-a14.outputs.packageSha256 }}
+          A14_MANIFEST_SHA256: ${{ needs.execute-a14.outputs.manifestSha256 }}
+          A14_NONCE: ${{ needs.execute-a14.outputs.attestationNonce }}
+          A14_PLATFORM_SUPPORTED: ${{ needs.execute-a14.outputs.platformSupported }}
+          A14_TOOLCHAIN_COMMIT: ${{ needs.execute-a14.outputs.toolchainCommit }}
+          DIR_A14: ${{ runner.temp }}/s2-a14
+          DECOY_ARTIFACT_ID: ${{ needs.execute-a14.outputs.decoyArtifactId }}
+          DIR_DECOY: ${{ runner.temp }}/s2-decoy
+          SAMENAME_OUTCOME: ${{ needs.same-name.outputs.outcome }}
+          SAMENAME_ARTIFACT_ID: ${{ needs.same-name.outputs.artifactId }}
+          DIR_SAMENAME: ${{ runner.temp }}/s2-sn
+          FOREIGN_ARTIFACT_ID: ${{ inputs.previousArtifactId }}
+          FOREIGN_RUN_ID: ${{ inputs.previousRunId }}
+          FOREIGN_OUTCOME: ${{ steps.foreign.outcome }}
+          DIR_FOREIGN: ${{ runner.temp }}/s2-foreign
+          PREV_OUTCOME: ${{ steps.prev.outcome }}
+          DIR_PREV: ${{ runner.temp }}/s2-prev
+          A4_SCENARIO: attack-a4-tamper
+          A4_TEST_ID: ${{ needs.execute-a4.outputs.testId }}
+          A4_ARTIFACT_ID: ${{ needs.execute-a4.outputs.artifactId }}
+          A4_PACKAGE_SHA256: ${{ needs.execute-a4.outputs.packageSha256 }}
+          A4_MANIFEST_SHA256: ${{ needs.execute-a4.outputs.manifestSha256 }}
+          A4_NONCE: ${{ needs.execute-a4.outputs.attestationNonce }}
+          A4_PLATFORM_SUPPORTED: ${{ needs.execute-a4.outputs.platformSupported }}
+          A4_TOOLCHAIN_COMMIT: ${{ needs.execute-a4.outputs.toolchainCommit }}
+          A4_TREES_UNCHANGED: ${{ needs.execute-a4.outputs.trustedTreesUnchanged }}
+          DIR_A4: ${{ runner.temp }}/s2-a4
+        run: node poc/stage2/scripts/attack-verify.mjs
+      - name: 上傳攻擊驗收摘要（未簽章診斷，保存 30 天）
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: s2-attack-summary
+          path: ${{ runner.temp }}/s2-attack
+          retention-days: 30
+          if-no-files-found: error
+          overwrite: false

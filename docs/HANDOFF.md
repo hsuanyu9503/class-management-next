@@ -6,7 +6,7 @@
 
 - 專案：Classroom Manager Next 技術驗證 PoC
 - 階段：**PoC Stage 1 已合併**（Merged Baseline）。合併後驗收狀態依下方實際 CI 證據記錄。
-- 目前任務：**S2-B2 第 3 批 B3b（PR-2）**：`attest.yml`、批准紀錄 `S2B2-TRUST-POLICY.json`、受保護清單、信任根閘門。見 `docs/stage2/S2B2-B3B-REPORT.md`。PR-1（PR #9）已合併為 `bda85b2`。
+- 目前任務：**S2-B2 第 3 批 C-1**：hosted 攻擊驗收的實作（A10、A14、A4），以及無簽章的 `attest-attack.yml`、scenario 綁定、完整觀察值。見 `docs/stage2/S2B2-B3C-REPORT.md`。B3b（PR #10）已合併；攻擊驗收計畫 v0.4（PR #12）已合併為 `0771790`。
 - **PR #6 合併事實**（2026-11-21）：負責人回覆「三項都同意」後，Claude 依明確批准合併 PR #6，merge `636e13088a39c3bd956461e6f8fbab75949c58c1`（Head `5876ddb0`，與 Reviewed Head 相同）。同時批准 B3a 本機範圍與 Q-4（ATTESTATION v0.3）。**未**批准 D-17、CI、錨定、repository variable、公開與保存範圍。
 - **PR #5 合併事實**（2026-11-21）：使用者合併 PR #5，Merge SHA `40c09a3fb92b0c699a2b00dda1da5b2a32b468a4`（最後 PR Head `85a0bb4b40d9cf2ff030c1d95f70513cad9a57fd`，兩者無檔案差異；最後程式審查 Head `d2dafe16ba488df60e6a2340ad9cd075c691ed2a`）。合併**不等於** D-01～D-17、G-1～G-4、Q1～Q3 已核准。
 - **PR #4 合併事實**（2026-11-21）：使用者合併 PR #4，Merge SHA `e98c46b05fe2a127f0356e66777c4484ec768ceb`（最終 Reviewed Head `ee756da8920080d4874e1f71915b97f27431576a`，兩者無檔案差異）；合併後 CI [run 44854491499](https://github.com/hsuanyu9503/class-management-next/actions/runs/44854491499) 成功。S2B2-REV-001／003 已修正；REV-002 只有認證隔離**設計**結案，隔離未實作。合併**不等於** D-01～D-17、Q1～Q3 已核准。
@@ -39,11 +39,35 @@
   - 這不是 GitHub 的正式核准。hosted 攻擊驗收與第三方簽章驗收都尚未完成；
   - 計畫 §9 的四項實作驗收備註，留待 C-1／C-2 時核對；
   - 待 ChatGPT 複驗，並由負責人決定 Q-A～Q-D；核准後依 C-1 → C-2 →（C-3）實作。
-- 下一位負責人：你。要決定兩件事：
-  - Q-A～Q-D，其中 Q-B 是流程 I 或 II；
-  - PR #12 是否合併。
+- **PR #12 已合併**（2026-11-22，merge commit `0771790f9906fe22233d9156cf4c51e31aae02ad`；合併時的 Head `667ec03`）。
+  - 合併後 `main` 的 CI：[44978067608](https://github.com/hsuanyu9503/class-management-next/actions/runs/44978067608)，success。
+  - push 觸發的 `attest.yml`：run [44978067634](https://github.com/hsuanyu9503/class-management-next/actions/runs/44978067634)，POC-001 → `UNATTESTED [TRUST_ROOT_NOT_CONFIGURED]`，沒有簽章。
+    - 封裝 artifact 14736254648，digest `4f5d3dd9…`，上傳與下載一致；
+    - 診斷 artifact 14736098649；
+    - 資料來自 job log。
+- **負責人的決定（2026-11-22）**：
+  - Q-A：是；
+  - **Q-B：流程 I**；
+  - Q-C：是，Environment 只作為額外保護；
+  - Q-D：C-1 → C-2 → C-3。
+- **門檻（流程 I）**：A4／A10／A14 的 hosted 驗收、A18 的隔離測試簽章驗收（分為密碼學／身分層與 statement 政策層），以及第三方驗證腳本，**全部**完成並經獨立審查、負責人核准之後，才進入打開 PASS 的 PR。在那之前，`PASS_ENABLED=false`。
+- **C-1 實作**（2026-11-22，Claude）：已開 PR，見 REVIEW_LOG 的「C-1」段落。
+  - PR #13 審查：
+    - `9e4db47`：CHANGES REQUESTED（C1-REV001～005），R1 已修正，見 REPORT §7；
+    - `d0ab942`：CHANGES REQUESTED（剩 A14-3a 與短秘密兩項），R2 已修正，見 REPORT §8；
+    - `e4aee0d`：CHANGES REQUESTED（剩 A14-3a 的欄位驗證），R3 已修正，見 REPORT §9。
+    - **`60169cf`：程式審查通過**。C1-REV001～005 全部結案；hosted 驗收仍待完成。這不是合併授權。
+  - 錨定 digest（R3）：`31c23e4dc7bafdf80943581e459576bd0afef9a9f495fc6d046911a36fadb8d3`（83 檔）。`e2149bd9…`、`fb0f85b0…`、`f79ade1e…` 都已作廢。在負責人重新核准之前，`baseline-anchor` 會失敗。
+  - 本機結果（R3）：`npm test` 19/19、`s2:test` 143/143、`s2:b3` 33/33、`s2:a10` 9/9、mutation 43/43、attest-attack 的本機模擬。
+  - **hosted 的 `attest-attack.yml` 尚未執行**（NOT_RUN）。合併並重新核准錨定之後，由負責人手動觸發。
+  - `PASS_ENABLED=false`；沒有簽章權限；沒有設定任何變數或 Settings。
+- 下一位負責人：你。
+  1. 核准錨定 `31c23e4dc7bafdf80943581e459576bd0afef9a9f495fc6d046911a36fadb8d3`（83 檔）；
+  2. 確認同 Head 的 CI 全部通過（含 `baseline-anchor`）後，決定是否合併；
+  3. 合併後手動觸發 `attest-attack.yml`：`previousRunId` 與 `previousArtifactId` 填仍在保存期內的其他 run，並保存 `s2-attack-a10`、`s2-attack-summary`，以及 A14、誘餌、A4-1 三個封裝與各自的 run／artifact ID。
 
-  四個 hosted run 的 artifact 原檔重播仍待處理，需要你提供原檔給 ChatGPT。
+  之後交給 ChatGPT 做 hosted 驗收，再由 Claude 進行 C-2（A18 流程 I）。
+- 四個 hosted run 的 artifact 原檔重播仍待處理，需要你提供原檔給 ChatGPT。
 - **PASS 啟用的門檻**（依 Q-B 的選擇；**選擇之前 `PASS_ENABLED=false`**）：
   - **流程 I（保留原門檻）**：A4／A10／A14 的 hosted 驗收、A18 的隔離測試簽章驗收（分為密碼學／身分層與 statement 政策層），以及第三方驗證腳本，**全部**完成並經獨立審查、負責人核准之後，才進入打開 PASS 的 PR。
   - **流程 II（經負責人書面批准的例外）**：打開 PASS 前，先完成 A4／A10／A14 的 hosted 驗收與第三方驗證腳本，並取得負責人的書面例外批准。第一份簽章的狀態是 `ACCEPTANCE_PENDING`，要立刻完成正向與反向的第三方驗證；失敗時刪除或改指工具鏈變數、撤銷批准紀錄，並重新審查。
@@ -179,5 +203,14 @@
 | 2026-11-22 | ChatGPT → Claude | v0.3 複審 `9bca6c78c4f8`：CHANGES REQUESTED（只剩 F1、F2） | v0.4 修訂 |
 | 2026-11-22 | Claude → ChatGPT | 攻擊驗收計畫 v0.4（PR #12） | 最後一次文件複驗 |
 | 2026-11-22 | ChatGPT → Claude | v0.4 審查 `68ca03c1cfc0`：文件審查通過（設計結案、實作待驗收） | 負責人決定 Q-A～Q-D 與合併 |
+| 2026-11-22 | 負責人 | 合併 PR #12（`0771790`）；Q-A 是、Q-B 流程 I、Q-C 是、Q-D 依建議順序 | C-1 實作 |
+| 2026-11-22 | Claude → ChatGPT | C-1 實作 PR（A10／A14／A4、`attest-attack.yml`；錨定 `e2149bd9…`） | L3 審查 |
+| 2026-11-22 | ChatGPT → Claude | PR #13 審查 `9e4db47d9343`：CHANGES REQUESTED（C1-REV001～005） | R1 修正 |
+| 2026-11-22 | Claude → ChatGPT | C-1 R1（錨定 `fb0f85b0…`，83 檔） | 複審 |
+| 2026-11-22 | ChatGPT → Claude | R1 複審 `d0ab942897ff`：CHANGES REQUESTED（A14-3a、短秘密） | R2 修正 |
+| 2026-11-22 | Claude → ChatGPT | C-1 R2（錨定 `f79ade1e…`，83 檔） | 複審 |
+| 2026-11-23 | ChatGPT → Claude | R2 複審 `e4aee0dbef22`：CHANGES REQUESTED（A14-3a 的必要欄位） | R3 修正 |
+| 2026-11-23 | Claude → ChatGPT | C-1 R3（錨定 `31c23e4d…`，83 檔） | 複審 |
+| 2026-11-23 | ChatGPT → Claude | R3 審查 `60169cfaf9b3`：程式審查通過（C1-REV001～005 結案；hosted 驗收待完成） | 負責人核准錨定與合併 |
 
 > 規格的正式變更請同步修改 SPEC／TECH，不要只在這裡留下新決策。

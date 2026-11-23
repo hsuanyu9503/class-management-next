@@ -22,7 +22,7 @@ const run = (args, env) => { const r = spawnSync(process.execPath, args, { cwd: 
 
 const sup = platformSupport();
 if (!sup.supported) { console.log(`NOT_RUN: sandbox platform unsupported (${sup.reason})`); process.exit(3); }
-const unit = run(['--test', 'test/b3-unit.test.mjs'], cleanEnv(process.env));
+const unit = run(['--test', 'test/b3-unit.test.mjs', 'test/c1-unit.test.mjs', 'test/a10-unit.test.mjs', 'test/attack-suite-unit.test.mjs'], cleanEnv(process.env));
 if (!log(unit.code === 0, 'B3a unit tests', (unit.out.match(/# (pass|fail) \d+/g) || []).join(' '))) { console.log(unit.out.slice(-3000)); process.exit(2); }
 await requireClosed('before emulator run');
 const ex = run([FIREBASE_JS, 'emulators:exec', '--only', 'auth,firestore', '--project', PROJECT_ID, 'node test/b3-run.mjs'], cleanEnv(process.env, { RUN_NONCE: randomBytes(16).toString('hex') }));
