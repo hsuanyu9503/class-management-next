@@ -67,7 +67,16 @@ test('attest-attack.yml：只能手動觸發、只在 main、沒有任何簽章�
   assert.match(w, /^permissions: \{\}$/m);
   assert.doesNotMatch(w, /id-token|attestations|attest-build-provenance|secrets\./);
   const jobs = jobsOf(w);
-  assert.deepEqual(Object.keys(jobs).sort(), ['a10', 'execute-a14', 'execute-a4', 'same-name', 'verify-attack']);
+  assert.deepEqual(Object.keys(jobs).sort(), ['a10', 'execute-a14', 'execute-a4', 'same-name', 'verify-attack', 'verify-same-name']);
+  // hosted run 45088076830: a same-named artifact shadows the original ID → the same-name upload must come AFTER the
+  // main verification has downloaded the real package, and is judged by its own job afterwards
+  assert.match(jobs['verify-attack'], /\n    needs: \[execute-a14, execute-a4\]\n/); assert.doesNotMatch(jobs['verify-attack'], /same-name/);
+  assert.match(jobs['same-name'], /\n    needs: \[execute-a14, verify-attack\]\n/);
+  assert.match(jobs['verify-same-name'], /\n    needs: \[execute-a14, same-name\]\n/);
+  assert.match(jobs['verify-same-name'], /\n    permissions:\n      contents: read\n      actions: read\n    steps:/);
+  assert.match(jobs['verify-same-name'], /STAGE: same-name\n/); assert.match(jobs['verify-same-name'], /A14_SCENARIO: attack-a14\n/);
+  assert.deepEqual(runLines(jobs['verify-same-name']), ['node poc/stage2/scripts/attack-platform-evidence.mjs', 'node poc/stage2/scripts/attack-verify.mjs']);
+  assert.deepEqual(jobs['verify-same-name'].match(/ref: .+/g), ['ref: ${{ vars.CMN_S2_TRUSTED_TOOLCHAIN_SHA || github.sha }}', 'ref: main']);
   for (const [n, j] of Object.entries(jobs)) assert.match(j, /\n    if: (always\(\) && )?github\.ref == 'refs\/heads\/main'/, n);
   for (const n of ['a10', 'execute-a14', 'execute-a4']) assert.match(jobs[n], /\n    permissions:\n      contents: read\n    [a-z]/, n);
   assert.match(jobs['same-name'], /\n    permissions: \{\}\n/);
@@ -87,11 +96,11 @@ test('attest-attack.yml：只能手動觸發、只在 main、沒有任何簽章�
   const ve = jobs['verify-attack'];
   assert.deepEqual(ve.match(/ref: .+/g), ['ref: ${{ vars.CMN_S2_TRUSTED_TOOLCHAIN_SHA || github.sha }}', 'ref: main']);
   assert.deepEqual(runLines(ve), ['node poc/stage2/scripts/attack-platform-evidence.mjs', 'node poc/stage2/scripts/attack-verify.mjs']);
-  // the read-only token is used in exactly two places of verify-attack: the earlier run's package (A14-3b) and
-  // the platform-evidence step (C1-REV001: this run's artifact list, same-name job error lines)
-  assert.equal((w.match(/github\.token/g) || []).length, 2); assert.equal((ve.match(/github\.token/g) || []).length, 2);
+  // the read-only token: verify-attack (the earlier run's package for A14-3b; platform evidence) and
+  // verify-same-name (platform evidence: this run's artifact list, same-name job error lines) — nowhere else
+  assert.equal((w.match(/github\.token/g) || []).length, 3); assert.equal((ve.match(/github\.token/g) || []).length, 2); assert.equal((jobs['verify-same-name'].match(/github\.token/g) || []).length, 1);
   assert.match(ve, /run-id: \$\{\{ inputs\.previousRunId \}\}\n\s+github-token: \$\{\{ github\.token \}\}/);
-  assert.match(ve, /GITHUB_TOKEN: \$\{\{ github\.token \}\}\n\s+OUT_FILE: .+\n\s+SAMENAME_CONTROL_OUTCOME: .+\n\s+FOREIGN_ARTIFACT_ID: .+\n\s+run: node poc\/stage2\/scripts\/attack-platform-evidence\.mjs\n/);
+  assert.match(ve, /GITHUB_TOKEN: \$\{\{ github\.token \}\}\n\s+OUT_FILE: .+\n\s+FOREIGN_ARTIFACT_ID: .+\n\s+run: node poc\/stage2\/scripts\/attack-platform-evidence\.mjs\n/);
   // the same-name job has an upload control with a different name, before the same-name attempt
   assert.ok(jobs['same-name'].indexOf('id: control') > 0 && jobs['same-name'].indexOf('id: control') < jobs['same-name'].indexOf('id: up'));
   // the same-name upload must not overwrite, and its failure is expected (recorded, not fatal)

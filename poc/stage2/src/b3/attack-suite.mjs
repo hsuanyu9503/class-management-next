@@ -11,7 +11,8 @@ import { createHash } from 'node:crypto';
 import { runVerifyJob } from './attest-verify.mjs';
 import { readPackageSafe, writePackage } from './package.mjs';
 
-export const SUITE_VERSION = 's2-attack-suite-v2';   // v2: C1-REV001 — a failed platform step is never DEFENDED by itself
+export const SUITE_VERSION = 's2-attack-suite-v3';   // v3: same-name stage AFTER the main verification (hosted run 45088076830: the platform accepted the
+                                                   // same-name upload and the newer artifact shadowed the original ID for download-artifact)   // v2: C1-REV001 — a failed platform step is never DEFENDED by itself
 
 /** Platform error lines of a job log ("##[error]" lines only), bounded — kept for the reviewer and for the
  *  conflict check. Never contains secrets: the same-name job has no token and handles only random bytes. */
@@ -50,16 +51,29 @@ const vOut = (r) => `${r.result} [${codesOf(r).join(',')}]`;
  *          foreign: { artifactId, downloadOutcome, list, read },
  *          previous: { bytes: Buffer | null, reason } },
  *   a4: { outputs: {...same keys..., trustedTreesUnchanged}, scenario, pkg, read } | null } */
-export function runAttackVerify(io) {
+function makeVerifier(io) {
   const base = { GITHUB_ACTIONS: io.env.GITHUB_ACTIONS, RUNNER_ENVIRONMENT: io.env.RUNNER_ENVIRONMENT, GITHUB_RUN_ID: io.env.GITHUB_RUN_ID, GITHUB_RUN_ATTEMPT: io.env.GITHUB_RUN_ATTEMPT,
     CMN_STAGE1_ANCHOR_SHA256: io.env.CMN_STAGE1_ANCHOR_SHA256, CMN_S2_TRUSTED_TOOLCHAIN_SHA: io.env.CMN_S2_TRUSTED_TOOLCHAIN_SHA, CMN_S2_SIGNING_POLICY_BLOB: io.env.CMN_S2_SIGNING_POLICY_BLOB };
   const expEnv = (o, scenario, over = {}) => ({ ...base, EXP_TEST_ID: o.testId, EXP_ARTIFACT_ID: o.artifactId, EXP_PACKAGE_SHA256: o.packageSha256, EXP_MANIFEST_SHA256: o.manifestSha256,
     EXP_ATTESTATION_NONCE: o.attestationNonce, EXP_PLATFORM_SUPPORTED: String(o.platformSupported), EXP_TOOLCHAIN_COMMIT: o.toolchainCommit, EXP_SCENARIO: scenario, ...over });
   const verify = (env, list, read, producerJob = 'attack-execute-a14') => runVerifyJob({ env, head: io.head, workflowBlob: io.workflowBlob, policy: io.policy, caseSpecs: io.caseSpecs, now: io.now, listDownload: list, readDownload: read, producerJob });
-  const one = (name) => () => [{ name, isFile: true }];
+  return { expEnv, verify };
+}
+const one = (name) => () => [{ name, isFile: true }];
+const blockedWith = (r, code) => r.result === 'BLOCKED' && codesOf(r).includes(code);
+const summarize = (S, stage, controlId) => {
+  const control = !controlId || S.find((s) => s.id === controlId)?.testOutcome === 'CONTROL_OK';
+  const judged = S.filter((s) => s.id !== controlId);
+  const overall = !control ? 'INCONCLUSIVE' : judged.some((s) => s.testOutcome === 'BREACHED') ? 'BREACHED' : judged.some((s) => s.testOutcome === 'INCONCLUSIVE') ? 'INCONCLUSIVE' : 'DEFENDED_WHERE_RUN';
+  return { suiteVersion: SUITE_VERSION, stage, overall, notRun: judged.filter((s) => s.testOutcome === 'NOT_RUN').map((s) => s.id), findings: S.filter((s) => s.finding).map((s) => ({ id: s.id, finding: s.finding })), scenarios: S, unsigned: true, notice: 'UNSIGNED DIAGNOSTIC — attack acceptance, never an attestation.' };
+};
+
+/** MAIN stage — runs BEFORE the same-name upload exists (verify-attack job): positive control, A14-1, A14-3a/3b,
+ *  A4-1/2/3. A14-2 / A14-1b / A14-2s are judged later by runSameNameVerify(). */
+export function runAttackVerify(io) {
+  const { expEnv, verify } = makeVerifier(io);
   const S = [];
   const add = (id, o) => S.push({ id, ...o });
-  const blockedWith = (r, code) => r.result === 'BLOCKED' && codesOf(r).includes(code);
 
   // ---------------------------------------------------------------- A14 positive control (correct ID)
   const a = io.a14; const expName = `package-${a.outputs.testId}.tar`;
@@ -72,25 +86,8 @@ export function runAttackVerify(io) {
   else { const r = verify(expEnv(a.outputs, a.scenario, { EXP_ARTIFACT_ID: a.decoy.artifactId }), a.decoy.list, a.decoy.read);
     add('A14-1', { testOutcome: blockedWith(r, 'ARTIFACT_SELECTION_MISMATCH') ? 'DEFENDED' : 'BREACHED', platformOutcome: 'DOWNLOADED', verifierOutcome: vOut(r), expected: 'BLOCKED ARTIFACT_SELECTION_MISMATCH' }); }
 
-  // ---------------------------------------------------------------- A14-2 same-name upload (→ A14-1b if the platform accepted it)
-  const sn = a.sameName || {}; const pf = io.platform || {};
+  const pf = io.platform || {};
   const listed = pf.artifactsOk === true && Array.isArray(pf.artifacts) ? pf.artifacts : null;
-  if (sn.uploadOutcome === 'failure') {
-    // DEFENDED only with checkable conflict evidence: the job's own upload control succeeded, the platform's error
-    // says 409 / conflict, and this run holds exactly ONE artifact of that name — the sealed package
-    const sameNamed = listed ? listed.filter((x) => x.name === expName) : null;
-    const conflict = saysConflict(pf.sameNameErrorLines || []);
-    const evidence = { controlUpload: pf.sameNameControlOutcome ?? null, platformErrorLines: pf.sameNameErrorLines || [], artifactsListed: !!listed, sameNamedArtifactIds: sameNamed ? sameNamed.map((x) => String(x.id)) : null };
-    const ok = pf.sameNameControlOutcome === 'success' && conflict && !!sameNamed && sameNamed.length === 1 && String(sameNamed[0].id) === String(a.outputs.artifactId);
-    add('A14-2', ok
-      ? { testOutcome: 'DEFENDED', platformOutcome: 'UPLOAD_REJECTED_CONFLICT', verifierOutcome: 'NOT_REACHED', expected: 'platform rejects a second artifact with the same name (overwrite: false)', evidence }
-      : { testOutcome: 'INCONCLUSIVE', platformOutcome: 'UPLOAD_FAILED_REASON_UNVERIFIED', verifierOutcome: 'NOT_REACHED', manualReview: 'check the same-name job log: the failure must be the name conflict, not a network / service / permission error', evidence });
-  }
-  else if (sn.uploadOutcome === 'success' && /^[0-9]{1,20}$/.test(sn.artifactId || '') && sn.list) {
-    const r = verify(expEnv(a.outputs, a.scenario, { EXP_ARTIFACT_ID: sn.artifactId }), sn.list, sn.read);
-    add('A14-2', { testOutcome: 'INCONCLUSIVE', platformOutcome: 'UPLOAD_ACCEPTED', verifierOutcome: 'NOT_REACHED', note: 'platform accepted the same name; see A14-1b' });
-    add('A14-1b', { testOutcome: blockedWith(r, 'PACKAGE_DIGEST_MISMATCH') ? 'DEFENDED' : 'BREACHED', platformOutcome: 'UPLOAD_ACCEPTED', verifierOutcome: vOut(r), expected: 'BLOCKED PACKAGE_DIGEST_MISMATCH' });
-  } else add('A14-2', { testOutcome: 'NOT_RUN', platformOutcome: `UPLOAD_${String(sn.uploadOutcome || 'unknown').toUpperCase()}`, verifierOutcome: 'NOT_REACHED', notRunReason: 'same-name upload step did not run' });
 
   // ---------------------------------------------------------------- A14-3a another run's artifact ID, downloaded in THIS run
   const f = a.foreign || {};
@@ -150,8 +147,66 @@ export function runAttackVerify(io) {
   const a43 = io.head === a.outputs.toolchainCommit && (!io.a4 || io.head === io.a4.outputs.toolchainCommit);
   add('A4-3', { testOutcome: a43 ? 'DEFENDED' : 'BREACHED', platformOutcome: 'CHECKOUT', verifierOutcome: 'NOT_REACHED', expected: 'verify-job checkout SHA = trusted toolchain commit of the execute jobs (structure: tests/repo_policy.test.mjs)', verifyHead: io.head });
 
-  const control = S.find((s) => s.id === 'A14-positive').testOutcome === 'CONTROL_OK';
-  const judged = S.filter((s) => !['A14-positive'].includes(s.id));
-  const overall = !control ? 'INCONCLUSIVE' : judged.some((s) => s.testOutcome === 'BREACHED') ? 'BREACHED' : judged.some((s) => s.testOutcome === 'INCONCLUSIVE') ? 'INCONCLUSIVE' : 'DEFENDED_WHERE_RUN';
-  return { suiteVersion: SUITE_VERSION, overall, notRun: judged.filter((s) => s.testOutcome === 'NOT_RUN').map((s) => s.id), scenarios: S, unsigned: true, notice: 'UNSIGNED DIAGNOSTIC — attack acceptance, never an attestation.' };
+  return summarize(S, 'main', 'A14-positive');
+}
+
+/** SAME-NAME stage — runs AFTER the main stage has downloaded and judged everything (verify-same-name job).
+ *  io = { env, head, workflowBlob, policy, caseSpecs, now,
+ *         a14: { outputs, scenario },
+ *         sameName: { uploadOutcome, artifactId, list, read },            // the second artifact of the same name
+ *         original: { downloadOutcome, list, read },                       // the ORIGINAL ID downloaded again, now
+ *         platform: { artifactsOk, artifacts (this run, from the API), sameNameErrorLines, sameNameControlOutcome } }
+ *  Three questions, three scenarios:
+ *   A14-2  platform layer: is a second artifact of the same name rejected? (rejection needs checkable conflict
+ *          evidence; an ACCEPTED upload is recorded as a finding, not as a Verifier breach)
+ *   A14-1b Verifier layer: the same-named substitute, fetched by ITS ID, must be BLOCKED (PACKAGE_DIGEST_MISMATCH)
+ *   A14-2s availability / integrity of the ORIGINAL ID after shadowing: re-downloading it must either return the
+ *          sealed bytes (digest = packageSha256) or fail (fail closed) while the API still lists the original —
+ *          it must NEVER return other bytes. */
+export function runSameNameVerify(io) {
+  const { expEnv, verify } = makeVerifier(io);
+  const S = []; const add = (id, o) => S.push({ id, ...o });
+  const a = io.a14; const expName = `package-${a.outputs.testId}.tar`;
+  const sn = io.sameName || {}; const pf = io.platform || {}; const og = io.original || {};
+  const listed = pf.artifactsOk === true && Array.isArray(pf.artifacts) ? pf.artifacts : null;
+  const sameNamed = listed ? listed.filter((x) => x.name === expName).map((x) => String(x.id)) : null;
+  const evidence = { controlUpload: pf.sameNameControlOutcome ?? null, platformErrorLines: pf.sameNameErrorLines || [], artifactsListed: !!listed, sameNamedArtifactIds: sameNamed };
+  const accepted = sn.uploadOutcome === 'success' && /^[0-9]{1,20}$/.test(sn.artifactId || '');
+  if (sn.uploadOutcome === 'failure') {
+    const ok = pf.sameNameControlOutcome === 'success' && saysConflict(pf.sameNameErrorLines || []) && !!sameNamed && sameNamed.length === 1 && sameNamed[0] === String(a.outputs.artifactId);
+    add('A14-2', ok
+      ? { testOutcome: 'DEFENDED', platformOutcome: 'UPLOAD_REJECTED_CONFLICT', verifierOutcome: 'NOT_REACHED', expected: 'platform rejects a second artifact with the same name (overwrite: false)', evidence }
+      : { testOutcome: 'INCONCLUSIVE', platformOutcome: 'UPLOAD_FAILED_REASON_UNVERIFIED', verifierOutcome: 'NOT_REACHED', manualReview: 'check the same-name job log: the failure must be the name conflict, not a network / service / permission error', evidence });
+  } else if (accepted) {
+    // the platform accepted it: a recorded platform FINDING (the plan expected a rejection); the Verifier layer is
+    // judged by A14-1b and the original ID by A14-2s. Accepted only counts as "accepted" with the API listing both.
+    const both = !!sameNamed && sameNamed.includes(String(a.outputs.artifactId)) && sameNamed.includes(String(sn.artifactId));
+    add('A14-2', both
+      ? { testOutcome: 'PLATFORM_ACCEPTED', platformOutcome: 'UPLOAD_ACCEPTED_SAME_NAME', verifierOutcome: 'NOT_REACHED', finding: 'the platform accepts a second artifact with the same name in one run (overwrite: false did not reject it)', evidence }
+      : { testOutcome: 'INCONCLUSIVE', platformOutcome: 'UPLOAD_ACCEPTED_UNVERIFIED', verifierOutcome: 'NOT_REACHED', manualReview: 'the upload step succeeded but the run listing does not show both artifacts', evidence });
+  } else add('A14-2', { testOutcome: 'NOT_RUN', platformOutcome: `UPLOAD_${String(sn.uploadOutcome || 'unknown').toUpperCase()}`, verifierOutcome: 'NOT_REACHED', notRunReason: 'same-name upload step did not run' });
+
+  // A14-1b: the substitute by its own ID
+  if (!accepted) add('A14-1b', { testOutcome: 'NOT_RUN', platformOutcome: 'NO_SECOND_ARTIFACT', verifierOutcome: 'NOT_REACHED', notRunReason: 'the platform did not accept a same-named artifact' });
+  else if (!sn.list) add('A14-1b', { testOutcome: 'INCONCLUSIVE', platformOutcome: 'SUBSTITUTE_NOT_DOWNLOADED', verifierOutcome: 'NOT_REACHED', manualReview: 'the accepted same-named artifact could not be downloaded by its ID' });
+  else { const r = verify(expEnv(a.outputs, a.scenario, { EXP_ARTIFACT_ID: sn.artifactId }), sn.list, sn.read);
+    add('A14-1b', { testOutcome: blockedWith(r, 'PACKAGE_DIGEST_MISMATCH') ? 'DEFENDED' : 'BREACHED', platformOutcome: 'SUBSTITUTE_DOWNLOADED_BY_ITS_ID', verifierOutcome: vOut(r), expected: 'BLOCKED PACKAGE_DIGEST_MISMATCH' }); }
+
+  // A14-2s: the ORIGINAL ID after shadowing
+  if (!accepted) add('A14-2s', { testOutcome: 'NOT_RUN', platformOutcome: 'NO_SHADOWING', verifierOutcome: 'NOT_REACHED', notRunReason: 'no same-named artifact exists' });
+  else if (og.downloadOutcome === 'success' && og.list) {
+    const files = og.list().filter((e) => e.isFile);
+    const bytes = files.length === 1 ? og.read(files[0].name) : null;
+    const same = !!bytes && sha(bytes) === a.outputs.packageSha256;
+    add('A14-2s', same
+      ? { testOutcome: 'DEFENDED', platformOutcome: 'ORIGINAL_STILL_DOWNLOADABLE', verifierOutcome: 'NOT_REACHED', expected: 'the original ID returns the sealed bytes or fails — never other bytes' }
+      : { testOutcome: 'BREACHED', platformOutcome: 'ORIGINAL_ID_RETURNED_OTHER_BYTES', verifierOutcome: 'NOT_REACHED', expected: 'the original ID returns the sealed bytes or fails — never other bytes', evidence: { files: files.length, sha256: bytes ? sha(bytes) : null } });
+  } else if (og.downloadOutcome === 'failure') {
+    const stillListed = !!sameNamed && sameNamed.includes(String(a.outputs.artifactId));
+    add('A14-2s', stillListed
+      ? { testOutcome: 'DEFENDED', platformOutcome: 'ORIGINAL_ID_SHADOWED_FAIL_CLOSED', verifierOutcome: 'NOT_REACHED', expected: 'the original ID returns the sealed bytes or fails — never other bytes', finding: 'a newer same-named artifact makes the original ID undownloadable for download-artifact (availability impact; fails closed)', evidence: { artifactsListed: true, originalStillListed: true } }
+      : { testOutcome: 'INCONCLUSIVE', platformOutcome: 'ORIGINAL_DOWNLOAD_FAILED_UNVERIFIED', verifierOutcome: 'NOT_REACHED', manualReview: 'the original ID failed to download and the listing does not confirm it still exists', evidence: { artifactsListed: !!listed, originalStillListed: listed ? false : null } });
+  } else add('A14-2s', { testOutcome: 'NOT_RUN', platformOutcome: `ORIGINAL_DOWNLOAD_${String(og.downloadOutcome || 'unknown').toUpperCase()}`, verifierOutcome: 'NOT_REACHED', notRunReason: 'original re-download step did not run' });
+
+  return summarize(S, 'same-name', null);
 }
