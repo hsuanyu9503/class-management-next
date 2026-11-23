@@ -1528,3 +1528,19 @@
   - PR #16 合併為 `b8d3ba4096033105f9149600f3138311e1443045`；
   - 下一步：負責人手動觸發 `attest-sigtest.yml`，之後由第三方以真實的 `gh` 驗證。**C-2 尚未驗收**。
 
+### C-2 hosted 測試簽章：`attest-sigtest.yml` run 45121359992 attempt 1（Claude 從 log 讀出；不是驗證）
+
+- 觸發：負責人，workflow_dispatch，main `b8d3ba4096033105f9149600f3138311e1443045`（PR #16 的合併 commit）。job `sigtest` success。
+- 簽章 action：`actions/attest-build-provenance@4d10147…`（內部 `actions/attest@508db95…`），`subject-path: poc/stage2/sigtest/SIGTEST.txt`。
+- log 中的事實：
+  - `Attestation created for SIGTEST.txt@sha256:63515e7c0a94b6e13d0f9ed2525b4e43b5da5221a8442a611dcc2c6d79ffb318`，與判定核心寫死的 `SIGTEST_SHA256` 相同；
+  - 使用 Public Good Sigstore 的憑證；
+  - 已上傳到 Rekor：`logIndex=4050349070`；
+  - repository attestation：`https://github.com/hsuanyu9503/class-management-next/attestations/70952425`。
+- 憑證的 SAN 在 log 中以 base64 呈現。Claude 只讀了 log，**沒有**驗證憑證或簽章。身分與政策的判定，要由第三方以 `gh` v2.102.0 以上執行 `verify-attestation.mjs --profile sigtest`。
+- 這份測試簽章會永久留在公開的透明度日誌中。它不是 statement，也不代表 PASS。
+- 待完成：
+  - 第三方的正向與反向驗證；
+  - ChatGPT 審查交付物：run、attempt、commit、subject digest、`gh` 的版本與參數、退出碼、`gh-stdout.json`、`result.json`。
+  - 通過後才記錄 C-2 驗收完成。
+

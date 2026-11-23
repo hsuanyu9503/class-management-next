@@ -87,7 +87,7 @@
   5. **C-2 已實作**（負責人 2026-11-23 指示），送新的 PR 審查（L3），見 `docs/stage2/S2B2-B3C2-REPORT.md`；
   6. ChatGPT 已審查 `1164c40`：CHANGES REQUESTED（PR16-REV001 P1、PR16-REV002 P2）。Claude 在 R1 修正後，**R1 複審 `d6d5102` 通過，兩項 CLOSED**；
   7. **已完成**：錨定 `060c588e…`（91 檔）已核准，CI 全綠，PR #16 已合併為 `b8d3ba4`（2026-11-23）；
-  8. 合併後：你手動觸發 `attest-sigtest.yml` 一次；第三方以 `gh` v2.102.0 以上執行報告 §5 的正向與反向驗證，並交付 run／attempt／commit、subject digest、`gh` 的版本與參數、退出碼、`gh-stdout.json`、`result.json`；審查通過後才記錄 C-2 驗收完成；
+  8. 合併後：你已觸發 `attest-sigtest.yml`，run **45121359992** attempt 1 成功，subject `63515e7c…`，Rekor `logIndex=4050349070`。接下來：第三方以 `gh` v2.102.0 以上執行報告 §5 的正向與反向驗證，並交付 run／attempt／commit、subject digest、`gh` 的版本與參數、退出碼、`gh-stdout.json`、`result.json`；審查通過後才記錄 C-2 驗收完成；
   9. 之後：C-3（Environment `s2-attest`，Settings 由你操作）。
 - 四個 hosted run 的 artifact 原檔重播仍待處理，需要你提供原檔給 ChatGPT。
 - **PASS 啟用的門檻**（依 Q-B 的選擇；**選擇之前 `PASS_ENABLED=false`**）：
