@@ -1318,3 +1318,20 @@
 - 審查者建議另立追蹤的可用性項目（不阻擋本 PR）：下載失敗時保存有上限的 ID／清單／錯誤診斷，並評估同一個 run 重跑或新增上傳者時的同名情況。
 - 使用者決策：`待決`
 
+### PR #14 R1 複審（ChatGPT）：程式複審通過
+
+- Reviewed Head：`d2c1c09fcfe42ff5bcf1c97e4678b21d75e6ab8a`
+- 結論：**程式複審通過**。PR14-REV001（P2）已關閉，沒有新的阻擋項目。這不是 GitHub approval、不代表 CI 全綠，也不代表 hosted 攻擊驗收已完成。
+- 審查者的證據：
+  - Head、Base 與附件的 SHA-256 一致；
+  - 在 Windows 上重跑單元測試 40/40、`repo_policy` 6/6；
+  - 獨立重算 83 檔的錨定 `7c4303b1…`，與 CI log 一致；
+  - 獨立對照：ETIMEDOUT 與原因缺失 → `CAUSE_UNVERIFIED`，沒有 finding；目標錯誤 → `SHADOWED`，有 finding；
+  - **沒有**重跑 mutation 或 Linux／root 的整合測試；這些仍是提交者的證據。
+- 非阻擋的追蹤項目：
+  1. **A14-1b 的標籤語義**：工具鏈不符等前置條件錯誤時，目前判為 `BREACHED`，應改為 `INCONCLUSIVE`，並保留原 reason code，仍以非零狀態退出。原則：預期的 `PACKAGE_DIGEST_MISMATCH` → `DEFENDED`；確認替代品被接受，或受測的不變條件遭破壞 → `BREACHED`。
+  2. **正常 `attest.yml` 的可用性診斷**：下載失敗時保存有上限的 ID／清單／錯誤診斷，並評估同一個 run 重跑或新增上傳者時的同名情況。
+- 仍未完成：修正後的 hosted 執行；run 45088076830 原檔的核對。
+- 本段記錄是在 Reviewed Head 之後新增的文件 commit，只改 `docs/REVIEW_LOG.md` 與 `docs/HANDOFF.md`。新 Head **不是**審查者已審的版本。
+- 使用者決策：`待決`（核准錨定 `7c4303b1…`、合併、合併後觸發 hosted）
+
