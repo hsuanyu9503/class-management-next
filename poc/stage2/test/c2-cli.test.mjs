@@ -1,7 +1,8 @@
 /** C-2 CLI integration (PR16-REV001 / PR16-REV002): verify-attestation.mjs against a LOCAL bare repository and a STUB
  *  gh (canned JSON — NO cryptographic verification). The candidate toolchain commit plants a sentinel in every script
  *  the old CLI would have run (scripts/verify-anchor.mjs) and in package.json scripts; the sentinel must never appear,
- *  whether the input is accepted or rejected. Needs git and tar; uses only a temporary directory. */
+ *  whether the input is accepted or rejected. Needs git; uses only a temporary directory. POSIX only: the stub gh is a
+ *  shebang script (on Windows, spawn finds only gh.exe) — Windows snapshot compatibility is covered by c2-snapshot.test.mjs. */
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { execFileSync, spawnSync } from 'node:child_process';
@@ -12,6 +13,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { computeTargets } from '../src/b3/third-party.mjs';
 import { anchorListing } from '../../../scripts/verify-anchor.mjs';
+import { materializeCommit } from '../src/b3/git-snapshot.mjs';
 
 const ROOT = path.resolve(fileURLToPath(new URL('../../../', import.meta.url)));
 const CLI = path.join(ROOT, 'poc/stage2/scripts/verify-attestation.mjs');
@@ -19,7 +21,9 @@ const sha = (b) => createHash('sha256').update(b).digest('hex');
 const tmp = mkdtempSync(path.join(os.tmpdir(), 's2-c2-cli-'));
 const SENTINEL = path.join(tmp, 'SENTINEL-candidate-code-ran');
 const g = (cwd, ...a) => execFileSync('git', ['-C', cwd, '-c', 'user.name=c2-test', '-c', 'user.email=c2-test@localhost', '-c', 'commit.gpgsign=false', ...a], { encoding: 'utf8' }).trim();
-const extractTree = (repo, rev, dir) => { mkdirSync(dir, { recursive: true }); const t = `${dir}.tar`; execFileSync('git', ['-C', repo, 'archive', '--format=tar', '-o', t, rev]); execFileSync('tar', ['-xf', t, '-C', dir]); return dir; };
+// the same tar-free snapshot as the CLI (src/b3/git-snapshot.mjs)
+const extractTree = (repo, rev, dir) => { materializeCommit(repo, rev, dir); return dir; };
+const POSIX = process.platform !== 'win32' ? {} : { skip: 'stub gh is a POSIX shebang script; Windows: see c2-snapshot.test.mjs' };
 
 // --- fixture: origin (bare) with main = B, where A = candidate toolchain with sentinels, B = A + official policy records
 const origin = path.join(tmp, 'origin.git'); const work = path.join(tmp, 'work');
@@ -71,7 +75,7 @@ const run = (mode, anchor = ANCHOR_MAIN) => {
   return { status: p.status, stderr: p.stderr, result: existsSync(path.join(out, 'result.json')) ? JSON.parse(readFileSync(path.join(out, 'result.json'), 'utf8')) : null };
 };
 
-test('PR16-REV001 (CLI): a rejected input never starts candidate code — and neither does an accepted one', () => {
+test('PR16-REV001 (CLI): a rejected input never starts candidate code — and neither does an accepted one', POSIX, () => {
   const rejected = run('one', 'b'.repeat(64));                  // wrong external anchor
   assert.equal(rejected.status, 1, rejected.stderr); assert.equal(rejected.result.result, 'REJECTED'); assert.ok(rejected.result.reasons.includes('ANCHOR_MISMATCH'));
   assert.deepEqual(rejected.result.toolchainTrees, [], 'the candidate commit must not even be extracted');
@@ -86,7 +90,7 @@ test('PR16-REV001 (CLI): a rejected input never starts candidate code — and ne
   assert.ok(!existsSync(SENTINEL), 'candidate code ran for an accepted input');
 });
 
-test('PR16-REV002 (CLI): two valid attestations sharing the toolchain commit are both accepted; one extraction', () => {
+test('PR16-REV002 (CLI): two valid attestations sharing the toolchain commit are both accepted; one extraction', POSIX, () => {
   const dup = run('dup');
   assert.equal(dup.status, 0, JSON.stringify(dup.result?.reasons)); assert.equal(dup.result.result, 'ACCEPTED');
   assert.equal(dup.result.toolchainTrees.length, 1); assert.equal(dup.result.toolchainTrees[0].commit, A);
@@ -94,7 +98,7 @@ test('PR16-REV002 (CLI): two valid attestations sharing the toolchain commit are
   assert.ok(!existsSync(SENTINEL));
 });
 
-test('PR16-REV001: the anchor path list is validated data; symbolic links and unsafe paths fail the listing', () => {
+test('PR16-REV001: the anchor path list is validated data; symbolic links and unsafe paths fail the listing', POSIX, () => {
   const fresh = (name) => extractTree(origin, B, path.join(tmp, name));
   assert.equal(anchorListing(fresh('v-ok')).digest, ANCHOR_MAIN);
   const ln = fresh('v-link'); unlinkSync(path.join(ln, 'poc/stage2/src/b3/verifier.mjs')); symlinkSync('/etc/hostname', path.join(ln, 'poc/stage2/src/b3/verifier.mjs'));
@@ -106,6 +110,31 @@ test('PR16-REV001: the anchor path list is validated data; symbolic links and un
     const dir = fresh(name); const f = path.join(dir, 'scripts/anchor-paths.json'); const d = JSON.parse(readFileSync(f, 'utf8')); mut(d); writeFileSync(f, JSON.stringify(d));
     assert.throws(() => anchorListing(dir), /anchor path list invalid/, name);
   }
+});
+
+// C-2 Windows compatibility: an environment or repository-shape problem is NOT_RUN (exit 3) with a diagnostic — never a
+// policy REJECTED (exit 1), so it cannot pass for an expected reverse-test rejection
+test('environment errors are NOT_RUN ENVIRONMENT_ERROR (exit 3), never REJECTED', POSIX, () => {
+  const runIn = (repoDir, anchor = ANCHOR_MAIN) => { const out = path.join(tmp, `out-env-${n++}`);
+    const p = spawnSync(process.execPath, [CLI, '--profile', 'sigtest', '--subject', path.join(ROOT, 'poc/stage2/sigtest/SIGTEST.txt'), '--repo-dir', repoDir, '--anchor', anchor, '--anchor-source', 'env test', '--out', out],
+      { encoding: 'utf8', env: { ...process.env, PATH: `${bin}${path.delimiter}${process.env.PATH}`, STUB_MODE: 'one' } });
+    return { status: p.status, stderr: p.stderr, result: existsSync(path.join(out, 'result.json')) ? JSON.parse(readFileSync(path.join(out, 'result.json'), 'utf8')) : null }; };
+  // 1. not a repository / no origin → fetch-main
+  const noRepo = path.join(tmp, 'no-repo'); mkdirSync(noRepo);
+  const a = runIn(noRepo);
+  assert.equal(a.status, 3, a.stderr); assert.equal(a.result.result, 'NOT_RUN'); assert.equal(a.result.reason, 'ENVIRONMENT_ERROR'); assert.equal(a.result.environment[0].stage, 'fetch-main');
+  assert.ok(!('reasons' in a.result), 'no policy reasons are invented'); assert.match(a.stderr, /NOT_RUN ENVIRONMENT_ERROR/);
+  // 2. main whose tree cannot be snapshotted safely (a symbolic link entry) → snapshot-main, not ANCHOR_MISMATCH
+  const w2 = path.join(tmp, 'work-link'); execFileSync('git', ['clone', '-q', '-b', 'main', origin, w2]);
+  const oid = execFileSync('git', ['-C', w2, 'hash-object', '-w', '--stdin'], { input: '/etc/passwd' }).toString().trim();
+  execFileSync('git', ['-C', w2, 'update-index', '--add', '--cacheinfo', `120000,${oid},docs/link`]);
+  g(w2, 'commit', '-qm', 'TEST ONLY: symbolic link entry'); g(w2, 'push', '-q', 'origin', 'HEAD:refs/heads/main');
+  const c2 = path.join(tmp, 'clone-link'); execFileSync('git', ['clone', '-q', origin, c2]);
+  const b = runIn(c2);
+  assert.equal(b.status, 3, b.stderr); assert.equal(b.result.result, 'NOT_RUN'); assert.equal(b.result.environment[0].stage, 'snapshot-main');
+  assert.match(b.result.environment[0].error, /SNAPSHOT_FAILED\[entry\]: docs\/link: mode 120000/);
+  assert.ok(!existsSync(SENTINEL));
+  g(work, 'push', '-q', '--force', 'origin', `${B}:refs/heads/main`);   // restore main = B for any later test
 });
 
 test.after(() => rmSync(tmp, { recursive: true, force: true }));
