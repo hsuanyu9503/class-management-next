@@ -212,3 +212,47 @@ test('C-2 CLI: only the fixed options; no option can replace the policy, the wor
   assert.match(cli(['--profile', 'sigtest', '--profile', 'official']).stderr, /repeated/);
   assert.match(cli(['--profile', 'sigtest']).stderr, /--subject is required/);
 });
+
+// PR16-REV001: "finally rejected" and "nothing ran before the rejection" are separate acceptance conditions
+test('PR16-REV001: targetsAt is never reached when any side-effect-free check fails', () => {
+  const offP = (o = {}) => policyOf(pol(TRUST_POLICY_VERSION, offRecs()), o);
+  const bad = {
+    'anchor mismatch': { policy: offP({ anchorExpected: 'b'.repeat(64) }) },
+    'anchor missing': { policy: offP({ anchorExpected: '' }) },
+    'policy source invalid': { policy: offP({ sourceCommit: 'main' }) },
+    'policy stale': { policy: offP({ fetchedAt: '2026-11-20T00:00:00Z' }) },
+    'fetch time invalid': { policy: offP({ fetchedAt: 'today' }) },
+    'fetch time in the future': { policy: offP({ fetchedAt: '2026-11-25T00:00:00Z' }) },
+    'policy unparsable': { policy: offP({ text: '{' }) },
+    'identity: other workflow': { verified: [item({ path: '.github/workflows/evil.yml', subject: sha(stBytes()) })] },
+    'identity: other ref': { verified: [item({ path: '.github/workflows/attest.yml', ref: 'refs/heads/evil', subject: sha(stBytes()) })] },
+    'subject mismatch': { verified: [item({ path: '.github/workflows/attest.yml', subject: 'c'.repeat(64) })] },
+    'no trusted time': { verified: [item({ path: '.github/workflows/attest.yml', subject: sha(stBytes()), ts: [] })] },
+    'signing policy not approved': { blobAt: () => 'e'.repeat(40) },
+    'gh failed': { verified: null },
+    'second attestation invalid': { verified: [item({ path: '.github/workflows/attest.yml', subject: sha(stBytes()) }), item({ path: '.github/workflows/attest.yml.bak', subject: sha(stBytes()) })] },
+  };
+  for (const [n, over] of Object.entries(bad)) {
+    const r = off({ over });
+    assert.notEqual(r.result, 'ACCEPTED', n); assert.equal(r.targetsCalls, 0, `${n}: targetsAt was called`);
+    for (const it of r.evidence.items) if ('targetsChecked' in it) assert.equal(it.targetsChecked, false, n);
+  }
+  // statement-level rejections also stop before targets
+  for (const st of [{ scenario: 'attack-a14' }, { verdict: { result: 'UNATTESTED' } }, { package: { artifactId: null } }, { toolchain: { trustedToolchainCommit: TC, signingPolicyBlob: BS } }])
+    assert.equal(off({ st }).targetsCalls, 0, JSON.stringify(st));
+});
+
+// PR16-REV002: several valid attestations sharing a toolchain — computed once, all accepted
+test('PR16-REV002: attestations sharing a toolchain commit are judged once per (commit, testId)', () => {
+  const v = item({ path: '.github/workflows/attest.yml', subject: sha(stBytes()) });
+  const two = off({ over: { verified: [v, v] } });
+  assert.equal(two.result, 'ACCEPTED', two.reasons.join()); assert.equal(two.targetsCalls, 1);
+  assert.deepEqual(two.evidence.items.map((e) => e.targetsChecked), [true, true]);
+  const three = off({ over: { verified: [v, item({ path: '.github/workflows/attest.yml', subject: sha(stBytes()), ts: [{ type: 'TimestampAuthority', timestamp: T0 }] }), v] } });
+  assert.equal(three.result, 'ACCEPTED'); assert.equal(three.targetsCalls, 1);
+  // a targets failure (computed once) rejects every attestation that depends on it
+  let calls = 0;
+  const fail = judgeAttestation({ profile: 'official', verified: [v, v], subjectBytes: stBytes(), policy: policyOf(pol(TRUST_POLICY_VERSION, offRecs())), blobAt, targetsAt: () => { calls++; return null; }, nowMs: NOW });
+  assert.deepEqual(fail.reasons, ['TARGETS_UNAVAILABLE#0', 'TARGETS_UNAVAILABLE#1']); assert.equal(calls, 1);
+});
+

@@ -13,10 +13,12 @@
  *   3. `gh attestation verify <subject> --repo … --signer-workflow <repo>/<fixed path> --source-ref refs/heads/main
  *      --format json` — the output is parsed ONLY when gh exits 0; version, arguments, exit code and output are kept;
  *   4. blobs at the signer commit via `git rev-parse <commit>:<path>` in the clone;
- *   5. (official) targets of the approved toolchain commit: its Stage 1 oracle / fixture files and its own anchor digest
- *      (`scripts/verify-anchor.mjs --print` of THAT commit — a file hasher, run only after the toolchain record checked out);
+ *   5. (official) targets of the approved toolchain commit, recomputed with THIS verifier's own code from that commit's
+ *      files: its Stage 1 oracle / fixture files and anchorListing() over its tree with ITS path list (data,
+ *      scripts/anchor-paths.json). PR16-REV001: no program from the candidate commit is ever run, and the core calls
+ *      this only after every other check of every attestation passed. PR16-REV002: one extraction per full commit SHA;
  *   6. judgeAttestation(); exit 0 only for the profile's accept label, 1 for REJECTED / REVOCATION_STATUS_UNKNOWN, 2 for usage. */
-import { execFileSync, spawnSync } from 'node:child_process';
+import { execFileSync, spawnSync } from 'node:child_process';   // spawnSync: gh only
 import { mkdirSync, mkdtempSync, readFileSync, writeFileSync, rmSync, existsSync } from 'node:fs';
 import { createHash } from 'node:crypto';
 import os from 'node:os';
@@ -50,8 +52,9 @@ if (!ghVersionOk(ghVersion)) {
 }
 
 const tmp = mkdtempSync(path.join(os.tmpdir(), 's2-verify-attestation-'));
+// each extraction gets its own fresh directory, named by the FULL commit SHA (never a prefix); a name is used once
 const extract = (rev, name) => { const dir = path.join(tmp, name); mkdirSync(dir); const tar = path.join(tmp, `${name}.tar`);
-  execFileSync('git', ['-C', repoDir, 'archive', '--format=tar', '-o', tar, rev]); execFileSync('tar', ['-xf', tar, '-C', dir]); return dir; };
+  execFileSync('git', ['-C', repoDir, 'archive', '--format=tar', '-o', tar, rev]); execFileSync('tar', ['-xf', tar, '-C', dir, '--no-same-owner']); return dir; };
 try {
   // 2. policy from main as actually fetched now
   git('fetch', '--no-tags', 'origin', '+refs/heads/main:refs/remotes/origin/main');
@@ -74,19 +77,28 @@ try {
 
   // 4. / 5. facts from the clone
   const blobAt = (commit, p) => { try { git('cat-file', '-e', `${commit}^{commit}`); const b = git('rev-parse', '--verify', `${commit}:${p}`); return /^[0-9a-f]{40}$/.test(b) ? b : null; } catch { return null; } };
+  // PR16-REV002: one extraction per full commit SHA, cached with its outcome (a failed extraction stays failed)
+  const trees = new Map();
+  const treeOf = (commit) => {
+    if (!/^[0-9a-f]{40}$/.test(commit)) return { ok: false };
+    if (!trees.has(commit)) {
+      let t;
+      try { const dir = extract(commit, `toolchain-${commit}`); t = { ok: true, dir, anchorDigest: anchorListing(dir).digest }; } catch (e) { t = { ok: false, error: String(e.message).slice(0, 200) }; }
+      trees.set(commit, t);
+    }
+    return trees.get(commit);
+  };
   const targetsAt = (commit, testId) => {
+    const t = treeOf(commit); if (!t.ok) return null;
     try {
-      const dir = extract(commit, `toolchain-${commit.slice(0, 12)}`);
-      const r = spawnSync(process.execPath, [path.join(dir, 'scripts/verify-anchor.mjs'), '--print'], { cwd: dir, encoding: 'utf8', maxBuffer: 64 << 20 });
-      const anchorDigest = (/CMN_STAGE1_ANCHOR_SHA256=([0-9a-f]{64})/.exec(r.stdout || '') || [])[1] || null;
-      return computeTargets({ oracleBytes: readFileSync(path.join(dir, 'poc/stage1/contracts/canonical-oracles-v1.0.json')),
-        fixtureBytes: readFileSync(path.join(dir, 'poc/stage1/fixtures/canonical-fixtures-v1.0.json')), testId, anchorDigest });
+      return computeTargets({ oracleBytes: readFileSync(path.join(t.dir, 'poc/stage1/contracts/canonical-oracles-v1.0.json')),
+        fixtureBytes: readFileSync(path.join(t.dir, 'poc/stage1/fixtures/canonical-fixtures-v1.0.json')), testId, anchorDigest: t.anchorDigest });
     } catch { return null; }
   };
 
   // 6. judge
   const r = judgeAttestation({ profile, verified, subjectBytes, policy, blobAt, targetsAt, nowMs: Date.now() });
-  const out = { ...r, gh: { version: ghVersion.join('.'), args: ghArgs, exitCode: gh.status, stdoutSha256: sha(gh.stdout || ''), stderr: String(gh.stderr || '').slice(0, 2000) },
+  const out = { ...r, toolchainTrees: [...trees].map(([commit, t]) => ({ commit, ok: t.ok, anchorDigest: t.anchorDigest ?? null, error: t.error ?? null })), gh: { version: ghVersion.join('.'), args: ghArgs, exitCode: gh.status, stdoutSha256: sha(gh.stdout || ''), stderr: String(gh.stderr || '').slice(0, 2000) },
     clock: { verifiedAt: iso(), source: 'local system clock of the verifier' },
     notice: 'UNSIGNED VERIFICATION RECORD. Only gh verifies signatures; this record is the policy decision over gh\'s verified output.' };
   writeFileSync(path.join(outDir, 'result.json'), JSON.stringify(out, null, 1));

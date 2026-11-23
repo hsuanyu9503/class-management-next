@@ -68,12 +68,14 @@ const timeOf = (s) => (typeof s === 'string' && UTC.test(s) && Number.isFinite(D
  *                         from the fetched main), anchorExpected (--anchor, from the owner's public record), anchorSource }
  *                       TEST INTERFACE: unit tests inject policy copies here; the CLI only ever reads the fixed file.
  *  @param o.blobAt(commit, path) → blob SHA of the file at that commit | null
- *  @param o.targetsAt(commit, testId) → recomputed targets | null (official only; called only after the toolchain record checks)
+ *  @param o.targetsAt(commit, testId) → recomputed targets | null (official only). PR16-REV001: called only after EVERY
+ *                       other check of EVERY attestation passed; at most once per (commit, testId). It must not run code
+ *                       from the commit (the CLI reads its files with the verifier's own code).
  *  @param o.nowMs       the verifier's clock */
 export function judgeAttestation({ profile, verified, subjectBytes, policy, blobAt, targetsAt, nowMs }) {
   const P = Object.hasOwn(PROFILES, profile) ? PROFILES[profile] : null;
   if (!P) throw new Error(`unknown profile: ${profile}`);
-  const reasons = []; const items = [];
+  const reasons = []; const items = []; const pending = [];
   const rej = (code, i = null) => reasons.push(i === null ? code : `${code}#${i}`);
   const subjectSha = Buffer.isBuffer(subjectBytes) ? sha(subjectBytes) : null;
   const ev = { version: THIRD_PARTY_VERSION, profile, unsigned: true, now: Number.isFinite(nowMs) ? new Date(nowMs).toISOString() : null, subjectSha256: subjectSha, items,
@@ -142,11 +144,23 @@ export function judgeAttestation({ profile, verified, subjectBytes, policy, blob
     const r = recOk('toolchain', tcc); e.toolchainApprovals = r.ids;
     if (r.invalidated) { rej('TOOLCHAIN_INVALIDATED', i); return; }
     if (!r.ok) { rej('TOOLCHAIN_NOT_VALID_AT_SIGNING_TIME', i); return; }
-    // targets are recomputed from the approved toolchain commit only after its record checked out
-    const tg = typeof st.testId === 'string' ? targetsAt(tcc, st.testId) : null;
-    if (!isObj(tg)) rej('TARGETS_UNAVAILABLE', i);
-    else if (!isObj(st.targets) || stableJson(st.targets) !== stableJson(tg)) rej('TARGETS_MISMATCH', i);
+    // PR16-REV001: targets are NOT computed here — only queued (phase 2 below)
+    pending.push({ i, commit: tcc, testId: st.testId, targets: st.targets, e });
   });
+  // Phase 2 (PR16-REV001): targetsAt reads files of a candidate commit. It runs only when EVERY side-effect-free
+  // check of EVERY attestation passed (external anchor, policy source and freshness, identity, times, subject, signing
+  // policy, statement fields, toolchain record) — a rejection must happen before, never after, that access.
+  // PR16-REV002: memoised by full commit + testId, so attestations sharing a toolchain are computed once.
+  if (!reasons.length && !stale) {
+    const memo = new Map();
+    for (const { i, commit, testId, targets, e } of pending) {
+      const key = `${commit}\0${testId}`;
+      if (!memo.has(key)) memo.set(key, typeof testId === 'string' ? targetsAt(commit, testId) : null);
+      const tg = memo.get(key); e.targetsChecked = true;
+      if (!isObj(tg)) rej('TARGETS_UNAVAILABLE', i);
+      else if (!isObj(targets) || stableJson(targets) !== stableJson(tg)) rej('TARGETS_MISMATCH', i);
+    }
+  } else for (const { e } of pending) e.targetsChecked = false;
   const result = reasons.length ? 'REJECTED' : stale ? 'REVOCATION_STATUS_UNKNOWN' : P.accept;
   return { result, reasons: [...new Set(reasons)], accepted: result === P.accept, stalePolicy: stale, evidence: ev };
 }
