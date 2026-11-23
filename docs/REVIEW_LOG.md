@@ -1387,3 +1387,19 @@
   - `PASS_ENABLED=false`、POC-009 BLOCKED、Stage 1 的 72 筆 NOT_RUN；
   - N5、N7、main 摘要、NOTE-c 原文缺失不因本次結果結案。
 
+### A14-3b-i／ii 原檔獨立重播（ChatGPT，2026-11-23）：缺件關閉
+
+- 原檔：run 45087498469 的 artifact 14780101081（`package-POC-001.tar`，87552 bytes）。
+  - SHA-256 `d3dfaacf31a0bb68c13469ebda2370975ae57786577f7cfd3c2f440320de985b`；manifest `3dafa587…`；
+  - 封裝內的 `run.json` 確認來源是 run 45087498469。
+- 方法：
+  - 使用已審、版本 `2f78f9b…` 的 `runVerifyJob`。可信的預期輸入取自 hosted verify-attack 的 log（run 45094456766 attempt 1，scenario `attack-a14`），不採信舊封裝內的 run、nonce 或工具鏈；
+  - 只做資料解析並執行可信 Verifier，不執行封裝內的程式。
+- 結果，兩項都與 hosted 一致：
+  - A14-3b-i：BLOCKED `PACKAGE_DIGEST_MISMATCH`；
+  - A14-3b-ii：外層 digest 同步後，仍 BLOCKED `RUN_BINDING_MISMATCH`、`SCENARIO_MISMATCH`、`NONCE_MISMATCH`；
+  - 兩項的 `delivery.signing` 都是 `NOT_ATTEMPTED_NOT_PASS`。
+- 結論：A14-3b-i／ii 為「原檔獨立重播完成，與 hosted 一致」，**C-1 的 hosted 證據收尾**（報告 §12）。沒有新的修正要求，也不需要再觸發 hosted。這不授權開啟 PASS、簽章或更改 Settings。
+- 機器可讀的結果在審查者本機：`work/hosted45094456766/a14-3b-replay-results.json`。這是審查者的證據，不在本 repository。
+- 下一步：Claude 提出 C-2 計畫（`docs/stage2/S2B2-B3C2-PLAN.md`，草案），經審查與負責人確認後才實作。
+

@@ -80,13 +80,9 @@
   1. A14-1b 在工具鏈不符等前置條件錯誤時判 `BREACHED`，應改為 `INCONCLUSIVE`（保留 reason code，仍以非零狀態退出）；
   2. 正常 `attest.yml` 的可用性診斷：下載失敗時保存有上限的診斷，並評估同一個 run 重跑或新增上傳者時的同名情況。
 - 下一位負責人：
-  1. 你：已觸發 `attest-attack.yml`，run **45094456766** attempt 1。7 個 job 全部 success，兩個階段都是 `DEFENDED_WHERE_RUN`，A10 為 9/9，詳見 REVIEW_LOG。ChatGPT 已核對 8 份原檔並通過，A14-3b-i/ii 的獨立重播還待補。接下來請下載舊 run 45087498469 的 artifact 14780101081（`package-POC-001.tar`，87552 bytes，`d3dfaacf…`）交給 ChatGPT；補齊後由 Claude 整理 C-1 完成紀錄與 C-2 計畫；
-  2. ChatGPT：以原檔做 hosted 驗收。需要交付：
-     - run ID 與 attempt、實際的工具鏈版本；
-     - `s2-attack-a10`、`s2-attack-summary`、`s2-attack-summary-same-name`；
-     - 平台證據（含 `probe-original` 的錯誤行）；
-     - 相應的封裝原檔與 hash；
-  3. Claude：處理上面的追蹤項目，之後進行 C-2（A18 流程 I）。
+  1. 你：已觸發 `attest-attack.yml`，run **45094456766** attempt 1。7 個 job 全部 success，兩個階段都是 `DEFENDED_WHERE_RUN`，A10 為 9/9，詳見 REVIEW_LOG。ChatGPT 已核對 8 份原檔與舊 run 的封裝，A14-3b-i/ii 的重播也與 hosted 一致：**C-1 的 hosted 證據已收尾**（報告 §12）；
+  2. ChatGPT：審查 C-2 計畫草案 `docs/stage2/S2B2-B3C2-PLAN.md`（v0.1）；
+  3. 你：決定計畫 §8 的問題（追蹤項目的處理方式、第三方取得錨定值的方式），核准後 Claude 才實作 C-2。
 - 四個 hosted run 的 artifact 原檔重播仍待處理，需要你提供原檔給 ChatGPT。
 - **PASS 啟用的門檻**（依 Q-B 的選擇；**選擇之前 `PASS_ENABLED=false`**）：
   - **流程 I（保留原門檻）**：A4／A10／A14 的 hosted 驗收、A18 的隔離測試簽章驗收（分為密碼學／身分層與 statement 政策層），以及第三方驗證腳本，**全部**完成並經獨立審查、負責人核准之後，才進入打開 PASS 的 PR。

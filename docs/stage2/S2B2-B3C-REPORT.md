@@ -309,3 +309,39 @@ PR #13 合併後（`b5ae349`），負責人在 2026-11-23 觸發 `attest-attack.
 - 修正後的 hosted 執行；
 - run 45088076830 的原檔核對。
 
+## 12. 修正後的 hosted 攻擊驗收（run 45094456766）：C-1 hosted 證據收尾
+
+- 執行：負責人以 workflow_dispatch 觸發，attempt 1。
+  - main 與工具鏈 commit 都是 `2f78f9b72fe8492ae3b3aaba8d06ff234a1fe73f`（PR #14 的合併 commit）；workflow blob `9206e80c…`；
+  - 錨定 `7c4303b1…`；沒有簽章；
+  - 7 個 job 都是 success。`probe-original` 的下載步驟依設計失敗（continue-on-error），這**不是**原 ID 下載成功。
+- 結果與證據層級：
+
+| 案例 | hosted 結果 | 審查者的原檔證據 |
+|---|---|---|
+| A10（9 組） | 9/9 符合預期；A10-main 為 `REAL_TARGETS_ONLY`，必要的 5 個目標都是 DEFENDED | 診斷 JSON 的 digest 核對，並以已審的 judge 重算 |
+| A14-positive | `CONTROL_OK`；UNATTESTED（`TRUST_ROOT_NOT_CONFIGURED`、`SCENARIO_NOT_HONEST`） | 真封裝重播 |
+| A14-1 | DEFENDED（`ARTIFACT_SELECTION_MISMATCH`） | 誘餌重播 |
+| A14-1b | DEFENDED（`PACKAGE_DIGEST_MISMATCH`） | 同名替代品的位元組重播 |
+| A14-2 | `PLATFORM_ACCEPTED`（finding；不是 Verifier 失守） | API 雙 ID 清單、上傳 log、摘要 |
+| A14-2s | DEFENDED（`ORIGINAL_ID_SHADOWED_FAIL_CLOSED`；可用性 finding） | `probe-original` 與 `verify-same-name` 的 ID-not-found 錯誤行、雙 ID 清單 |
+| A14-3a | DEFENDED | hosted log、兩個 run 的清單、artifact 歸屬與到期狀態 |
+| A14-3b-i | DEFENDED（`PACKAGE_DIGEST_MISMATCH`） | 舊 run 45087498469 的 artifact 14780101081（`d3dfaacf…`）重播 |
+| A14-3b-ii | DEFENDED（`RUN_BINDING_MISMATCH`、`SCENARIO_MISMATCH`、`NONCE_MISMATCH`） | 同上；外層 digest 同步後，仍因綁定不符被拒絕 |
+| A4-1 | DEFENDED；UNATTESTED | POC-002 原封裝重播；可信樹未變更依 hosted outputs 與 log |
+| A4-2-i／ii | DEFENDED（`PACKAGE_DIGEST_MISMATCH`／`PAYLOAD_SET_MISMATCH`） | 從原封裝產生受控注入後重播 |
+| A4-3 | DEFENDED | 執行與驗證 SHA、workflow 結構、遠端版本 |
+
+- 結論：**C-1 的 hosted 證據已收尾**。所有案例都有原檔層級的審查證據，沒有新的產品阻擋缺陷，也沒有新的修正要求。
+- 界線（審查者界定）：
+  - `ENV_*` 為 `N/A_HOST_ABSENT`，不能宣稱這次測到了實際 token 的阻擋；`PORT_183xx` 為 `N/A_HOST_UNREACHABLE`，不能當成防禦成功；
+  - A10 是原始診斷的一致性重算，不是獨立觀測主機。安全診斷沒有保留完整的沙箱原始資料；N7 主機來源的信任限制仍在；
+  - 平台證據 JSON 沒有獨立隨附件提供，用 API 清單、日誌與摘要欄位交叉核對；
+  - 同名的可用性問題只在該 action 版本與該次 run 下觀察到，不能推廣成一般保證。
+- 仍然保留：
+  - A14-2 與 A14-2s 的平台 finding；
+  - 非阻擋的追蹤項目：A14-1b 標籤、`attest.yml` 的可用性診斷；
+  - 另行追蹤：run 45088076830 原檔核對、四個正常 hosted run 的原檔重播；
+  - `PASS_ENABLED=false`、POC-009 BLOCKED、Stage 1 的 72 筆 NOT_RUN；
+  - N5、N7、main 摘要、NOTE-c（原文缺失，待確認）都不因此結案。
+
