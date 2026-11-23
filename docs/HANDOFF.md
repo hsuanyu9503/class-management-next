@@ -85,8 +85,8 @@
   3. ChatGPT 已審查 PR #15（Reviewed Head `dbe6562`）：**C-1f 程式審查通過**；C-2 計畫方向可採用，4 項備註已納入計畫 v0.2；
   4. **已完成**：錨定 `d07dfc54…`（85 檔）已核准，CI 全綠，PR #15 已合併為 `da25061`（2026-11-23）；
   5. **C-2 已實作**（負責人 2026-11-23 指示），送新的 PR 審查（L3），見 `docs/stage2/S2B2-B3C2-REPORT.md`；
-  6. ChatGPT：審查 C-2；
-  7. 你：核准錨定 `afa0dcd3bf824a17de45d5af883666d3f93be2b8352be1e831f8aacf2469822d`（90 檔），確認 CI 全綠後決定是否合併；
+  6. ChatGPT 已審查 `1164c40`：CHANGES REQUESTED（PR16-REV001 P1、PR16-REV002 P2）。Claude 已在 R1 修正（報告 §7），請 ChatGPT 複審；
+  7. 你：核准錨定 `060c588e4f919f48bfcbf5c14f3d29ffbb1f36d3d1be957289908bd79e942c25`（91 檔；`afa0dcd3…` 已作廢），確認 CI 全綠後決定是否合併；
   8. 合併後：你手動觸發 `attest-sigtest.yml` 一次；第三方以 `gh` v2.102.0 以上執行報告 §5 的正向與反向驗證；
   9. 之後：C-3（Environment `s2-attest`，Settings 由你操作）。
 - 四個 hosted run 的 artifact 原檔重播仍待處理，需要你提供原檔給 ChatGPT。

@@ -1465,5 +1465,38 @@
   - targets 的 `anchorDigest` 由已核准工具鏈 commit 自己的錨定腳本算出，只在 toolchain 紀錄有效後才執行；
   - subject 要求「至少一個」相符；
   - 測試身分政策的 `reviewRef` 與 `validFrom`。
-- 使用者決策：`待決`（審查、核准錨定、合併；合併後手動觸發 `attest-sigtest.yml`）
+- 使用者決策：`待決`（見下方 R1）
+
+### PR #16 審查（ChatGPT）：CHANGES REQUESTED（PR16-REV001 P1、PR16-REV002 P2）→ Claude R1 修正
+
+- Reviewed Head：`1164c40dba63081448e091a02ff8b09dc0dc8132`
+- 審查者的發現：
+  - **PR16-REV001（P1）**：錨定不符等拒絕之後，official 分支仍呼叫 `targetsAt`。CLI 的 `targetsAt` 會執行候選 commit 的腳本，最後才 `REJECTED`，無法撤銷副作用；
+  - **PR16-REV002（P2）**：兩份有效的 official 證據共用工具鏈時，第二次解開會 `EEXIST`，被轉成 `TARGETS_UNAVAILABLE#1`。
+- 審查者的證據：
+  - Head、Base 與附件一致，ZIP 內 10 份檔案與 Head 逐字一致；
+  - 在 Windows／Node 26.13.1 上：`c2-unit` 11/11、`repo_policy` 7/7；`anchor_coverage` 因 Windows 路徑分隔符失敗 1 項（不列為 finding）；
+  - 兩個反例都重現；
+  - 獨立重算錨定 90 檔，與提交值一致；
+  - **沒有**重跑：160/160、B3、mutation；也沒有執行真實的 `gh`。
+- 審查者對設計問題的答覆：
+  - subject「至少一個相符」可以接受；
+  - 執行歷史工具鏈的腳本不是天然安全的讀檔操作；
+  - 測試身分政策的生效依賴已錨定的 `main`，審查不等於負責人核准。
+- Claude R1 修正（報告 §3、§7）：
+  - REV001：
+    - protected 清單改為已驗證的資料檔 `scripts/anchor-paths.json`，驗證者用自己的程式計算候選 commit 的錨定值，**不執行候選程式**；
+    - 兩階段判定，無副作用的檢查全部通過且政策沒過期，才讀取候選 commit；
+    - 錨定清單拒絕符號連結與不安全的路徑；
+  - REV002：核心依（commit，testId）快取，CLI 依完整 SHA 快取解開的結果；
+  - 另外修正 `anchor_coverage` 的 POSIX 路徑。
+- R1 的本機結果（提交者證據）：
+  - `npm run check`、`npm test` 20/20、`stage1:all` 通過；
+  - `s2:test` 165/165：`c2-unit` 13 項；`c2-cli` 3 項，用本機 bare repo、假的 `gh` 和 sentinel；
+  - `s2:b3` 33/33（`S2B2B3A-20261123T054522Z-751913ee`）；
+  - mutation：
+    - Y1～Y10 中 9 項被抓到；Y5（CLI 解開快取）是等價的 mutation，因為一次 CLI 只有一個 testId，核心快取已經涵蓋；
+    - 既有的 56＋16＋36 項全部被抓到。protected 清單移到資料檔後，R11、R12、W15、X34 改指向 `anchor-paths.json`，X25 改指向第二階段的比對。
+- 新錨定：`060c588e4f919f48bfcbf5c14f3d29ffbb1f36d3d1be957289908bd79e942c25`（91 檔）。送審時的 `afa0dcd3…` 已作廢。
+- 使用者決策：`待決`（R1 複審、核准錨定、合併；合併後手動觸發 `attest-sigtest.yml`）
 
