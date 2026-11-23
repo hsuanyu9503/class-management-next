@@ -1267,3 +1267,19 @@
 - 本段記錄是在 Reviewed Head 之後新增的文件 commit，只改 `docs/REVIEW_LOG.md` 與 `docs/HANDOFF.md`。新 Head **不是**審查者已審的版本。
 - 使用者決策：`待決`（核准錨定 `31c23e4d…`、合併、合併後觸發 hosted 攻擊驗收）
 
+### PR #13 合併
+
+- 負責人（2026-11-23）：「錨定已核准，pr13合併」。
+- 合併前的檢查：
+  - 第一次重跑時，`baseline-anchor` 讀到的仍是舊值 `fe954c3a…`，Claude 因此先停止合併，並請負責人確認 repository variable；
+  - 負責人更新變數後，`baseline-anchor` 重跑結果為 `ANCHOR_OK`：83 個受保護檔案與 `31c23e4dc7bafdf80943581e459576bd0afef9a9f495fc6d046911a36fadb8d3` 一致；
+  - Head `fd4e565` 的 `validate` 與 `baseline-anchor` 都通過。
+- 合併：merge commit `b5ae349f1498620ac55fd38cbe888e5d77b40aa9`，`expectedHeadSha` 為 `fd4e565`。
+- 合併後：
+  - `main` 的 CI 45087498485：success；
+  - push 觸發的 `attest.yml` run 45087498469：POC-001，`EXP_SCENARIO: honest` → `UNATTESTED [TRUST_ROOT_NOT_CONFIGURED]`，statement `21ca461a…`，簽章 skipped；
+  - 封裝 artifact 14780101081，digest `d3dfaacf31a0bb68c13469ebda2370975ae57786577f7cfd3c2f440320de985b`，上傳與下載一致；
+  - 以上只來自 job log。
+- 尚未執行：hosted 的 `attest-attack.yml`，由負責人觸發。
+- 使用者決策：合併 `已核准`；錨定 `已核准`
+

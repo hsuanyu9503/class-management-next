@@ -61,12 +61,18 @@
   - 本機結果（R3）：`npm test` 19/19、`s2:test` 143/143、`s2:b3` 33/33、`s2:a10` 9/9、mutation 43/43、attest-attack 的本機模擬。
   - **hosted 的 `attest-attack.yml` 尚未執行**（NOT_RUN）。合併並重新核准錨定之後，由負責人手動觸發。
   - `PASS_ENABLED=false`；沒有簽章權限；沒有設定任何變數或 Settings。
+- **PR #13（C-1）已合併**（2026-11-23）：
+  - 負責人核准錨定 `31c23e4dc7bafdf80943581e459576bd0afef9a9f495fc6d046911a36fadb8d3`（83 檔）；
+  - 合併前，Head `fd4e565` 的 CI 全綠：重跑後 `baseline-anchor` 為 `ANCHOR_OK`；
+  - merge commit：`b5ae349f1498620ac55fd38cbe888e5d77b40aa9`；
+  - 合併後 `main` 的 CI 45087498485：success；
+  - push 觸發的 `attest.yml` run 45087498469：POC-001 honest → `UNATTESTED [TRUST_ROOT_NOT_CONFIGURED]`，簽章 skipped。封裝 artifact 14780101081（`d3dfaacf…`），診斷 artifact 14778829583。
 - 下一位負責人：你。
-  1. 核准錨定 `31c23e4dc7bafdf80943581e459576bd0afef9a9f495fc6d046911a36fadb8d3`（83 檔）；
-  2. 確認同 Head 的 CI 全部通過（含 `baseline-anchor`）後，決定是否合併；
-  3. 合併後手動觸發 `attest-attack.yml`：`previousRunId` 與 `previousArtifactId` 填仍在保存期內的其他 run，並保存 `s2-attack-a10`、`s2-attack-summary`，以及 A14、誘餌、A4-1 三個封裝與各自的 run／artifact ID。
+  - 手動觸發 `attest-attack.yml`（Actions → S2 attack acceptance → Run workflow，分支選 `main`）；
+  - `previousRunId` 與 `previousArtifactId` 填仍在保存期內的其他 run，例如 `45087498469` 與 `14780101081`；
+  - 保存 `s2-attack-a10`、`s2-attack-summary`，以及 A14、誘餌、A4-1 三個封裝與各自的 run／artifact ID，交給 ChatGPT 做 hosted 驗收。
 
-  之後交給 ChatGPT 做 hosted 驗收，再由 Claude 進行 C-2（A18 流程 I）。
+  之後由 Claude 進行 C-2（A18 流程 I）。
 - 四個 hosted run 的 artifact 原檔重播仍待處理，需要你提供原檔給 ChatGPT。
 - **PASS 啟用的門檻**（依 Q-B 的選擇；**選擇之前 `PASS_ENABLED=false`**）：
   - **流程 I（保留原門檻）**：A4／A10／A14 的 hosted 驗收、A18 的隔離測試簽章驗收（分為密碼學／身分層與 statement 政策層），以及第三方驗證腳本，**全部**完成並經獨立審查、負責人核准之後，才進入打開 PASS 的 PR。
@@ -212,5 +218,6 @@
 | 2026-11-23 | ChatGPT → Claude | R2 複審 `e4aee0dbef22`：CHANGES REQUESTED（A14-3a 的必要欄位） | R3 修正 |
 | 2026-11-23 | Claude → ChatGPT | C-1 R3（錨定 `31c23e4d…`，83 檔） | 複審 |
 | 2026-11-23 | ChatGPT → Claude | R3 審查 `60169cfaf9b3`：程式審查通過（C1-REV001～005 結案；hosted 驗收待完成） | 負責人核准錨定與合併 |
+| 2026-11-23 | 負責人 | 核准錨定 `31c23e4d…`；合併 PR #13（`b5ae349`） | 觸發 hosted 攻擊驗收 |
 
 > 規格的正式變更請同步修改 SPEC／TECH，不要只在這裡留下新決策。
