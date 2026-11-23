@@ -67,12 +67,14 @@ test('attest-attack.yml：只能手動觸發、只在 main、沒有任何簽章�
   assert.match(w, /^permissions: \{\}$/m);
   assert.doesNotMatch(w, /id-token|attestations|attest-build-provenance|secrets\./);
   const jobs = jobsOf(w);
-  assert.deepEqual(Object.keys(jobs).sort(), ['a10', 'execute-a14', 'execute-a4', 'same-name', 'verify-attack', 'verify-same-name']);
+  assert.deepEqual(Object.keys(jobs).sort(), ['a10', 'execute-a14', 'execute-a4', 'probe-original', 'same-name', 'verify-attack', 'verify-same-name']);
   // hosted run 45088076830: a same-named artifact shadows the original ID → the same-name upload must come AFTER the
   // main verification has downloaded the real package, and is judged by its own job afterwards
   assert.match(jobs['verify-attack'], /\n    needs: \[execute-a14, execute-a4\]\n/); assert.doesNotMatch(jobs['verify-attack'], /same-name/);
   assert.match(jobs['same-name'], /\n    needs: \[execute-a14, verify-attack\]\n/);
-  assert.match(jobs['verify-same-name'], /\n    needs: \[execute-a14, same-name\]\n/);
+  assert.match(jobs['probe-original'], /\n    needs: \[execute-a14, same-name\]\n/);
+  assert.match(jobs['probe-original'], /\n    permissions:\n      actions: read\n    outputs:/); assert.deepEqual(runLines(jobs['probe-original']), []); assert.doesNotMatch(jobs['probe-original'], /checkout/);
+  assert.match(jobs['verify-same-name'], /\n    needs: \[execute-a14, same-name, probe-original\]\n/); assert.match(jobs['verify-same-name'], /PROBE_ORIGINAL_OUTCOME: \$\{\{ needs\.probe-original\.outputs\.outcome \}\}\n/);
   assert.match(jobs['verify-same-name'], /\n    permissions:\n      contents: read\n      actions: read\n    steps:/);
   assert.match(jobs['verify-same-name'], /STAGE: same-name\n/); assert.match(jobs['verify-same-name'], /A14_SCENARIO: attack-a14\n/);
   assert.deepEqual(runLines(jobs['verify-same-name']), ['node poc/stage2/scripts/attack-platform-evidence.mjs', 'node poc/stage2/scripts/attack-verify.mjs']);

@@ -5,7 +5,7 @@ import { readFileSync as rf } from 'node:fs';
 import { createHash } from 'node:crypto';
 import { fileURLToPath as f2p } from 'node:url';
 import { writePackage, readPackageSafe } from '../src/b3/package.mjs';
-import { runAttackVerify, runSameNameVerify, errorLines, saysConflict, foreignEvidenceFrom } from '../src/b3/attack-suite.mjs';
+import { runAttackVerify, runSameNameVerify, errorLines, saysConflict, saysIdNotFound, foreignEvidenceFrom } from '../src/b3/attack-suite.mjs';
 
 const sha = (b) => createHash('sha256').update(b).digest('hex');
 const FIX = f2p(new URL('./fixtures/b3a-honest-poc001/', import.meta.url));
@@ -51,12 +51,14 @@ test('attack suite: expected defences on the fixture (positive control, A14-1/2/
 });
 
 // ------------------------------------------------------------------ same-name stage (after the main verification)
+const ID_NOT_FOUND = '##[error]Unable to download artifact(s): None of the provided artifact IDs were found';   // as logged in run 45088076830
 const pkgA14Sha = createHash('sha256').update(pkgA14.packageBytes).digest('hex');
 const snIo = (o = {}) => ({ env: io().env, head: run0.trustedToolchainCommit, workflowBlob: 'b'.repeat(40), policy: null, caseSpecs: { 'POC-001': caseSpec001 }, now: () => new Date('2026-11-22T00:00:00Z'),
   a14: { outputs: outputsOf(pkgA14), scenario: 'attack-a14' },
   sameName: { uploadOutcome: 'success', artifactId: '1004', list: one('package-POC-001.tar'), read: () => Buffer.from('random same-named bytes') },
   original: { downloadOutcome: 'failure' },
-  platform: platformOk({ artifacts: [...platformOk().artifacts, { id: '1004', name: 'package-POC-001.tar' }], sameNameErrorLines: [] }), ...o });
+  platform: platformOk({ artifacts: [...platformOk().artifacts, { id: '1004', name: 'package-POC-001.tar' }], sameNameErrorLines: [], probeOriginalOutcome: 'failure', probeOriginalErrorLines: [ID_NOT_FOUND] }), ...o });
+const snPlatform = (o) => snIo().platform && { ...snIo().platform, ...o };
 test('same-name stage: the hosted reproduction (run 45088076830) — accepted, substitute blocked, original shadowed fail closed', () => {
   const r = runSameNameVerify(snIo());
   assert.equal(r.stage, 'same-name');
@@ -230,5 +232,35 @@ test('C1-REV001 R3: API response → platform evidence keeps unknown fields unkn
   // the collector uses exactly this conversion
   const src = rf(f2p(new URL('../scripts/attack-platform-evidence.mjs', import.meta.url)), 'utf8');
   assert.match(src, /out\.foreign = foreignEvidenceFrom\(foreignId, r\.status, j\);/); assert.doesNotMatch(src, /j\.expired === true/);
+});
+
+// ------------------------------------------------------------------ PR14-REV001: a failure is not attributed without evidence
+test('PR14-REV001: shadowing is recorded only with the probe-original ID-not-found error, both IDs listed and both downloads failed', () => {
+  const r = runSameNameVerify(snIo());
+  assert.deepEqual([sc(r, 'A14-2s').testOutcome, sc(r, 'A14-2s').platformOutcome], ['DEFENDED', 'ORIGINAL_ID_SHADOWED_FAIL_CLOSED']);
+  assert.equal(sc(r, 'A14-2s').evidence.causeVerified, true); assert.match(sc(r, 'A14-2s').finding, /attributed by the probe-original log/);
+  const unverified = {
+    'timeout': ['##[error]Unable to download artifact(s): connect ETIMEDOUT 140.82.112.21:443'],
+    'service failure': ['##[error]Failed request: (503) Service Unavailable'],
+    'permission': ['##[error]Unable to download artifact(s): Resource not accessible by integration (403)'],
+    'unknown / no error line': [],
+  };
+  for (const [n, lines] of Object.entries(unverified)) {
+    const x = runSameNameVerify(snIo({ platform: snPlatform({ probeOriginalErrorLines: lines }) }));
+    const t = sc(x, 'A14-2s');
+    assert.deepEqual([t.testOutcome, t.platformOutcome], ['DEFENDED', 'ORIGINAL_DOWNLOAD_FAILED_CAUSE_UNVERIFIED'], n);   // limited proposition only
+    assert.equal(t.finding, undefined, n); assert.equal(t.evidence.causeVerified, false, n); assert.match(t.note, /CAUSE of the failure is not established/, n);
+    assert.ok(!x.findings.some((f) => f.id === 'A14-2s'), n);
+  }
+  // the target error line, but the other evidence is missing → still not attributed
+  for (const [n, o] of Object.entries({ 'probe succeeded': { probeOriginalOutcome: 'success' }, 'probe outcome unknown': { probeOriginalOutcome: null }, 'no probe log': { probeOriginalErrorLines: undefined } })) {
+    assert.equal(sc(runSameNameVerify(snIo({ platform: snPlatform(o) })), 'A14-2s').platformOutcome, 'ORIGINAL_DOWNLOAD_FAILED_CAUSE_UNVERIFIED', n);
+  }
+  const notBoth = runSameNameVerify(snIo({ platform: snPlatform({ artifacts: [{ id: '1001', name: 'package-POC-001.tar' }] }) }));
+  assert.equal(sc(notBoth, 'A14-2s').platformOutcome, 'ORIGINAL_DOWNLOAD_FAILED_CAUSE_UNVERIFIED');
+  // the reviewer's probe: an ETIMEDOUT diagnostic no longer yields the shadowing finding
+  const probe = runSameNameVerify(snIo({ platform: snPlatform({ probeOriginalErrorLines: ['##[error]connect ETIMEDOUT'] }) }));
+  assert.notEqual(sc(probe, 'A14-2s').platformOutcome, 'ORIGINAL_ID_SHADOWED_FAIL_CLOSED');
+  assert.equal(saysIdNotFound([ID_NOT_FOUND]), true); assert.equal(saysIdNotFound(['##[error]ETIMEDOUT']), false); assert.equal(saysIdNotFound(undefined), false);
 });
 

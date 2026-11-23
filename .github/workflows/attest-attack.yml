@@ -356,10 +356,30 @@ jobs:
           if-no-files-found: error
           overwrite: false
 
+  probe-original:
+    # PR14-REV001: the ORIGINAL ID re-downloaded in its OWN job, so that its error (if any) can be read from the job
+    # log afterwards and a failure is attributed to shadowing only with that evidence. No checkout, no code.
+    needs: [execute-a14, same-name]
+    if: always() && github.ref == 'refs/heads/main' && needs.execute-a14.result == 'success'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      actions: read
+    outputs:
+      outcome: ${{ steps.dl.outcome }}
+    steps:
+      - name: 依原本的 ID 再次下載真封裝（只為了留下這一步自己的錯誤訊息）
+        id: dl
+        continue-on-error: true
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          artifact-ids: ${{ needs.execute-a14.outputs.artifactId }}
+          path: ${{ runner.temp }}/s2-probe
+
   verify-same-name:
     # A14-2 / A14-1b / A14-2s, AFTER the same-name upload: platform acceptance (finding), the substitute by its own
     # ID (Verifier must block it), and the ORIGINAL ID again (sealed bytes or fail closed — never other bytes)
-    needs: [execute-a14, same-name]
+    needs: [execute-a14, same-name, probe-original]
     if: always() && github.ref == 'refs/heads/main' && needs.execute-a14.result == 'success'
     runs-on: ubuntu-24.04
     timeout-minutes: 20
@@ -402,6 +422,7 @@ jobs:
           GITHUB_TOKEN: ${{ github.token }}
           OUT_FILE: ${{ runner.temp }}/s2-platform-sn.json
           SAMENAME_CONTROL_OUTCOME: ${{ needs.same-name.outputs.controlOutcome }}
+          PROBE_ORIGINAL_OUTCOME: ${{ needs.probe-original.outputs.outcome }}
         run: node poc/stage2/scripts/attack-platform-evidence.mjs
       - name: 判定 A14-2／A14-1b／A14-2s（只做安全解析；沒有簽章；非 DEFENDED_WHERE_RUN 時失敗）
         env:

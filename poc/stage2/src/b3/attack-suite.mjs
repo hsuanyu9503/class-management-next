@@ -11,7 +11,7 @@ import { createHash } from 'node:crypto';
 import { runVerifyJob } from './attest-verify.mjs';
 import { readPackageSafe, writePackage } from './package.mjs';
 
-export const SUITE_VERSION = 's2-attack-suite-v3';   // v3: same-name stage AFTER the main verification (hosted run 45088076830: the platform accepted the
+export const SUITE_VERSION = 's2-attack-suite-v4';   // v4: PR14-REV001 — a failed original-ID download is attributed to shadowing only with evidence   // v3: same-name stage AFTER the main verification (hosted run 45088076830: the platform accepted the
                                                    // same-name upload and the newer artifact shadowed the original ID for download-artifact)   // v2: C1-REV001 — a failed platform step is never DEFENDED by itself
 
 /** Platform error lines of a job log ("##[error]" lines only), bounded — kept for the reviewer and for the
@@ -33,6 +33,9 @@ export function foreignEvidenceFrom(artifactId, status, body) {
     name: ok && typeof body.name === 'string' ? body.name : null };
 }
 const RUN_ID_RE = /^[1-9][0-9]{0,19}$/;
+/** PR14-REV001: the download-artifact error that identifies the shadowing seen in hosted run 45088076830 (the ID is
+ *  absent from the run's de-duplicated list). Any other failure (timeout, 5xx, 401/403, unknown) is NOT shadowing. */
+export const saysIdNotFound = (lines) => Array.isArray(lines) && lines.some((l) => typeof l === 'string' && /None of the provided artifact IDs were found/.test(l));
 export const saysConflict = (lines) => lines.some((l) => /\b409\b/.test(l) && /conflict/i.test(l));
 const sha = (b) => createHash('sha256').update(b).digest('hex');
 const codesOf = (r) => [...new Set((r.report?.reasons || []).map((x) => String(x).split(':')[0]))];
@@ -155,7 +158,8 @@ export function runAttackVerify(io) {
  *         a14: { outputs, scenario },
  *         sameName: { uploadOutcome, artifactId, list, read },            // the second artifact of the same name
  *         original: { downloadOutcome, list, read },                       // the ORIGINAL ID downloaded again, now
- *         platform: { artifactsOk, artifacts (this run, from the API), sameNameErrorLines, sameNameControlOutcome } }
+ *         platform: { artifactsOk, artifacts (this run, from the API), sameNameErrorLines, sameNameControlOutcome,
+ *                     probeOriginalOutcome, probeOriginalErrorLines } }   // PR14-REV001: probe-original job (same download, own log)
  *  Three questions, three scenarios:
  *   A14-2  platform layer: is a second artifact of the same name rejected? (rejection needs checkable conflict
  *          evidence; an ACCEPTED upload is recorded as a finding, not as a Verifier breach)
@@ -202,10 +206,17 @@ export function runSameNameVerify(io) {
       ? { testOutcome: 'DEFENDED', platformOutcome: 'ORIGINAL_STILL_DOWNLOADABLE', verifierOutcome: 'NOT_REACHED', expected: 'the original ID returns the sealed bytes or fails — never other bytes' }
       : { testOutcome: 'BREACHED', platformOutcome: 'ORIGINAL_ID_RETURNED_OTHER_BYTES', verifierOutcome: 'NOT_REACHED', expected: 'the original ID returns the sealed bytes or fails — never other bytes', evidence: { files: files.length, sha256: bytes ? sha(bytes) : null } });
   } else if (og.downloadOutcome === 'failure') {
+    // The judged proposition is LIMITED: the original ID returned the sealed bytes or NO bytes (never other bytes).
+    // A failure says nothing about its cause. PR14-REV001: shadowing is recorded only when the probe-original job's own
+    // log shows the ID-not-found error, that job also failed, and the listing shows BOTH same-named IDs.
     const stillListed = !!sameNamed && sameNamed.includes(String(a.outputs.artifactId));
-    add('A14-2s', stillListed
-      ? { testOutcome: 'DEFENDED', platformOutcome: 'ORIGINAL_ID_SHADOWED_FAIL_CLOSED', verifierOutcome: 'NOT_REACHED', expected: 'the original ID returns the sealed bytes or fails — never other bytes', finding: 'a newer same-named artifact makes the original ID undownloadable for download-artifact (availability impact; fails closed)', evidence: { artifactsListed: true, originalStillListed: true } }
-      : { testOutcome: 'INCONCLUSIVE', platformOutcome: 'ORIGINAL_DOWNLOAD_FAILED_UNVERIFIED', verifierOutcome: 'NOT_REACHED', manualReview: 'the original ID failed to download and the listing does not confirm it still exists', evidence: { artifactsListed: !!listed, originalStillListed: listed ? false : null } });
+    const probeLines = Array.isArray(pf.probeOriginalErrorLines) ? pf.probeOriginalErrorLines : [];
+    const attributed = stillListed && sameNamed.includes(String(sn.artifactId)) && pf.probeOriginalOutcome === 'failure' && saysIdNotFound(probeLines);
+    const evidence = { artifactsListed: !!listed, originalStillListed: listed ? stillListed : null, probeOriginalOutcome: pf.probeOriginalOutcome ?? null, probeOriginalErrorLines: probeLines, causeVerified: attributed };
+    const expected = 'the original ID returns the sealed bytes or fails — never other bytes';
+    if (!stillListed) add('A14-2s', { testOutcome: 'INCONCLUSIVE', platformOutcome: 'ORIGINAL_DOWNLOAD_FAILED_UNVERIFIED', verifierOutcome: 'NOT_REACHED', manualReview: 'the original ID failed to download and the listing does not confirm it still exists', evidence });
+    else if (attributed) add('A14-2s', { testOutcome: 'DEFENDED', platformOutcome: 'ORIGINAL_ID_SHADOWED_FAIL_CLOSED', verifierOutcome: 'NOT_REACHED', expected, finding: 'a newer same-named artifact makes the original ID undownloadable for download-artifact (availability impact; fails closed) — attributed by the probe-original log', evidence });
+    else add('A14-2s', { testOutcome: 'DEFENDED', platformOutcome: 'ORIGINAL_DOWNLOAD_FAILED_CAUSE_UNVERIFIED', verifierOutcome: 'NOT_REACHED', expected, note: 'no bytes were returned (the limited proposition holds); the CAUSE of the failure is not established — not recorded as shadowing', evidence });
   } else add('A14-2s', { testOutcome: 'NOT_RUN', platformOutcome: `ORIGINAL_DOWNLOAD_${String(og.downloadOutcome || 'unknown').toUpperCase()}`, verifierOutcome: 'NOT_REACHED', notRunReason: 'original re-download step did not run' });
 
   return summarize(S, 'same-name', null);
