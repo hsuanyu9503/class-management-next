@@ -174,3 +174,86 @@
 
 測試結果與錨定值見 REVIEW_LOG 的 R1 紀錄。
 
+## 8. C-2 本機驗證在 Windows 受阻，以及修正（2026-11-23）
+
+**狀態：C-2 本機驗證受阻，尚未驗收。** 以下 hosted 簽章已經存在，**不需要**重新觸發：
+
+- `attest-sigtest.yml` run 45121359992，attempt 1；
+- attestation https://github.com/hsuanyu9503/class-management-next/attestations/70952425 。
+
+### 8.1 觀察到的事實（負責人回報）
+
+- 在 Windows 上，三次本機驗證（sigtest 正向、official 反向、錯誤錨定反向）都在 `verify-attestation.mjs` 的 `extract()` 中斷。中斷在第 57 行，呼叫端是第 63 行，也就是 main 的快照。
+- `tar` 解開 `main.tar` 中 `poc/stage1/docs/` 的中文檔名時失敗，訊息是 `Invalid empty pathname: Unknown error`，exit status 1。
+- 三個輸出資料夾都**沒有** `result.json`。`gh attestation verify` 一次都沒有執行。
+- 因此，三次的非零退出都**不是**政策拒絕，也不能算是反向測試通過。
+
+### 8.2 原因與修正
+
+- 原因：第一版用 `git archive` 加系統的 `tar` 建立快照。Windows 內建的 bsdtar（`tar.exe`）無法解開這個 repository 的 UTF-8 檔名。
+- 修正：新增 `poc/stage2/src/b3/git-snapshot.mjs`，**不再使用 `tar`**。
+  - `git ls-tree -r -z --full-tree <commit>`：取得原始、以 NUL 分隔、未加引號的 UTF-8 路徑、mode 與 blob ID；
+  - `git cat-file --batch`：取得原始 blob 位元組。沒有 checkout，所以不會套用 autocrlf、filter 或 attributes；
+  - 每個 blob 都重新計算 Git 物件雜湊（sha1，或 SHA-256 repository 的 sha256），必須等於它的物件 ID。寫出的位元組因此在每個平台上都和 commit 完全相同；
+  - 檔案由驗證者自己的程式寫出，不執行 commit 中的任何程式。
+- 以下情況 fail closed，回報 `SNAPSHOT_FAILED[stage]` 並附上路徑。所有平台套用同一套規則，Linux 上能建立的快照在 Windows 上也能建立：
+  - 符號連結、submodule 等非一般檔案；
+  - 路徑不是合法的 UTF-8、絕對路徑，或含有空段、`.`、`..`、反斜線、控制字元；
+  - 含有 Windows 保留字元 `<>:"|?*`，或保留名稱 `CON`、`NUL`、`COM1` 等；
+  - 路徑段以 `.` 或空白結尾；
+  - 在不分大小寫或會正規化 Unicode 的檔案系統上會衝突的兩個路徑；
+  - 快照目標目錄不是空的。
+- 錨定驗證**完全保留**：錨定值仍以 `anchorListing()` 計算，不略過任何受保護的檔案。`c2-snapshot` 測試確認：
+  - 快照上計算出的每一行，都等於直接從 Git 物件計算的 SHA-256；
+  - 在有 `tar` 的平台上，結果與舊的 `tar` 路徑逐位元組相同。
+- 同樣保留：不執行候選 commit 的程式、依完整 commit SHA 快取，以及所有信任檢查（R1）。
+
+### 8.3 診斷：環境錯誤不得冒充政策拒絕
+
+| 退出碼 | 結果 | 意義 |
+|---|---|---|
+| 0 | `SIGTEST_IDENTITY_ACCEPTED`／`ACCEPTED` | 接受 |
+| 1 | `REJECTED`／`REVOCATION_STATUS_UNKNOWN` | 政策的判定 |
+| 2 | 用法錯誤、`gh` 版本不足 | 沒有驗證 |
+| 3 | `NOT_RUN` `ENVIRONMENT_ERROR` | 環境或 repository 形狀的問題，**不是**政策判定 |
+
+- 退出碼 3 涵蓋以下情況：
+  - fetch main 失敗；
+  - main 或候選工具鏈的快照失敗；
+  - main 的錨定值無法計算。以前會被吞掉，變成 `ANCHOR_MISMATCH` 的「拒絕」；
+  - `gh` 無法啟動；
+  - signer commit 不在 clone 中。
+- `result.json` 一律寫出，內容包括 `environment[]`（stage 與錯誤訊息）與 `platform`；如果已有政策判定，另外保存在 `policyResult`，供參考。
+
+### 8.4 測試（提交者，Linux）
+
+- `c2-snapshot`（新）：**不需要 shell、tar，也不需要在磁碟上建立符號連結，可以在 Windows 執行**。
+  - HEAD 的快照：包含中文檔名的每個檔案，都與 `git cat-file blob` 逐位元組相同；沒有寫出多餘的檔案；
+  - 錨定值：快照上的每一行等於直接從 Git 物件計算的值；與 `tar` 路徑交叉比對（在非 Windows 平台）；
+  - 位元組保真：CRLF、BOM、二進位、空檔、可執行檔、中文路徑、NFD 檔名；
+  - fail closed：符號連結、submodule、`:`、`CON`、結尾的 `.` 或空白、反斜線、大小寫衝突、正規化衝突、不合法的 commit ID、未知的 commit、非 repository、非空的目標目錄；
+  - 完整性：blob 被替換、被截斷、物件不存在、ID 不符。
+- `c2-cli` 新增環境錯誤測試：非 repository → `fetch-main`；main 含符號連結 → `snapshot-main`；main 的錨定清單不合法 → `anchor-main`。三者都是 exit 3、`NOT_RUN`，不會產生政策理由，也不會留下 sentinel。
+  - 這個檔案的 stub `gh` 是 POSIX 的 shebang 腳本，Windows 上會略過；Windows 的相容性由 `c2-snapshot` 涵蓋。
+- mutation Z1～Z12 全部被抓到。其他測試結果與錨定值見 REVIEW_LOG。
+- **沒有執行**：Claude 的環境沒有 Windows。Windows 上的 `c2-snapshot` 與三次本機驗證，要由負責人或審查者執行。
+
+### 8.5 修正審查後的操作（負責人或審查者，在 Windows 上）
+
+見 HANDOFF。三次驗證都使用既有的簽章，不重新觸發 hosted。每次都要保留：退出碼、`result.json`、`gh-stdout.json`，以及 `gh --version` 的輸出。
+
+## 9. PR #17 審查的回應（Reviewed Head `a4e2078`）
+
+**狀態：C-2 本機驗證受阻，尚未驗收。**
+
+審查者在 Windows（win32/x64、Node v26.13.1、`gh` 2.103.3）上確認：中文檔名的快照問題已經解決。真實的 CLI 已完成 main 的快照與錨定值計算（`060c588e…`），才進入 `gh`。
+
+| ID | 問題 | 修正 | 驗證 |
+|---|---|---|---|
+| PR17-REV001（P2） | `gh` 已啟動但沒有完成（真實案例：`error creating Sigstore verifier: no valid Sigstore verifiers could be initialized`，exit 1），卻被記為政策的 `REJECTED GH_VERIFY_FAILED`／exit 1 | 1. `classifyGhRun()`：只有 exit 0 而且輸出是 JSON 陣列，才算驗證結果。其他情況一律「驗證未完成」，CLI 回報 `NOT_RUN ENVIRONMENT_ERROR`／**exit 3**，**不產生**政策結果：無法啟動、**任何非零退出**、輸出無法使用。保留原始的退出碼、stderr（另存 `gh-stderr.txt`）與 stdout。<br>2. `ghVerifyArgs()`：`gh` 只帶 `--repo`，不再帶 `--signer-workflow`／`--source-ref`。workflow 路徑與 ref 由核心對 `gh` 回傳的**每一份**證據做精確、大小寫敏感的比對（`parseSignerUri`、`SOURCE_REF`）。<br>因此 official profile 混用時，`gh` 會成功，核心給出**具體**的 `REJECTED SIGNER_WORKFLOW_MISMATCH`；不會再因為 `gh` 失敗而無法分類，也不會用非零退出碼去推論政策拒絕。`gh` 仍然負責驗證簽章、憑證鏈、透明度日誌／時間戳，並確認憑證屬於本 repository | `c2-unit`：初始化失敗、401、DNS、`Verification failed`、exit 2、沒有 stderr、被 signal 中止、spawn ENOENT、非 JSON、非陣列，**全部**是「未完成」；`gh` 的參數只有 `--repo`；official profile 用在測試簽章上 → `SIGNER_WORKFLOW_MISMATCH#0`。<br>`c2-cli`：stub 的 init-fail、not-json、not-array，在兩個 profile 下都是 exit 3、`NOT_RUN`，沒有 `reasons`／`policyResult`，保留 stderr；official 混用 → exit 1 `SIGNER_WORKFLOW_MISMATCH#0`；錯誤錨定 → exit 1 `ANCHOR_MISMATCH`（`gh` exit 0）。<br>mutation A1～A5、A1c |
+| PR17-REV002（P2） | Windows 的 Git 依 `core.protectNTFS` 拒絕把 `a:b.txt` 寫入 index（`Ignoring path`），測試資料因此變成空 tree，測試其實沒有測到目標的拒絕 | 測試資料改用 `git mktree -z`，從 tree 物件直接建立 commit，不經過 index 的路徑過濾，**只用測試自己的暫存 repository**，不讀也不改任何全域或使用者設定。測試先用原始的 `git ls-tree -r -z` 斷言 fixture 確實含有預期的路徑、mode 與數量，再比對**具體**的拒絕原因（每個案例一個 regex） | `c2-snapshot` 5/5（Linux）。Windows 的 5/5 **待審查者執行** |
+| PR17-REV003（P2） | `c2-cli` 的 POSIX skip 只套用在各個 test 上，頂層的 clone、commit、sentinel 對照組在 Windows 上仍然會執行 | 整個 fixture、stub、測試與 cleanup 都移進 `if (process.platform !== 'win32') { … }`。Windows 上只註冊一個 skipped test，任何準備動作都不執行 | 模擬 `process.platform = 'win32'`（`node --import` 預載）：1 個 skipped，exit 0，**沒有**建立任何暫存目錄。真實 Windows 上的證據待審查者執行 |
+
+- 審查者觀察到的 Sigstore 初始化失敗，原因尚未確定。可能是環境無法取得 Sigstore 的 TUF trusted root（例如 `tuf-repo-cdn.sigstore.dev` 被擋），或是快取目錄無法寫入。這只是推測，並不代表遠端簽章無效。修正後，這種情況會清楚回報為 `NOT_RUN`。
+- 與計畫 v0.2 §2.1 的差異：`gh` 命令不再帶 `--signer-workflow`／`--source-ref`。理由如上：核心本來就會做精確比對，而保留 `gh` 的過濾會讓反向測試的原因無法分類。`gh` ≥ 2.102.0 的門檻仍然保留。請審查者確認這個差異。
+

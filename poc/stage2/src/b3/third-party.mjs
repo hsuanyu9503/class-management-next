@@ -53,6 +53,28 @@ export function ghVersionOk(v) {
   for (let i = 0; i < 3; i++) { if (v[i] > MIN_GH[i]) return true; if (v[i] < MIN_GH[i]) return false; }
   return true;
 }
+/** PR17-REV001: the gh command. gh verifies the signature, certificate chain, transparency log / timestamps and that
+ *  the certificate names this repository (--repo). The signer workflow path and the refs are NOT passed as gh filters:
+ *  judgeAttestation() checks them itself, exactly and case-sensitively, on every attestation gh returns — so a wrong
+ *  workflow (e.g. the official profile used on the test signature) is a reliable, specific policy REJECTED
+ *  (SIGNER_WORKFLOW_MISMATCH …) instead of an unclassifiable gh failure. */
+export function ghVerifyArgs(subjectPath) {
+  return ['attestation', 'verify', subjectPath, '--repo', REPO, '--format', 'json'];
+}
+/** PR17-REV001: classify one gh run. Only a successful run with a JSON array is a verification result; EVERYTHING else
+ *  (not started, any non-zero exit — Sigstore initialisation, network, authentication, no attestation, signature
+ *  failure — or unusable output) is "verification not completed": the caller reports NOT_RUN, never a policy
+ *  REJECTED, because a non-zero exit cannot be attributed reliably. The raw exit code and stderr are kept.
+ *  @param r { status, error, stdout, stderr } from spawnSync
+ *  @returns { verified: [] } | { verified: null, issue: { stage, error, exitCode } } */
+export function classifyGhRun(r) {
+  const first = (t) => String(t || '').split(/\r?\n/).map((l) => l.trim()).filter(Boolean).slice(0, 3).join(' | ').slice(0, 400);
+  if (!r || r.error) return { verified: null, issue: { stage: 'gh-spawn', error: String(r?.error?.code || r?.error?.message || 'not started'), exitCode: r?.status ?? null } };
+  if (r.status !== 0) return { verified: null, issue: { stage: 'gh-verify', error: `gh exited ${r.status} — verification not completed (not a policy decision): ${first(r.stderr) || '(no stderr)'}`, exitCode: r.status } };
+  let j; try { j = JSON.parse(r.stdout); } catch { return { verified: null, issue: { stage: 'gh-output', error: 'gh exited 0 but its output is not JSON', exitCode: 0 } }; }
+  if (!Array.isArray(j)) return { verified: null, issue: { stage: 'gh-output', error: 'gh exited 0 but its output is not a JSON array', exitCode: 0 } };
+  return { verified: j };
+}
 /** exact identity parse of buildSignerURI: https://github.com/<owner>/<repo>/<path>@<ref> (case-sensitive) */
 export function parseSignerUri(uri) {
   const m = /^https:\/\/github\.com\/([A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+)\/(\.github\/workflows\/[^@\s]+)@(refs\/[^\s]+)$/.exec(String(uri || ''));

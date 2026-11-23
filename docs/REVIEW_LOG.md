@@ -1522,5 +1522,102 @@
   - run ID／attempt／實際的 commit、subject digest；
   - `gh` 的版本與實際參數、退出碼、`gh-stdout.json`、`result.json`；
   - 正向（`SIGTEST_IDENTITY_ACCEPTED`）與反向結果：official profile 混用、錯誤的錨定要拒絕；政策撤銷、過期與路徑的反向重播，要標明證據來源。
-- 使用者決策：`待決`（核准錨定 `060c588e…`、合併；合併後手動觸發 `attest-sigtest.yml`）
+- 使用者決策（2026-11-23）：
+  - 負責人更新了 `CMN_STAGE1_ANCHOR_SHA256`，並指示「改好了若 CI 全綠，合併 pr16」；
+  - 同 Head `1e70833` 的 CI run 45120816930 attempt 2：`validate` success，`baseline-anchor` 為 `ANCHOR_OK`（`060c588e…`，91 檔）；
+  - PR #16 合併為 `b8d3ba4096033105f9149600f3138311e1443045`；
+  - 下一步：負責人手動觸發 `attest-sigtest.yml`，之後由第三方以真實的 `gh` 驗證。**C-2 尚未驗收**。
+
+### C-2 hosted 測試簽章：`attest-sigtest.yml` run 45121359992 attempt 1（Claude 從 log 讀出；不是驗證）
+
+- 觸發：負責人，workflow_dispatch，main `b8d3ba4096033105f9149600f3138311e1443045`（PR #16 的合併 commit）。job `sigtest` success。
+- 簽章 action：`actions/attest-build-provenance@4d10147…`（內部 `actions/attest@508db95…`），`subject-path: poc/stage2/sigtest/SIGTEST.txt`。
+- log 中的事實：
+  - `Attestation created for SIGTEST.txt@sha256:63515e7c0a94b6e13d0f9ed2525b4e43b5da5221a8442a611dcc2c6d79ffb318`，與判定核心寫死的 `SIGTEST_SHA256` 相同；
+  - 使用 Public Good Sigstore 的憑證；
+  - 已上傳到 Rekor：`logIndex=4050349070`；
+  - repository attestation：`https://github.com/hsuanyu9503/class-management-next/attestations/70952425`。
+- 憑證的 SAN 在 log 中以 base64 呈現。Claude 只讀了 log，**沒有**驗證憑證或簽章。身分與政策的判定，要由第三方以 `gh` v2.102.0 以上執行 `verify-attestation.mjs --profile sigtest`。
+- 這份測試簽章會永久留在公開的透明度日誌中。它不是 statement，也不代表 PASS。
+- 待完成：
+  - 第三方的正向與反向驗證；
+  - ChatGPT 審查交付物：run、attempt、commit、subject digest、`gh` 的版本與參數、退出碼、`gh-stdout.json`、`result.json`。
+  - 通過後才記錄 C-2 驗收完成。
+
+### C-2 本機驗證：Windows 受阻（負責人回報）→ Claude 修正，待審查
+
+- **狀態：C-2 本機驗證受阻，尚未驗收。** 三次非零退出都**不是**政策拒絕，不能算是反向測試通過。
+- 負責人回報的事實：
+  - 在 Windows 上，sigtest 正向、official 反向、錯誤錨定反向三次，都在 `verify-attestation.mjs:57` 的 `extract()` 中斷（呼叫端第 63 行，main 的快照）；
+  - `tar` 解開 `poc/stage1/docs/` 的中文檔名時失敗：`Invalid empty pathname: Unknown error`，exit status 1；
+  - 三個輸出資料夾都沒有 `result.json`；`gh attestation verify` 沒有執行。
+- 既有的簽章不需要重新觸發：run 45121359992 attempt 1；attestation 70952425。
+- 修正（報告 §8）：
+  - `src/b3/git-snapshot.mjs`（新）：用 `git ls-tree -z` 與 `git cat-file --batch` 讀取，每個 blob 重新計算物件雜湊，由驗證者自己的程式寫出，不再使用 `tar`；
+  - 不支援的 repository 形狀一律 fail closed，回報 `SNAPSHOT_FAILED[stage]`；
+  - CLI 在環境錯誤時輸出 `NOT_RUN ENVIRONMENT_ERROR`，exit 3，並一律寫出 `result.json`。以前 main 的錨定值算不出來時，會被吞掉、變成政策的 `ANCHOR_MISMATCH`，現在也改成環境錯誤；
+  - 保留：不執行候選程式、依完整 SHA 快取、所有信任檢查、完整的錨定驗證。
+- 位元組一致性的證據：
+  - 以新的快照程式重建 main `b8d3ba4`，算出的錨定值是 `060c588e…`，等於**已核准**的值；
+  - `c2-snapshot` 確認每一行都等於直接從 Git 物件計算的值，並在 Linux 上與 `tar` 路徑交叉比對。
+- 提交者的證據（Linux；**沒有** Windows 的執行證據）：
+  - `npm run check`、`npm test` 20/20、`stage1:all` 通過；
+  - `s2:test` 171/171：`c2-snapshot` 5 項，`c2-cli` 4 項，其中 1 項是新的環境錯誤測試；
+  - `s2:b3` 33/33（`S2B2B3A-20261123T063712Z-02049f91`）；
+  - mutation：Z1～Z12 全部被抓到；既有的 56＋16＋36 項全部被抓到；Y1～Y10 中 9 項被抓到，Y5 未被抓到（等價，維持原紀錄）。Y1 的目標字串因改名而重新指定。
+- 錨定的變更（相對已核准的 `060c588e…`，91 檔）：
+  - 新增 `poc/stage2/src/b3/git-snapshot.mjs`；
+  - 修改 `poc/stage2/scripts/verify-attestation.mjs`、`poc/stage2/package.json`；
+  - 新值 `e27017712cceded2852150fdd705974d8b1447620e3668b85c12cfe7f466cc4c`（92 檔），**待審查與負責人核准**；這是 Claude 自己算出的值，不是已核准的錨定。
+- 使用者決策：`待決`（見下方 PR #17 審查）
+
+### PR #17 審查（ChatGPT）：CHANGES REQUESTED（PR17-REV001～003，皆 P2）→ Claude 修正
+
+- Reviewed Head：`a4e207818e52736aa8ee8d2e4e548a1b1066b20a`
+- 審查者在 Windows（win32/x64、Node v26.13.1、`gh` 2.103.3）上確認：中文檔名的快照阻塞**已經解除**。真實的 CLI 完成了 main 的快照與錨定計算（`060c588e…`），才進入 `gh`。
+- 審查者確認有效：
+  - `c2-snapshot` 5 項中通過 4 項（HEAD 快照與中文檔名、錨定逐行比對、位元組保真、完整性）；
+  - `c2-unit` 13/13；
+  - 不執行候選程式、依完整 SHA 快取；
+  - 錨定 92 檔 `e2701771…` 與提交值一致，但**不代表已核准**；
+  - CI 45125720361：`baseline-anchor` 為 `ANCHOR_MISMATCH`。
+- 發現：
+  - **REV001**：`gh` 已啟動但沒有完成，被記為政策的 `REJECTED`。真實案例：`no valid Sigstore verifiers could be initialized`，exit 1；
+  - **REV002**：`c2-snapshot` 的 colon fixture 在 Windows 上變成空 tree（`Ignoring path a:b.txt`）；
+  - **REV003**：`c2-cli` 的 POSIX skip 沒有阻止頂層 fixture 在 Windows 上執行。
+- 真實 `gh` 的狀態：還沒有成功的驗證輸出，沒有可以驗收的正向或反向結果。Sigstore 初始化失敗的原因尚未確定，**不據此**認定遠端簽章無效。
+- Claude 修正（報告 §9）：
+  - REV001：`classifyGhRun()` 把所有未完成的 `gh` 執行都判為 `NOT_RUN`（exit 3），不產生政策結果；`gh` 只帶 `--repo`，workflow 與 ref 由核心精確比對。official 混用時回報具體的 `SIGNER_WORKFLOW_MISMATCH`；
+  - REV002：測試資料改用 `git mktree -z`，先斷言 fixture 含預期的路徑與 mode，再比對具體原因；
+  - REV003：整個 POSIX fixture 都放在平台判斷內。
+- 提交者的證據（Linux）：
+  - `npm run check`、`npm test` 20/20、`stage1:all` 通過；
+  - `s2:test` 174/174：`c2-unit` 14、`c2-cli` 6、`c2-snapshot` 5；
+  - `s2:b3` 33/33（`S2B2B3A-20261123T071153Z-adb3c83b`）；
+  - mutation：A1～A5、A1c 全部被抓到；Z1～Z12、既有的 56＋16＋36 項全部被抓到；Y1～Y10 中 9 項被抓到，Y5 未被抓到（等價，維持原紀錄）；
+  - 以模擬的 `win32` 執行 `c2-cli`：1 個 skipped、exit 0、沒有建立暫存目錄。
+- **沒有** Windows 的實機證據：`c2-snapshot` 5/5 與 `c2-cli` 的略過，要由審查者在 Windows 上確認。
+- 錨定：`49fbdb250364aaa3f2f81d41f3bef3a4e65e1046601a68ba40e06e3c48327455`（92 檔），**待審查與負責人核准**。
+  - 相對已核准的 main `060c588e…`：新增 `src/b3/git-snapshot.mjs`；修改 `scripts/verify-attestation.mjs`、`src/b3/third-party.mjs`、`poc/stage2/package.json`；
+  - 相對審查過的 `a4e2078`（`e2701771…`，已作廢）：修改 `scripts/verify-attestation.mjs`、`src/b3/third-party.mjs`。
+- 使用者決策：`待決`（見下方 R1 複審）
+
+### PR #17 R1 複審（ChatGPT）：程式修正複審通過；PR17-REV001～003 CLOSED
+
+- Reviewed Head：`990e855b678a2c3e80a4fccb5e8a5d2c6b3ccdd4`。前次 `a4e2078`，增量 8 檔，+200／−46。
+- 結論：**R1 程式修正複審通過**，三項都關閉，增量沒有需要阻擋合併的新問題。這**不是** GitHub approval、合併授權或 C-2 最終驗收。
+- 審查者在 Windows 實機（win32/x64、Node v26.13.1、`gh` 2.103.3）上的證據：
+  - 10 個檔案的 blob hash 與 API 一致；附件檔案與 Head 逐位元組相同；
+  - `c2-snapshot` 5/5、`c2-unit` 14/14、`c2-cli` 正確略過 1 項；合計 20 個測試：19 通過、0 失敗、1 略過，exit 0；
+  - REV001：真實 `gh` 再次出現 Sigstore 初始化錯誤時，CLI 現在 exit 3，結果為 `NOT_RUN ENVIRONMENT_ERROR`，stage `gh-verify`；沒有 `policyResult`，保留 `gh` 的 exit 1、stderr 與 stdout；
+  - 錨定 92 檔 `49fbdb25…`，獨立重算一致；
+  - CI 45129542570：`validate` success，`baseline-anchor` 為 `ANCHOR_MISMATCH`（approved=`060c588e…`）。
+- `gh` 參數的調整（只帶 `--repo`，由核心精確比對）：**可以接受**。核心仍逐份檢查憑證身分、signer commit、blob、可信時間、subject、政策有效期間、外部錨定與新鮮度；任何一份失敗就拒絕。PR16 的兩階段判定與完整 SHA 快取都保留。所有非零退出都判為 `NOT_RUN` 是診斷粒度上的取捨，不構成繞過。
+- 審查者界定的限制：
+  - POSIX 的 CLI 整合測試沒有獨立執行；
+  - Linux 174/174、B3 33/33 與 mutation 是提交者的證據；Y5 維持未被抓到；
+  - official 混用只有單元測試，**不是**真實簽章的證據。
+- 真實 `gh` 的狀態：用 R1 的 verifier 加已核准的錨定 `060c588e…` 重播，結果 CLI exit 3／`gh` exit 1，Sigstore 初始化失敗，原因尚未確定，**沒有**取得正向接受，兩項反向驗收也還沒完成。既有簽章（run 45121359992、attestation 70952425）仍然適用，不需要重新簽章。
+- **C-2 仍未驗收。**
+- 使用者決策：`待決`（核准錨定 `49fbdb25…`、確認 CI 全綠、合併；之後先處理驗證環境的 Sigstore 初始化問題，再做三項真實驗證）
 
