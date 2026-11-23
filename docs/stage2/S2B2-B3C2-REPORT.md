@@ -69,11 +69,11 @@
 
 ## 3. 送審重點（設計選擇）
 
-- **targets 中的 `anchorDigest`**：
-  - statement 的 `targets.anchorDigest` 是簽章當時的錨定值。protected 清單會隨 commit 改變，只能由**那個工具鏈 commit 自己的** `scripts/verify-anchor.mjs --print` 算出；
-  - 所以 CLI 會在暫存目錄解開該 commit，執行它的錨定腳本。這個腳本只計算檔案雜湊；
-  - 只有在該 commit 的 `toolchain` 紀錄在簽章時間有效之後，才會執行（單元測試確認紀錄不符時 `targetsAt` 呼叫次數為 0）；
-  - 這是「執行已核准工具鏈的程式」。若審查者認為不可接受，替代方案是在 statement 之外另存該 commit 的錨定清單，請判斷。
+- **targets 中的 `anchorDigest`**（R1 依 PR16-REV001 改寫，見 §7）：
+  - 第一版是執行候選 commit 自己的 `scripts/verify-anchor.mjs`。審查者指出：這條路徑在拒絕之前就會執行候選程式（P1）；
+  - 現在 protected 清單改為**資料檔** `scripts/anchor-paths.json`（本身受保護）。驗證者用**自己的** `anchorListing()`，依候選 commit 的清單計算該 commit 的錨定值，**不執行**候選 commit 的任何程式；
+  - 清單會先驗證：版本、非空、不重複、必須包含自己與 `verify-anchor.mjs`、路徑不能是絕對路徑，也不能有 `.`／`..` 段。符號連結與非一般檔案一律讓計算失敗；
+  - 在本 PR 之前的 commit 沒有這個資料檔，因此無法驗證，結果是 `TARGETS_UNAVAILABLE`（fail closed）。目前沒有任何已核准的工具鏈，所以沒有影響。
 - **subject 比對**：一份 provenance 可以有多個 subject，目前要求「**至少一個**等於實際檔案」。`attest.yml` 與 `attest-sigtest.yml` 都只簽一個檔案。
 - **測試身分政策的紀錄**：
   - `reviewRef` 寫成 `PR #16 (C-2)`，以本 PR 的實際編號為準；
@@ -122,7 +122,7 @@
 | `gh` 以 1 退出 | `REJECTED GH_VERIFY_FAILED`，exit 1 |
 | `--anchor` 錯誤 | `REJECTED ANCHOR_MISMATCH`，exit 1 |
 | official profile 驗證 sigtest 檔 | `REJECTED`，exit 1 |
-| official，**模擬**的 main 加入 toolchain 與 signing-policy 紀錄，合成 PASS statement | `ACCEPTED`，exit 0。這次也實際走過 `targetsAt`：解開工具鏈 commit，執行它的錨定腳本，重算 targets |
+| official，**模擬**的 main 加入 toolchain 與 signing-policy 紀錄，合成 PASS statement | `ACCEPTED`，exit 0（第一版；R1 之後由 `c2-cli` 測試取代，見 §7） |
 | 同上，`targets.anchorDigest` 竄改 | `REJECTED TARGETS_MISMATCH`，exit 1 |
 | 本環境的真實 `gh` 2.89.0 | 拒絕執行，exit 2，`NOT_RUN GH_VERSION_UNSUPPORTED` |
 
@@ -154,3 +154,23 @@
 - 可信時間是 `gh` 回傳的觀測時間，不宣稱等於實際簽署的瞬間。
 - C-2 合併後，PASS 仍然關閉。打開 PASS 需要另一個 PR、新的工具鏈 commit、批准紀錄、兩個指標與錨定，並重新審查。
 - N5、N7、main 摘要、NOTE-c（原文缺失，待確認）、POC-009 BLOCKED、Stage 1 的 72 筆 NOT_RUN 都不受影響。
+
+## 7. R1：PR #16 審查的回應（Reviewed Head `1164c40`）
+
+| ID | 問題 | 修正 | 位置 | 驗證 |
+|---|---|---|---|---|
+| PR16-REV001（P1） | 錨定不符等情況已經記下拒絕理由，official 分支仍會呼叫 `targetsAt`，而 CLI 的 `targetsAt` 會執行候選 commit 的腳本。最後才 `REJECTED`，無法撤銷已經發生的副作用 | 1. **不再執行候選程式**：protected 清單改為已驗證的資料檔 `scripts/anchor-paths.json`。`verify-anchor.mjs` 讀取它；CLI 用驗證者自己的 `anchorListing()` 計算候選 commit 的錨定值。CLI 中唯一的子程序是 `gh`，以及 `git`／`tar` 的資料操作；沒有需要檢查退出碼的候選腳本。<br>2. **兩階段判定**：所有證據的無副作用檢查先做完；只有**完全沒有**拒絕理由、政策也沒過期時，才進入讀取候選 commit 的 `targetsAt`。無副作用檢查包括：外部錨定、政策來源、取得時間與新鮮度、身分、可信時間、subject、簽章政策、statement 欄位、toolchain 紀錄。<br>3. 錨定清單拒絕符號連結、非一般檔案、`.`／`..` 與絕對路徑 | `scripts/anchor-paths.json`（新）、`scripts/verify-anchor.mjs`、`src/b3/third-party.mjs`、`scripts/verify-attestation.mjs` | `c2-unit` 新增測試：14 種拒絕情境下 `targetsAt` 呼叫 0 次，statement 層的 4 種拒絕也是 0 次。<br>`c2-cli`（新）：本機 bare repo 加上**假的** `gh`。候選 commit 在 `verify-anchor.mjs` 與 `package.json` 植入 sentinel；對照組證明直接啟動那個腳本時 sentinel 會出現。錨定錯誤與第二份身分錯誤時 `REJECTED`、**沒有解開**候選 commit、sentinel 不存在；正確時 `ACCEPTED`，sentinel 同樣不存在。另測錨定清單的驗證（符號連結、`..`、絕對路徑、`.`、缺少自己、版本、重複、空的 trees） |
+| PR16-REV002（P2） | 兩份有效的 official 證據使用同一個工具鏈時，第二次解開到同一個目錄會 `EEXIST`，被轉成 `TARGETS_UNAVAILABLE#1` | 核心依（完整 commit，testId）快取，每組只計算一次，結果套用到每份證據。CLI 依**完整** commit SHA 快取解開的結果，失敗也會快取，不重試；目錄名稱用完整 SHA，不用前綴 | `src/b3/third-party.mjs`、`scripts/verify-attestation.mjs` | `c2-unit`：兩份／三份有效證據 → `ACCEPTED`，只計算一次；targets 失敗時每份證據都拒絕，也只計算一次。<br>`c2-cli`：兩份有效證據 → `ACCEPTED`，只解開一次 |
+
+另外：
+- `tests/anchor_coverage.test.mjs` 的路徑改用 POSIX 格式。審查者在 Windows 上遇到反斜線比對失敗，那不是這次的 finding，但修正成本很低。
+- 審查者對設計問題的答覆已採納：subject「至少一個相符」可以接受；測試身分政策的生效依賴已錨定的 `main`。
+
+**mutation（R1 新增 Y1～Y10）**：
+
+- Y1 是把「CLI 執行候選錨定腳本」放回來（舊行為），被 `c2-cli` 的 sentinel 抓到。
+- **Y5（移除 CLI 的解開快取）沒有被抓到**，它是等價的 mutation。一次 CLI 只驗證一個 subject，也就是一個 testId；核心快取已經保證同一個 commit 只呼叫 `targetsAt` 一次，所以 CLI 的快取在目前的參數下觀察不到。這個快取保留作為防禦。
+- 其餘 Y 全部被抓到。
+
+測試結果與錨定值見 REVIEW_LOG 的 R1 紀錄。
+
