@@ -1569,5 +1569,36 @@
   - 新增 `poc/stage2/src/b3/git-snapshot.mjs`；
   - 修改 `poc/stage2/scripts/verify-attestation.mjs`、`poc/stage2/package.json`；
   - 新值 `e27017712cceded2852150fdd705974d8b1447620e3668b85c12cfe7f466cc4c`（92 檔），**待審查與負責人核准**；這是 Claude 自己算出的值，不是已核准的錨定。
-- 使用者決策：`待決`（審查、核准錨定、合併；之後在 Windows 上重跑 `c2-snapshot` 與三次本機驗證）
+- 使用者決策：`待決`（見下方 PR #17 審查）
+
+### PR #17 審查（ChatGPT）：CHANGES REQUESTED（PR17-REV001～003，皆 P2）→ Claude 修正
+
+- Reviewed Head：`a4e207818e52736aa8ee8d2e4e548a1b1066b20a`
+- 審查者在 Windows（win32/x64、Node v26.13.1、`gh` 2.103.3）上確認：中文檔名的快照阻塞**已經解除**。真實的 CLI 完成了 main 的快照與錨定計算（`060c588e…`），才進入 `gh`。
+- 審查者確認有效：
+  - `c2-snapshot` 5 項中通過 4 項（HEAD 快照與中文檔名、錨定逐行比對、位元組保真、完整性）；
+  - `c2-unit` 13/13；
+  - 不執行候選程式、依完整 SHA 快取；
+  - 錨定 92 檔 `e2701771…` 與提交值一致，但**不代表已核准**；
+  - CI 45125720361：`baseline-anchor` 為 `ANCHOR_MISMATCH`。
+- 發現：
+  - **REV001**：`gh` 已啟動但沒有完成，被記為政策的 `REJECTED`。真實案例：`no valid Sigstore verifiers could be initialized`，exit 1；
+  - **REV002**：`c2-snapshot` 的 colon fixture 在 Windows 上變成空 tree（`Ignoring path a:b.txt`）；
+  - **REV003**：`c2-cli` 的 POSIX skip 沒有阻止頂層 fixture 在 Windows 上執行。
+- 真實 `gh` 的狀態：還沒有成功的驗證輸出，沒有可以驗收的正向或反向結果。Sigstore 初始化失敗的原因尚未確定，**不據此**認定遠端簽章無效。
+- Claude 修正（報告 §9）：
+  - REV001：`classifyGhRun()` 把所有未完成的 `gh` 執行都判為 `NOT_RUN`（exit 3），不產生政策結果；`gh` 只帶 `--repo`，workflow 與 ref 由核心精確比對。official 混用時回報具體的 `SIGNER_WORKFLOW_MISMATCH`；
+  - REV002：測試資料改用 `git mktree -z`，先斷言 fixture 含預期的路徑與 mode，再比對具體原因；
+  - REV003：整個 POSIX fixture 都放在平台判斷內。
+- 提交者的證據（Linux）：
+  - `npm run check`、`npm test` 20/20、`stage1:all` 通過；
+  - `s2:test` 174/174：`c2-unit` 14、`c2-cli` 6、`c2-snapshot` 5；
+  - `s2:b3` 33/33（`S2B2B3A-20261123T071153Z-adb3c83b`）；
+  - mutation：A1～A5、A1c 全部被抓到；Z1～Z12、既有的 56＋16＋36 項全部被抓到；Y1～Y10 中 9 項被抓到，Y5 未被抓到（等價，維持原紀錄）；
+  - 以模擬的 `win32` 執行 `c2-cli`：1 個 skipped、exit 0、沒有建立暫存目錄。
+- **沒有** Windows 的實機證據：`c2-snapshot` 5/5 與 `c2-cli` 的略過，要由審查者在 Windows 上確認。
+- 錨定：`49fbdb250364aaa3f2f81d41f3bef3a4e65e1046601a68ba40e06e3c48327455`（92 檔），**待審查與負責人核准**。
+  - 相對已核准的 main `060c588e…`：新增 `src/b3/git-snapshot.mjs`；修改 `scripts/verify-attestation.mjs`、`src/b3/third-party.mjs`、`poc/stage2/package.json`；
+  - 相對審查過的 `a4e2078`（`e2701771…`，已作廢）：修改 `scripts/verify-attestation.mjs`、`src/b3/third-party.mjs`。
+- 使用者決策：`待決`（複審、核准錨定、合併；之後在 Windows 上重跑 `c2-snapshot` 與三次本機驗證）
 

@@ -90,7 +90,8 @@
   8. 合併後：你已觸發 `attest-sigtest.yml`，run **45121359992** attempt 1 成功，subject `63515e7c…`，Rekor `logIndex=4050349070`。接下來：第三方以 `gh` v2.102.0 以上執行報告 §5 的正向與反向驗證，並交付 run／attempt／commit、subject digest、`gh` 的版本與參數、退出碼、`gh-stdout.json`、`result.json`；審查通過後才記錄 C-2 驗收完成；
   9. **C-2 本機驗證受阻，尚未驗收**（2026-11-23）：
      - Windows 的 `tar` 無法解開中文檔名，三次驗證都在快照階段中斷，沒有執行 `gh`；
-     - Claude 已改為不使用 `tar` 的快照，並讓環境錯誤以 `NOT_RUN`（exit 3）回報（報告 §8）。新錨定 `e2701771…`（92 檔）待審查與核准；
+     - Claude 已改為不使用 `tar` 的快照，並讓環境錯誤以 `NOT_RUN`（exit 3）回報（報告 §8）；
+     - PR #17 審查（`a4e2078`）：CHANGES REQUESTED，REV001～003。已修正（報告 §9）：未完成的 `gh` 執行回報 `NOT_RUN`；`gh` 只帶 `--repo`；Windows 上的測試資料與略過都已修正。新錨定 `49fbdb25…`（92 檔）待複審與核准，`e2701771…` 已作廢；
      - 修正合併後，請在 Windows 上：
        1. 執行 `node --test test/c2-snapshot.test.mjs`（在 `poc/stage2` 中）；
        2. 用既有的簽章（run 45121359992）重跑三次驗證，保留退出碼、`result.json`、`gh-stdout.json` 與 `gh --version`；
