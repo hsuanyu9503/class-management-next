@@ -1619,5 +1619,9 @@
   - official 混用只有單元測試，**不是**真實簽章的證據。
 - 真實 `gh` 的狀態：用 R1 的 verifier 加已核准的錨定 `060c588e…` 重播，結果 CLI exit 3／`gh` exit 1，Sigstore 初始化失敗，原因尚未確定，**沒有**取得正向接受，兩項反向驗收也還沒完成。既有簽章（run 45121359992、attestation 70952425）仍然適用，不需要重新簽章。
 - **C-2 仍未驗收。**
-- 使用者決策：`待決`（核准錨定 `49fbdb25…`、確認 CI 全綠、合併；之後先處理驗證環境的 Sigstore 初始化問題，再做三項真實驗證）
+- 使用者決策（2026-11-23）：
+  - 負責人更新了 `CMN_STAGE1_ANCHOR_SHA256`，並指示「改好了，若 CI 全綠，合併 pr17」；
+  - 同 Head `199bcf0` 的 CI run 45130648549 attempt 2：`validate` success，`baseline-anchor` 為 `ANCHOR_OK`（`49fbdb25…`，92 檔）；
+  - PR #17 合併為 `40bd998fca16d8ae9654f5867d46dc5a95ef9e5f`；
+  - **C-2 仍未驗收**。下一步：處理驗證環境的 Sigstore 初始化問題，然後用既有簽章做三項真實驗證。
 

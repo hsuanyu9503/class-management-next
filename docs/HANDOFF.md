@@ -91,7 +91,7 @@
   9. **C-2 本機驗證受阻，尚未驗收**（2026-11-23）：
      - Windows 的 `tar` 無法解開中文檔名，三次驗證都在快照階段中斷，沒有執行 `gh`；
      - Claude 已改為不使用 `tar` 的快照，並讓環境錯誤以 `NOT_RUN`（exit 3）回報（報告 §8）；
-     - PR #17 審查（`a4e2078`）：CHANGES REQUESTED，REV001～003。已修正（報告 §9）：未完成的 `gh` 執行回報 `NOT_RUN`；`gh` 只帶 `--repo`；Windows 上的測試資料與略過都已修正。**R1 複審 `990e855` 通過，三項 CLOSED**（審查者在 Windows 實機上：`c2-snapshot` 5/5、`c2-unit` 14/14、`c2-cli` 正確略過）。新錨定 `49fbdb250364aaa3f2f81d41f3bef3a4e65e1046601a68ba40e06e3c48327455`（92 檔）待你核准，`e2701771…` 已作廢；
+     - PR #17 審查（`a4e2078`）：CHANGES REQUESTED，REV001～003。已修正（報告 §9）：未完成的 `gh` 執行回報 `NOT_RUN`；`gh` 只帶 `--repo`；Windows 上的測試資料與略過都已修正。**R1 複審 `990e855` 通過，三項 CLOSED**（審查者在 Windows 實機上：`c2-snapshot` 5/5、`c2-unit` 14/14、`c2-cli` 正確略過）。錨定 `49fbdb250364aaa3f2f81d41f3bef3a4e65e1046601a68ba40e06e3c48327455`（92 檔）**已核准**，CI 全綠，**PR #17 已合併為 `40bd998`**（2026-11-23）；
      - 修正合併後，請在 Windows 上：
        1. 執行 `node --test test/c2-snapshot.test.mjs`（在 `poc/stage2` 中）；
        2. 用既有的簽章（run 45121359992）重跑三次驗證，保留退出碼、`result.json`、`gh-stdout.json` 與 `gh --version`；
