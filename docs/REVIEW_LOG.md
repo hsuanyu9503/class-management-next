@@ -1721,3 +1721,28 @@
   - PR #18 合併為 `824dcbf17dc1e119a014802812e223c4663104f3`（約 2026-11-23T10:43Z，晚於 cutoff 10:30Z）；
   - **C-3 尚未完成**：還要收集合併後自動觸發的 `attest.yml`（run 45158736877）證據，以及 Q3 的新 sigtest 與第三方驗證。
 
+### C-3 合併後的 hosted 證據（Claude 從 log 讀出；不是密碼學驗證）
+
+- 自動觸發的 `attest.yml` run 45158736877 attempt 1（push，main `824dcbf`）：
+  - `execute` success；
+  - `verify` success：`S2B2_B3B_VERIFY POC-001 result=UNATTESTED reasons=TRUST_ROOT_NOT_CONFIGURED`；簽章步驟 **skipped**；`DELIVERY result=UNATTESTED signing=NOT_ATTEMPTED_NOT_PASS`；log 中的錨定是 `caee1653…`；
+  - `availability` skipped（因為 verify 沒有失敗）。
+  - `verify` 的 `s2-attest` 部署紀錄**沒有出現在 job log 中**，Claude 的工具也讀不到 deployments API。要由負責人提供 run 頁面的截圖，或 `gh api` 的部署清單。
+- 新的 `attest-sigtest.yml` run 45158899144 attempt 1（負責人觸發，main `824dcbf`）：
+  - job `sigtest` success；
+  - `Attestation created for SIGTEST.txt@sha256:63515e7c…`；
+  - Rekor `logIndex=4051371751`；
+  - attestation https://github.com/hsuanyu9503/class-management-next/attestations/71047255 。
+  - Claude 從 log 印出的 PEM 解出 Fulcio 憑證的擴充欄位，**只是讀取，沒有驗證**：
+    - 1.9 build signer URI：`…/.github/workflows/attest-sigtest.yml@refs/heads/main`；
+    - 1.10／1.13 commit：`824dcbf…`；
+    - 1.14 ref：`refs/heads/main`；
+    - 1.21 run：`…/actions/runs/45158899144/attempts/1`；
+    - **1.23（deployment environment）：`s2-attest`**；
+    - **1.24（OIDC subject）：`repo:hsuanyu9503@328976242/class-management-next@1463026260:environment:s2-attest`**。這證實了 v0.3 的限制：完整的 `sub` 包含 immutable ID，不是假定的簡單格式。
+  - Environment 確實出現在憑證中，但依計畫**只記錄，不作為接受條件**。
+- 待完成：
+  - `verify` 的部署紀錄證據（負責人提供）；
+  - 第三方用 CLI 驗證新的簽章，預期 `SIGTEST_IDENTITY_ACCEPTED`、exit 0，採用 `SIGTEST-002`；
+  - ChatGPT 核對。
+
