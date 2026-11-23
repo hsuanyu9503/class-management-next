@@ -1656,3 +1656,18 @@
   - 負責人依計畫 §3 建立 Environment；
   - Claude 實作。
 
+### C-3：負責人建立 Environment `s2-attest`（Settings 的設定證據，負責人提供截圖）
+
+- 2026-11-23，負責人在 Settings → Environments 建立了 `s2-attest`，列表顯示「1 protection rule」。另有 GitHub Pages 自動建立的 `github-pages`，與 C-3 無關。
+- 第一張詳細頁截圖中，「Allow administrators to bypass configured protection rules」是**勾選**的，與 Q2 的決定不同。Claude 指出後，負責人取消勾選。
+- 第二張截圖：
+  - 「Allow administrators to bypass」：未勾選；
+  - Deployment branches and tags：「Selected branches and tags」，「1 branch and 0 tags allowed」，只有 `main`；
+  - Environment secrets：「This environment has no secrets」；
+  - Environment variables：「This environment has no variables」。
+- 第一張截圖中：Required reviewers 未勾選，Wait timer 未勾選。
+- 限制：
+  - 截圖只能證明畫面上的狀態。「取消勾選略過」是否已按 **Save protection rules** 儲存，請負責人重新整理頁面確認；
+  - 審查者也可以用 `GET /repos/{owner}/{repo}/environments/s2-attest` 核對（`can_admins_bypass: false`、`deployment_branch_policy.custom_branch_policies: true`）。
+- 待辦：ChatGPT 審查 C-3 計畫（PR #18），之後 Claude 實作。
+
