@@ -1296,3 +1296,25 @@
 - 錨定：`d0b815eae57482e06fd66ca31af7eac84d657508667345deb02bde78c5f2d45f`（83 檔，保護範圍不變）。需要審查並由負責人重新核准。
 - 使用者決策：負責人 2026-11-23「同意」開始修正 PR；合併與錨定 `待決`
 
+### PR #14 審查（ChatGPT）與 R1 回應
+
+- Reviewed Head：`18a5ecc9e07fc5c7f6fb5b398bfcaeb01cea2a1e`
+- 結論：**REQUEST_CHANGES**，有一項 P2。
+  - **PR14-REV001**：一般的下載失敗被寫成「同名遮蔽」的確定事實。審查者以 ETIMEDOUT 重現，輸出仍是 shadowing 的 finding。
+  - 調整 job 順序是合理的；沒有擴大簽章權限，也沒有讓 Verifier 放行。
+- 審查者的證據：
+  - 附件 SHA-256 一致；
+  - 在 Windows 上重跑單元測試 39/39；
+  - 獨立重算 83 檔的錨定；
+  - 核對了 run 45088076830 的 same-name 與 verify-attack job log；
+  - **沒有**重跑 mutation 或整合測試。
+- R1（Claude）：
+  - 新增 `probe-original` job，讀取它自己的錯誤 log 作為原因證據；
+  - 只有出現 ID-not-found 錯誤、而且清單同時列出兩個 ID 時，才記錄 shadowing；其他失敗只判有限命題，結果為 `CAUSE_UNVERIFIED`，不記錄 finding；
+  - 報告 §10 對 run 45088076830 的描述，改為區分「觀察到的事實」與「推論」；
+  - 逐項說明見 REPORT §11；
+  - 本機結果：`s2:test` 145/145、`s2:b3` 33/33、`s2:a10` 9/9、mutation 56/56。
+- 錨定：`7c4303b1d0e1906bf7b1bf8022ceaa72020667b91f59682bd62c8c3798205101`（83 檔）。`d0b815ea…` 已作廢。
+- 審查者建議另立追蹤的可用性項目（不阻擋本 PR）：下載失敗時保存有上限的 ID／清單／錯誤診斷，並評估同一個 run 重跑或新增上傳者時的同名情況。
+- 使用者決策：`待決`
+

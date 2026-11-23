@@ -70,7 +70,11 @@
 - **第一次 hosted attest-attack**（run 45088076830，2026-11-23）：
   - A10：9/9（真實目標）；
   - `verify-attack` 失敗，A14 與 A4 記為 NOT_RUN。原因是同名上傳被平台接受，並把原本的 ID 蓋住。詳見 REPORT §10。
-- **修正 PR**（同名階段改在主要驗證之後）：錨定 `d0b815ea…`，83 檔。
+- **修正 PR #14**（同名階段改在主要驗證之後）：
+  - `18a5ecc` 審查結果為 REQUEST_CHANGES（PR14-REV001，P2）；
+  - R1 已修正：shadowing 只在有證據時才記錄，見 REPORT §11；
+  - 錨定 `7c4303b1…`（83 檔）。`d0b815ea…` 已作廢。
+- 另立追蹤（審查者建議，不阻擋 PR #14）：下載失敗時的有上限診斷，以及同一個 run 重跑或新增上傳者時的同名情況。
 - 下一位負責人：
   1. ChatGPT：審查修正 PR（L3），並以原檔核對 run 45088076830 的 `s2-attack-a10`；
   2. 你：核准錨定、合併，之後重新觸發 `attest-attack.yml`；
@@ -224,5 +228,7 @@
 | 2026-11-23 | 負責人 | 核准錨定 `31c23e4d…`；合併 PR #13（`b5ae349`） | 觸發 hosted 攻擊驗收 |
 | 2026-11-23 | 負責人 | 觸發 attest-attack（45088076830）：A10 9/9；verify-attack 因同名 artifact 蓋住原 ID 而失敗 | 修正 PR |
 | 2026-11-23 | Claude → ChatGPT | 修正 PR：同名階段在主要驗證之後（錨定 `d0b815ea…`） | L3 審查 |
+| 2026-11-23 | ChatGPT → Claude | PR #14 審查 `18a5ecc9e07f`：REQUEST_CHANGES（PR14-REV001） | R1 修正 |
+| 2026-11-23 | Claude → ChatGPT | PR #14 R1（錨定 `7c4303b1…`） | 複審 |
 
 > 規格的正式變更請同步修改 SPEC／TECH，不要只在這裡留下新決策。

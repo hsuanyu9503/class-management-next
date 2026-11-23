@@ -251,7 +251,9 @@ PR #13 合併後（`b5ae349`），負責人在 2026-11-23 觸發 `attest-attack.
 
 **平台層的發現**：
 1. 在同一個 run 中，`upload-artifact`（v7.0.2，`archive: false`，`overwrite: false`）**接受了**第二個同名的 artifact。計畫原本預期它會被拒絕（A14-2）。
-2. 之後 `download-artifact`（v8.0.2）在本 run 列出的 artifact 數量少了一個，用**原本的 ID** 已經找不到真封裝。比較新的同名 artifact 會把原本的 ID 蓋住。
+2. 之後 `download-artifact`（v8.0.2）的 log 寫著 `Found 5 artifact(s)` 與 `None of the provided artifact IDs were found`；而本 run 的 artifact 清單在那個時間點有 6 個，其中兩個名稱相同。
+   - **觀察到的事實**：用原本的 ID 下載失敗，錯誤是「找不到這個 ID」。
+   - **推論**（PR14-REV001 之後明確標示為推論）：比較新的同名 artifact 把原本的 ID 蓋住了。這是從這次的 log 與清單推得的，不是對平台行為的一般性證明。此後的 run 只有在 `probe-original` 的 log 出現同一個錯誤、而且清單同時列出兩個 ID 時，才記錄為 shadowing（見 §11）。
 
 **安全面的意義**：
 - 這是 **fail closed**：Verifier 沒有收到其他的位元組，而是下載失敗、整個判定沒有執行。
@@ -284,4 +286,26 @@ PR #13 合併後（`b5ae349`），負責人在 2026-11-23 觸發 `attest-attack.
 **尚未完成**：
 - 修正後的 hosted 執行；
 - 第一次 run 的 artifact 原檔還沒有交給審查者核對，包括 `s2-attack-a10`。
+
+## 11. PR #14 審查回應（PR14-REV001，Reviewed Head `18a5ecc`）
+
+| ID | 問題 | 修正 | 位置 | 驗證 |
+|---|---|---|---|---|
+| PR14-REV001（P2） | 用原本的 ID 再下載只要失敗，就被寫成「同名遮蔽」的確定事實，例如 ETIMEDOUT 也會如此 | 採審查者提出的第一種策略，**收集可信的原因證據**：<br>- 新增 `probe-original` job：等 `execute-a14` 與 `same-name`；權限只有 `actions: read`；不 checkout、不執行任何程式；只在自己的 job 中用原本的 ID 下載一次，留下自己的錯誤訊息；<br>- `verify-same-name` 等它完成，平台證據步驟讀取它的 `##[error]` 行與 outcome。<br>A14-2s 只判定有限的命題：「原本的 ID 回傳封存的位元組，或不回傳任何位元組」。<br>- 只有三項都成立，才判 `ORIGINAL_ID_SHADOWED_FAIL_CLOSED` 並記錄 finding：`probe-original` 失敗、錯誤行含 `None of the provided artifact IDs were found`、清單同時列出兩個同名 ID；<br>- 其他失敗（逾時、5xx、401／403、原因不明、沒有 probe 的 log）→ `DEFENDED`，platformOutcome 為中性的 `ORIGINAL_DOWNLOAD_FAILED_CAUSE_UNVERIFIED`，`causeVerified: false`，**不**記錄 finding | `src/b3/attack-suite.mjs`（v4）、`scripts/attack-platform-evidence.mjs`、`attest-attack.yml`、`tests/repo_policy.test.mjs` | `attack-suite-unit` 14/14，新增 1 項：<br>- 目標錯誤 → shadowing；<br>- 逾時、503、403、沒有錯誤行 → 原因未證實；<br>- 有目標錯誤，但 probe 成功、probe 結果未知、沒有 probe 的 log、清單只列出一個 ID → 原因未證實；<br>- 審查者的 ETIMEDOUT 重現。<br>mutation V1～V6。<br>本機模擬（**合成**證據）：ID not found → `SHADOWED`；ETIMEDOUT → `CAUSE_UNVERIFIED` |
+
+**本機結果**（commit `0e26959`，程式與 Head 相同，之後只有文件）：
+- `npm test` 19/19；`check` 通過；`stage1:all` 通過，Stage 1 沒有變更；
+- `s2:test` 145/145；
+- `s2:b3` 33/33（`S2B2B3A-20261123T010603Z-ea6fb196`）；
+- `s2:a10` 9/9（`S2B2A10-20261123T010708Z`）；
+- mutation 56/56（M、R、S、T、U、V 各組），沒有 SKIP 或 SURVIVED。
+
+錨定：`7c4303b1d0e1906bf7b1bf8022ceaa72020667b91f59682bd62c8c3798205101`（83 檔，保護範圍不變）。送審時的 `d0b815ea…` 已作廢。
+
+**送審的問題**（不在本次修正範圍）：
+- A14-1b 若被 Verifier 以 `PACKAGE_DIGEST_MISMATCH` 以外的原因擋下（例如工具鏈不符），目前判為 `BREACHED`。這樣處理偏保守，但標籤可能誤導：替代品其實也沒有被接受。本機模擬用過期的封裝時遇到了這個情況。是否改為 `INCONCLUSIVE`，請審查者判斷。
+
+**仍未完成**：
+- 修正後的 hosted 執行；
+- run 45088076830 的原檔核對。
 
