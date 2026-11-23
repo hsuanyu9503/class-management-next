@@ -45,7 +45,7 @@ export const PROTECTED = [
   // Not protected by design: adapter-b3/ (the Adapter UNDER TEST — untrusted; A4-1 checks its tree from the host)
   // and unit tests. tests/anchor_coverage.test.mjs proves the static import closure of every entry is covered.
   S2 + 'scripts/run-attest-execute.mjs', S2 + 'scripts/attest-outputs.mjs', S2 + 'scripts/attest-delivery.mjs',
-  S2 + 'scripts/run-a10.mjs', S2 + 'scripts/attack-verify.mjs', S2 + 'scripts/attack-platform-evidence.mjs',
+  S2 + 'scripts/run-a10.mjs', S2 + 'scripts/attack-verify.mjs', S2 + 'scripts/attack-platform-evidence.mjs', S2 + 'scripts/attest-availability.mjs',
   S2 + 'test/b3-run.mjs', S2 + 'test/a10-run.mjs', S2 + 'test/smoke.mjs',   // smoke.mjs: named by src/orchestrator.mjs
   S2 + 'package.json', S2 + 'package-lock.json', S2 + 'firebase.json', S2 + 'firestore.rules',
 ];

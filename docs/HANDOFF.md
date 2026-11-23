@@ -75,17 +75,16 @@
   - R1 已修正：shadowing 只在有證據時才記錄，見 REPORT §11；
   - 錨定 `7c4303b1…`（83 檔）。`d0b815ea…` 已作廢。
   - **`d2c1c09`：程式複審通過**。PR14-REV001 已關閉；hosted 驗收仍待完成。
+  - **已合併**（2026-11-23，負責人指示）：Head `7223ff5` → main `2f78f9b`，合併前 `ANCHOR_OK` `7c4303b1…`。
 - 非阻擋的追蹤項目：
   1. A14-1b 在工具鏈不符等前置條件錯誤時判 `BREACHED`，應改為 `INCONCLUSIVE`（保留 reason code，仍以非零狀態退出）；
   2. 正常 `attest.yml` 的可用性診斷：下載失敗時保存有上限的診斷，並評估同一個 run 重跑或新增上傳者時的同名情況。
 - 下一位負責人：
-  1. 你：核准錨定 `7c4303b1d0e1906bf7b1bf8022ceaa72020667b91f59682bd62c8c3798205101`，確認同 Head 的 CI 全綠後決定是否合併 PR #14，之後重新觸發 `attest-attack.yml`；
-  2. ChatGPT：以原檔做 hosted 驗收。需要交付：
-     - run ID 與 attempt、實際的工具鏈版本；
-     - `s2-attack-a10`、`s2-attack-summary`、`s2-attack-summary-same-name`；
-     - 平台證據（含 `probe-original` 的錯誤行）；
-     - 相應的封裝原檔與 hash；
-  3. Claude：處理上面的追蹤項目，之後進行 C-2（A18 流程 I）。
+  1. 你：已觸發 `attest-attack.yml`，run **45094456766** attempt 1。7 個 job 全部 success，兩個階段都是 `DEFENDED_WHERE_RUN`，A10 為 9/9，詳見 REVIEW_LOG。ChatGPT 已核對 8 份原檔與舊 run 的封裝，A14-3b-i/ii 的重播也與 hosted 一致：**C-1 的 hosted 證據已收尾**（報告 §12）；
+  2. 你已決定 C-2 計畫 §8 的 Q1～Q4（都依建議）。Claude 已實作 C-1f（報告 §13），和 C-2 計畫草案放在同一個 PR；
+  3. ChatGPT 已審查 PR #15（Reviewed Head `dbe6562`）：**C-1f 程式審查通過**；C-2 計畫方向可採用，4 項備註已納入計畫 v0.2；
+  4. 你：核准新錨定 `d07dfc54b1b93fe80af10d26a8ef6b7486bbbe13d8d90ee7f0e813c71ca78694`（85 檔），確認同 Head 的 CI 全綠後決定是否合併 PR #15；
+  5. 合併後，Claude 依計畫 v0.2 實作 C-2，送新的 PR 審查。
 - 四個 hosted run 的 artifact 原檔重播仍待處理，需要你提供原檔給 ChatGPT。
 - **PASS 啟用的門檻**（依 Q-B 的選擇；**選擇之前 `PASS_ENABLED=false`**）：
   - **流程 I（保留原門檻）**：A4／A10／A14 的 hosted 驗收、A18 的隔離測試簽章驗收（分為密碼學／身分層與 statement 政策層），以及第三方驗證腳本，**全部**完成並經獨立審查、負責人核准之後，才進入打開 PASS 的 PR。

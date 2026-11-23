@@ -86,6 +86,16 @@ test('same-name stage: the original ID must return the sealed bytes or fail — 
   // verifies (here: the sealed bytes themselves), A14-1b must NOT be DEFENDED
   const acceptedSub = runSameNameVerify(snIo({ sameName: { uploadOutcome: 'success', artifactId: '1004', list: one('package-POC-001.tar'), read: () => pkgA14.packageBytes } }));
   assert.equal(sc(acceptedSub, 'A14-1b').testOutcome, 'BREACHED'); assert.doesNotMatch(sc(acceptedSub, 'A14-1b').verifierOutcome, /PACKAGE_DIGEST_MISMATCH/);
+  // C-1f: blocked BEFORE the digest check (a precondition, here the toolchain commit) → INCONCLUSIVE with the reason
+  // code kept; never DEFENDED, never BREACHED, and the stage is not DEFENDED_WHERE_RUN (non-zero exit)
+  const pre = runSameNameVerify(snIo({ a14: { outputs: outputsOf(pkgA14, { toolchainCommit: 'e'.repeat(40) }), scenario: 'attack-a14' } }));
+  assert.equal(sc(pre, 'A14-1b').testOutcome, 'INCONCLUSIVE'); assert.deepEqual(sc(pre, 'A14-1b').reasonCodes, ['TOOLCHAIN_COMMIT_MISMATCH']);
+  assert.match(sc(pre, 'A14-1b').verifierOutcome, /^BLOCKED \[TOOLCHAIN_COMMIT_MISMATCH\]$/); assert.notEqual(pre.overall, 'DEFENDED_WHERE_RUN');
+  // blocked for a different selection reason (two files under the substitute ID) → INCONCLUSIVE as well
+  const two1b = runSameNameVerify(snIo({ sameName: { uploadOutcome: 'success', artifactId: '1004', list: () => [{ name: 'package-POC-001.tar', isFile: true }, { name: 'x', isFile: true }], read: () => Buffer.from('x') } }));
+  assert.equal(sc(two1b, 'A14-1b').testOutcome, 'INCONCLUSIVE'); assert.deepEqual(sc(two1b, 'A14-1b').reasonCodes, ['ARTIFACT_SELECTION_MISMATCH']);
+  assert.equal(sc(acceptedSub, 'A14-1b').reasonCodes, undefined);                              // accepted stays BREACHED
+  assert.doesNotMatch(sc(acceptedSub, 'A14-1b').verifierOutcome, /^BLOCKED/);
   // accepted, but the substitute could not be downloaded by its ID → INCONCLUSIVE (not DEFENDED)
   assert.equal(sc(runSameNameVerify(snIo({ sameName: { uploadOutcome: 'success', artifactId: '1004' } })), 'A14-1b').testOutcome, 'INCONCLUSIVE');
   // accepted per the step, but the listing does not show both artifacts → A14-2 INCONCLUSIVE

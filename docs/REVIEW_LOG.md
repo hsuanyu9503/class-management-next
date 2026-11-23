@@ -1333,5 +1333,113 @@
   2. **正常 `attest.yml` 的可用性診斷**：下載失敗時保存有上限的 ID／清單／錯誤診斷，並評估同一個 run 重跑或新增上傳者時的同名情況。
 - 仍未完成：修正後的 hosted 執行；run 45088076830 原檔的核對。
 - 本段記錄是在 Reviewed Head 之後新增的文件 commit，只改 `docs/REVIEW_LOG.md` 與 `docs/HANDOFF.md`。新 Head **不是**審查者已審的版本。
-- 使用者決策：`待決`（核准錨定 `7c4303b1…`、合併、合併後觸發 hosted）
+- 使用者決策（2026-11-23）：
+  - 負責人更新了 `CMN_STAGE1_ANCHOR_SHA256`。CI run 45093716207 attempt 2 的結果是 `ANCHOR_OK`（`7c4303b1…`，83 檔），`validate` 也通過；
+  - 負責人明確指示「pr14合併」。PR #14 於 Head `7223ff5` 合併為 `2f78f9b72fe8492ae3b3aaba8d06ff234a1fe73f`；
+  - 修正後的 hosted `attest-attack.yml` 待負責人觸發。
+
+### 修正後的 hosted `attest-attack.yml`：run 45094456766 attempt 1（Claude 從 log 讀出；不是審查者證據）
+
+- 觸發：負責人，workflow_dispatch，main `2f78f9b72fe8492ae3b3aaba8d06ff234a1fe73f`。工具鏈 commit 也是 `2f78f9b…`（`CMN_S2_TRUSTED_TOOLCHAIN_SHA` 未設定）。錨定 `7c4303b1…`。沒有簽章。
+- 7 個 job 全部 success。Node v22.23.5；runner image ubuntu-24.04 20261116.133.1。
+- A10：`checks=9/9`、`A10_OK`。A10-main 與 N-1、N-3、N-4 為 DEFENDED；N-2、N-5、N-8 為預期的 BREACHED（負控制）；N-6、N-7 為預期的 INCONCLUSIVE。
+  - 4 個 `ENV_*` 為 `N/A_HOST_ABSENT`，`PORT_18300/18302/18399` 為 `N/A_HOST_UNREACHABLE`，其餘目標都是 DEFENDED。
+- 主要階段：`ATTACK_SUMMARY stage=main overall=DEFENDED_WHERE_RUN notRun=- findings=0`。
+  - A14-positive 的 `CONTROL_OK` 結果是 UNATTESTED（`TRUST_ROOT_NOT_CONFIGURED`、`SCENARIO_NOT_HONEST`）；
+  - A14-1、A14-3a、A14-3b-i/ii、A4-1、A4-2-i/ii、A4-3 都是 DEFENDED。
+- 同名階段：`ATTACK_SUMMARY stage=same-name overall=DEFENDED_WHERE_RUN notRun=- findings=2`。
+  - A14-2 為 `PLATFORM_ACCEPTED`：同名 artifact 被接受，ID 14783000880；
+  - A14-1b 為 DEFENDED（`PACKAGE_DIGEST_MISMATCH`）；
+  - A14-2s 為 DEFENDED（`ORIGINAL_ID_SHADOWED_FAIL_CLOSED`）。
+- `probe-original` 的錯誤行：`Unable to download artifact(s): None of the provided artifact IDs were found`（原 ID 14782373665；`Found 6 artifact(s)`）。
+- Artifact digest：
+  - `s2-attack-a10` 14782333832，`be9a8e74…`
+  - `s2-attack-summary` 14781973556，`449e7ff4…`
+  - `s2-attack-summary-same-name` 14781888957，`853d8435…`
+  - 原封裝 14782373665，`0f91173c…`
+  - 誘餌 14782523179，`f1cffd08…`
+  - A4 封裝 14782727619，`3bdbbda7…`
+  - 同名封裝 14783000880，`b4589cdf…`
+  - 控制檔 14782990640，`bc3978ab…`
+- 待審查者確認：主要階段的平台證據行是 `sameNameLogOk=false … errors=1`。推論：主要階段執行時同名 job 尚未執行，所以查不到它的 log。這一點需要用原檔確認。
+- 仍未完成：ChatGPT 以原檔做 hosted 驗收；run 45088076830 原檔的核對。
+
+### run 45094456766 原檔審查（ChatGPT，2026-11-23）
+
+- 結論：**八份原始附件核對通過**。可重播的 A14／A4 案例與 A10 診斷判定，都與 hosted 摘要一致；沒有新的產品阻擋缺陷。這不是 GitHub approval，也不授權開啟 PASS、簽章或更改 Settings。
+- 審查者的證據：
+  - 從實際位元組重算 8 份附件的 SHA-256，逐項符合 GitHub artifact digest。兩個 `package-POC-001.tar` 中，87552 bytes 是原封裝，4096 bytes 是同名替代品；
+  - 用已審的判定程式重播（不執行封裝內容）：A14-positive（UNATTESTED）、A14-1、A14-1b、A4-1、A4-2-i/ii 符合；A14-2、A14-2s、A14-3a、A4-3 以 API 清單與 job 日誌交叉核對；
+  - A10：九組情境的 overall 與逐目標 outcome 重算一致。A10-main 為 `REAL_TARGETS_ONLY`，五個必要目標都是 DEFENDED。N-2、N-5、N-8 的 BREACHED 是負控制成功被抓到。
+- 審查者界定的證據限制：
+  - `ENV_*` 為 `N/A_HOST_ABSENT`，不能宣稱這次測到了實際 token 的阻擋；
+  - `PORT_183xx` 為 `N/A_HOST_UNREACHABLE`，不能當成防禦成功；
+  - 安全診斷沒有保留完整的沙箱原始資料。這次是一致性重算，不是獨立觀測主機；N7 主機來源的信任限制仍在；
+  - 平台證據 JSON 沒有獨立隨附件提供，用 API 清單、日誌與摘要欄位交叉核對；當時的清單與日誌是有時間點的證據；
+  - 同名可用性問題只是在該 action 版本與該次 run 下觀察到的，不能推廣成一般保證。
+- **待補**：A14-3b-i/ii 是「hosted 已執行、原檔獨立重播待補」。缺的是舊 run 45087498469 的 artifact 14780101081（`package-POC-001.tar`，87552 bytes，`d3dfaacf31a0bb68c13469ebda2370975ae57786577f7cfd3c2f440320de985b`）。
+  - Claude 以 API 確認（2026-11-23）：該 artifact 屬於 run 45087498469，未過期，到期日 2026-12-23；
+  - 補齊後只需重播這兩項，不必重跑 hosted。
+- 保留：
+  - A14-2 `PLATFORM_ACCEPTED` 與同名可用性 finding；
+  - A14-1b 標籤改進（非阻擋）；
+  - run 45088076830 原檔核對、四個正常 hosted run 的原檔重播（與本次分開）；
+  - `PASS_ENABLED=false`、POC-009 BLOCKED、Stage 1 的 72 筆 NOT_RUN；
+  - N5、N7、main 摘要、NOTE-c 原文缺失不因本次結果結案。
+
+### A14-3b-i／ii 原檔獨立重播（ChatGPT，2026-11-23）：缺件關閉
+
+- 原檔：run 45087498469 的 artifact 14780101081（`package-POC-001.tar`，87552 bytes）。
+  - SHA-256 `d3dfaacf31a0bb68c13469ebda2370975ae57786577f7cfd3c2f440320de985b`；manifest `3dafa587…`；
+  - 封裝內的 `run.json` 確認來源是 run 45087498469。
+- 方法：
+  - 使用已審、版本 `2f78f9b…` 的 `runVerifyJob`。可信的預期輸入取自 hosted verify-attack 的 log（run 45094456766 attempt 1，scenario `attack-a14`），不採信舊封裝內的 run、nonce 或工具鏈；
+  - 只做資料解析並執行可信 Verifier，不執行封裝內的程式。
+- 結果，兩項都與 hosted 一致：
+  - A14-3b-i：BLOCKED `PACKAGE_DIGEST_MISMATCH`；
+  - A14-3b-ii：外層 digest 同步後，仍 BLOCKED `RUN_BINDING_MISMATCH`、`SCENARIO_MISMATCH`、`NONCE_MISMATCH`；
+  - 兩項的 `delivery.signing` 都是 `NOT_ATTEMPTED_NOT_PASS`。
+- 結論：A14-3b-i／ii 為「原檔獨立重播完成，與 hosted 一致」，**C-1 的 hosted 證據收尾**（報告 §12）。沒有新的修正要求，也不需要再觸發 hosted。這不授權開啟 PASS、簽章或更改 Settings。
+- 機器可讀的結果在審查者本機：`work/hosted45094456766/a14-3b-replay-results.json`。這是審查者的證據，不在本 repository。
+- 下一步：Claude 提出 C-2 計畫（`docs/stage2/S2B2-B3C2-PLAN.md`，草案），經審查與負責人確認後才實作。
+
+### C-1f（PR #14 R1 的兩個非阻擋追蹤項目）：Claude 實作，待審查
+
+- 負責人決定（2026-11-23）：C-2 計畫的 Q1～Q4 都依建議處理（計畫 §8），Q1 是先開這個小 PR。
+- 內容（報告 §13）：
+  - A14-1b：前置條件擋下 → `INCONCLUSIVE`，保留 reason code（`attack-suite.mjs` v5）；
+  - `attest.yml`：新增 `availability` job，只有 `actions: read`，只在 verify 失敗時保存有上限的診斷；
+  - 同名重跑的評估（推論，未在 hosted 測試）。
+- 錨定會改變（85 檔，新增 `scripts/attest-availability.mjs`、`src/b3/availability.mjs`），需要負責人重新核准。
+- 同一個 PR 也帶入 C-2 計畫草案 v0.1，請一併審查；C-2 尚未實作。
+
+### PR #15 審查（ChatGPT）：C-1f 程式審查通過；C-2 計畫方向可採用
+
+- Reviewed Head：`dbe65627b59761832e95a79adbab4b51804c0d35`（Base `2f78f9b…`）
+- 結論：
+  - **C-1f 程式審查通過**，沒有需要阻擋的缺陷，可以交給負責人決定錨定核准與合併；
+  - C-2 計畫的方向可以採用，另有 4 項實作備註；
+  - 這不是 C-2 程式或真實簽章的驗收，不是 GitHub approval，也不授權觸發簽章 workflow。
+- 審查者的證據：
+  - 遠端 Head 與 Base 和證據包一致，共 13 個檔案；ZIP 中的 7 份原始碼與測試和 Head 逐字一致；
+  - 在 Windows、Node 26.13.1 上執行：`attack-suite-unit` 14/14、`availability-unit` 4/4、`repo_policy` 6/6，合計 24/24；
+  - 獨立重算錨定 85 檔 `d07dfc54…`，與 PR 及 CI log 一致；
+  - CI 45101256252：`validate` success；`baseline-anchor` 為預期的 `ANCHOR_MISMATCH`。
+- 審查者**沒有**獨立執行，仍是提交者的證據：
+  - `s2:b3`、`s2:a10`（Linux／root／emulator）；
+  - `s2:test` 149/149；
+  - mutation 16+56；
+  - availability job 沒有在 hosted 執行，也不為驗收而製造失敗。
+- 非阻擋的提醒：
+  - A14-1b 的「非 BLOCKED」也包含 Verifier 的 FAIL。註解只舉 PASS／UNATTESTED。之後擴充攻擊資料時，依該案例受測的不變條件解釋，不一律寫成「已正式接受」；
+  - 診斷的**輸出**有上限，但讀取 log 時的位元組數沒有上限，列為後續強化；
+  - 這次的診斷實作不代表消除了同名 artifact 的可用性風險。
+- C-2 的備註已納入計畫 v0.2（§2.2～§2.4、§5、§9、§10）：
+  - 時間戳必須非空且可解析，記錄來源；
+  - sigtest 照做檔案 digest 綁定，有三種輸出與對應的退出碼；
+  - 外部 `--anchor`、政策取得紀錄、只能透過測試介面注入政策複本；
+  - 合成 JSON 不等於真實驗證；
+  - 官方來源已列入計畫 §10。
+- 本段之後的 commit 只改文件（REVIEW_LOG、HANDOFF、C-2 計畫），錨定仍是 `d07dfc54…`。
+- 使用者決策：`待決`（核准錨定 `d07dfc54…`、合併 PR #15）
 

@@ -7,6 +7,7 @@ name: S2 attestation (B3b)
 # - PASS_ENABLED=false（verifier.mjs）：在負責人完成批准紀錄、錨定與兩個 repository variable，
 #   而且另一個 PR 打開 PASS 之前，結果最多 UNATTESTED，簽章步驟不會執行。
 # - 每個官方 action 以完整 commit SHA 固定（tag → SHA 見 docs/stage2/S2B2-B3B-REPORT.md）。
+# - C-1f：verify 失敗時，另一個只有 actions: read 的 job 保存有上限的可用性診斷（不是證據，不影響任何判定）。
 on:
   push:
     branches: [main]
@@ -157,3 +158,39 @@ jobs:
           path: ${{ runner.temp }}/s2-verify
           retention-days: 30
           if-no-files-found: error
+
+  availability:
+    # C-1f（PR #14 R1 的非阻擋追蹤）：只在 verify 失敗時執行；沒有 id-token、沒有 attestations。
+    # 記錄本 run 的 artifact 清單（上限 100）、預期 ID 是否在清單中、同名 ID，以及 verify job 的錯誤行（上限 10 行）。
+    needs: [execute, verify]
+    if: always() && needs.execute.result == 'success' && needs.verify.result == 'failure'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      actions: read
+    steps:
+      - name: Checkout 可信工具鏈（不 checkout Adapter 或 artifact 的任何內容）
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ vars.CMN_S2_TRUSTED_TOOLCHAIN_SHA || github.sha }}
+          persist-credentials: false
+      - name: Node.js 22
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: '22'
+      - name: 可用性診斷（唯讀 token；只讀 artifact 清單與 verify job 的 log）
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          OUT_DIR: ${{ runner.temp }}/s2-availability
+          EXP_TEST_ID: ${{ needs.execute.outputs.testId }}
+          EXP_ARTIFACT_ID: ${{ needs.execute.outputs.artifactId }}
+        run: node poc/stage2/scripts/attest-availability.mjs
+      - name: 上傳可用性診斷（未簽章，保存 30 天）
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: s2-availability-${{ needs.execute.outputs.testId }}
+          path: ${{ runner.temp }}/s2-availability
+          retention-days: 30
+          if-no-files-found: error
+          overwrite: false
