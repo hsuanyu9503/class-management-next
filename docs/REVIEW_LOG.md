@@ -1283,3 +1283,16 @@
 - 尚未執行：hosted 的 `attest-attack.yml`，由負責人觸發。
 - 使用者決策：合併 `已核准`；錨定 `已核准`
 
+### 第一次 hosted attest-attack（run 45088076830）與同名階段的修正（Claude 送審）
+
+- 負責人在 PR #13 合併後觸發（2026-11-23），輸入 `previousRunId=45087498469`、`previousArtifactId=14780101081`。
+- 結果（只來自 job log 與 artifact 清單）：
+  - `a10`：9/9 符合預期，A10-main 以**真實目標**判 `DEFENDED`；
+  - `verify-attack`：在 A14 正向控制的下載就失敗；A14 與 A4 都沒有判定，記為 **NOT_RUN**。
+- 發現：
+  - 平台接受了同一個 run 中的同名上傳（`overwrite: false` 沒有拒絕）；
+  - 比較新的同名 artifact 會把原本的 ID 蓋住，`download-artifact` 找不到原本的封裝。這是 fail closed，但有可用性上的影響。
+- 修正：same-name 改在主要驗證之後執行；新增 `verify-same-name` 與 A14-2s；`attack-suite` v3。詳見 REPORT §10。
+- 錨定：`d0b815eae57482e06fd66ca31af7eac84d657508667345deb02bde78c5f2d45f`（83 檔，保護範圍不變）。需要審查並由負責人重新核准。
+- 使用者決策：負責人 2026-11-23「同意」開始修正 PR；合併與錨定 `待決`
+
