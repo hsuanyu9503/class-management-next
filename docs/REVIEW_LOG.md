@@ -1522,5 +1522,9 @@
   - run ID／attempt／實際的 commit、subject digest；
   - `gh` 的版本與實際參數、退出碼、`gh-stdout.json`、`result.json`；
   - 正向（`SIGTEST_IDENTITY_ACCEPTED`）與反向結果：official profile 混用、錯誤的錨定要拒絕；政策撤銷、過期與路徑的反向重播，要標明證據來源。
-- 使用者決策：`待決`（核准錨定 `060c588e…`、合併；合併後手動觸發 `attest-sigtest.yml`）
+- 使用者決策（2026-11-23）：
+  - 負責人更新了 `CMN_STAGE1_ANCHOR_SHA256`，並指示「改好了若 CI 全綠，合併 pr16」；
+  - 同 Head `1e70833` 的 CI run 45120816930 attempt 2：`validate` success，`baseline-anchor` 為 `ANCHOR_OK`（`060c588e…`，91 檔）；
+  - PR #16 合併為 `b8d3ba4096033105f9149600f3138311e1443045`；
+  - 下一步：負責人手動觸發 `attest-sigtest.yml`，之後由第三方以真實的 `gh` 驗證。**C-2 尚未驗收**。
 
