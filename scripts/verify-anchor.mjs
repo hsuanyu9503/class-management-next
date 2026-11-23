@@ -9,56 +9,49 @@
 //   node scripts/verify-anchor.mjs           compare with env CMN_STAGE1_ANCHOR_SHA256 (fails if unset)
 //
 // Residual risk (documented, not solvable inside the PR): a PR that edits this file,
-// .github/workflows/ci.yml, attest.yml or attest-attack.yml can skip the comparison. Both are in the anchored set, so the
+// .github/workflows/ci.yml, attest.yml, attest-attack.yml or attest-sigtest.yml can skip the comparison. All are in the anchored set, so the
 // digest changes; such diffs need the owner's review before the variable is updated.
-import { readFileSync, existsSync, readdirSync, statSync } from 'node:fs';
+import { readFileSync, existsSync, readdirSync, lstatSync } from 'node:fs';
 import { createHash } from 'node:crypto';
 import { resolve, join } from 'node:path';
 
 const root = resolve(import.meta.dirname, '..');
 const POC = 'poc/stage1/';
-const S2 = 'poc/stage2/';
-export const PROTECTED = [
-  '.gitattributes', '.github/workflows/ci.yml', 'package.json', 'scripts/check.mjs', 'scripts/verify-anchor.mjs',
-  POC + 'package.json', POC + 'contracts/stage1-baseline-lock.json',
-  POC + 'src/common.mjs', POC + 'src/contract-guard.mjs', POC + 'src/runner.mjs', POC + 'src/oracle.mjs', POC + 'src/evidence.mjs',
-  POC + 'scripts/validate-stage0.mjs', POC + 'scripts/validate-stage1.mjs', POC + 'scripts/validate-stage1-guards.mjs', POC + 'scripts/make-plan.mjs',
-  POC + 'test/runner.test.mjs', POC + 'test/contract-guard.test.mjs', POC + 'test/mock-adapter.mjs',
-  // S2-B2 B3b (plan v0.3 §9.5): the signing workflow, the approval record, and every file that launches the
-  // sandbox or decides the verdict. Any change here changes the digest → the owner re-approves the anchor.
-  // (C1-REV005: this list alone is NOT the whole trusted chain — see the C-1 block below. A configured
-  //  CMN_S2_TRUSTED_TOOLCHAIN_SHA pins the toolchain commit too, but while it is unset the workflows run github.sha.)
-  '.github/workflows/attest.yml', 'docs/stage2/S2B2-TRUST-POLICY.json',
-  S2 + 'src/b3/sandbox.mjs', S2 + 'src/b3/isolation-policy.mjs', S2 + 'src/b3/verifier.mjs', S2 + 'src/b3/reconcile.mjs',
-  S2 + 'src/b3/package.mjs', S2 + 'src/b3/trust-policy.mjs', S2 + 'src/b3/attest-verify.mjs', S2 + 'scripts/attest-verify.mjs',
-  S2 + 'src/observer.mjs', S2 + 'src/verdict.mjs',
-  // S2-B2 C-1 (attack-acceptance plan v0.4): the no-signing attack workflow
-  '.github/workflows/attest-attack.yml',
-  // C1-REV005: the whole TRUSTED call chain from both attest workflows to every verdict / evidence output — not a
-  // hand-picked subset. With no trust root set the workflows check out github.sha, so the anchor (not the
-  // toolchain variable) is what pins these files:
-  //  - entry scripts the workflows run, and the Runner programs they spawn (b3-run, a10-run produce the sealed
-  //    evidence, positive controls, equivalence, masking inputs and summaries);
-  //  - the Stage 2 package / lock / emulator config those programs depend on;
-  //  - PROTECTED_TREES below: every file of src/ (Verifier, Observer, harness, traces, masking, sandbox, self-check
-  //    host, A10, attack suite, secret collector …) and sandbox-check/ (in-sandbox self-check and A10 probe).
-  // Not protected by design: adapter-b3/ (the Adapter UNDER TEST — untrusted; A4-1 checks its tree from the host)
-  // and unit tests. tests/anchor_coverage.test.mjs proves the static import closure of every entry is covered.
-  S2 + 'scripts/run-attest-execute.mjs', S2 + 'scripts/attest-outputs.mjs', S2 + 'scripts/attest-delivery.mjs',
-  S2 + 'scripts/run-a10.mjs', S2 + 'scripts/attack-verify.mjs', S2 + 'scripts/attack-platform-evidence.mjs', S2 + 'scripts/attest-availability.mjs',
-  S2 + 'test/b3-run.mjs', S2 + 'test/a10-run.mjs', S2 + 'test/smoke.mjs',   // smoke.mjs: named by src/orchestrator.mjs
-  S2 + 'package.json', S2 + 'package-lock.json', S2 + 'firebase.json', S2 + 'firestore.rules',
-];
-/** C1-REV005: directories protected file by file (every regular file, recursively, sorted). */
-export const PROTECTED_TREES = [S2 + 'src', S2 + 'sandbox-check'];
-const treeFiles = (base, rel) => { const out = []; const walk = (r) => { for (const n of readdirSync(join(base, r)).sort()) { const q = `${r}/${n}`; if (statSync(join(base, q)).isDirectory()) walk(q); else out.push(q); } }; walk(rel); return out; };
+// PR16-REV001: the protected path list is DATA (scripts/anchor-paths.json, itself protected), so that a third-party
+// verifier can recompute the anchor digest of a historical toolchain commit with ITS OWN trusted code over that
+// commit's files — without running any program from the commit. The groups, and why each path is protected, are
+// described in the file's "notes" (Stage 1 baseline; B3b signing workflow / approval record / verdict code; C-1
+// attack workflow; C-2 test signing; C1-REV005 trusted call chain). adapter-b3/ and unit tests are not protected.
+export const ANCHOR_PATHS_FILE = 'scripts/anchor-paths.json';
+export const ANCHOR_PATHS_VERSION = 's2-anchor-paths-v1';
+const SAFE = /^(?!\/)(?!.*(?:^|\/)\.{1,2}(?:\/|$))[A-Za-z0-9._@-]+(?:\/[A-Za-z0-9._@-]+)*$/;
 const sha = (b) => createHash('sha256').update(b).digest('hex');
 
+/** Reads and validates <base>/scripts/anchor-paths.json. Throws on anything unexpected (fail closed). */
+export function anchorPaths(base = root) {
+  const d = JSON.parse(readFileSync(join(base, ANCHOR_PATHS_FILE), 'utf8'));
+  const ok = (a) => Array.isArray(a) && a.length > 0 && a.every((p) => typeof p === 'string' && SAFE.test(p)) && new Set(a).size === a.length;
+  if (!d || d.version !== ANCHOR_PATHS_VERSION || !ok(d.files) || !ok(d.trees) || !d.files.includes(ANCHOR_PATHS_FILE) || !d.files.includes('scripts/verify-anchor.mjs')) throw new Error('anchor path list invalid');
+  return { files: d.files, trees: d.trees };
+}
+const P0 = anchorPaths(root);
+export const PROTECTED = P0.files;
+/** C1-REV005: directories protected file by file (every regular file, recursively, sorted). */
+export const PROTECTED_TREES = P0.trees;
+// regular files only: a symbolic link (which could point outside the tree) or any other type fails the listing
+const kind = (base, q) => { const st = lstatSync(join(base, q)); if (st.isSymbolicLink()) throw new Error(`symbolic link in anchored set: ${q}`); return st.isDirectory() ? 'dir' : st.isFile() ? 'file' : 'other'; };
+const treeFiles = (base, rel) => { const out = []; const walk = (r) => { if (kind(base, r) !== 'dir') throw new Error(`not a directory: ${r}`); for (const n of readdirSync(join(base, r)).sort()) { const q = `${r}/${n}`; const k = kind(base, q); if (k === 'dir') walk(q); else if (k === 'file') out.push(q); else throw new Error(`not a regular file: ${q}`); } }; walk(rel); return out; };
+
+/** @param base a checkout (or an extracted tree of any commit): its OWN path list and files are used. */
 export function anchorListing(base = root) {
+  const { files, trees } = anchorPaths(base);
   const lock = JSON.parse(readFileSync(join(base, POC, 'contracts/stage1-baseline-lock.json'), 'utf8'));
-  const paths = [...new Set([...PROTECTED, ...PROTECTED_TREES.flatMap((t) => treeFiles(base, t)), ...lock.fixed.map((f) => POC + f.path)])].sort();
+  const fixed = (lock.fixed || []).map((f) => POC + f.path);
+  if (!fixed.every((p) => typeof p === 'string' && SAFE.test(p))) throw new Error('lock path invalid');
+  const paths = [...new Set([...files, ...trees.flatMap((t) => treeFiles(base, t)), ...fixed])].sort();
   const missing = paths.filter((p) => !existsSync(join(base, p)));
   if (missing.length) throw new Error(`anchored file missing: ${missing.join(', ')}`);
+  for (const p of paths) if (kind(base, p) !== 'file') throw new Error(`not a regular file: ${p}`);
   const lines = paths.map((p) => `${sha(readFileSync(join(base, p)))}  ${p}`);
   const text = lines.join('\n') + '\n';
   return { lines, digest: sha(Buffer.from(text, 'utf8')) };

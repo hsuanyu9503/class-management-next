@@ -83,8 +83,12 @@
   1. 你：已觸發 `attest-attack.yml`，run **45094456766** attempt 1。7 個 job 全部 success，兩個階段都是 `DEFENDED_WHERE_RUN`，A10 為 9/9，詳見 REVIEW_LOG。ChatGPT 已核對 8 份原檔與舊 run 的封裝，A14-3b-i/ii 的重播也與 hosted 一致：**C-1 的 hosted 證據已收尾**（報告 §12）；
   2. 你已決定 C-2 計畫 §8 的 Q1～Q4（都依建議）。Claude 已實作 C-1f（報告 §13），和 C-2 計畫草案放在同一個 PR；
   3. ChatGPT 已審查 PR #15（Reviewed Head `dbe6562`）：**C-1f 程式審查通過**；C-2 計畫方向可採用，4 項備註已納入計畫 v0.2；
-  4. 你：核准新錨定 `d07dfc54b1b93fe80af10d26a8ef6b7486bbbe13d8d90ee7f0e813c71ca78694`（85 檔），確認同 Head 的 CI 全綠後決定是否合併 PR #15；
-  5. 合併後，Claude 依計畫 v0.2 實作 C-2，送新的 PR 審查。
+  4. **已完成**：錨定 `d07dfc54…`（85 檔）已核准，CI 全綠，PR #15 已合併為 `da25061`（2026-11-23）；
+  5. **C-2 已實作**（負責人 2026-11-23 指示），送新的 PR 審查（L3），見 `docs/stage2/S2B2-B3C2-REPORT.md`；
+  6. ChatGPT 已審查 `1164c40`：CHANGES REQUESTED（PR16-REV001 P1、PR16-REV002 P2）。Claude 在 R1 修正後，**R1 複審 `d6d5102` 通過，兩項 CLOSED**；
+  7. 你：核准錨定 `060c588e4f919f48bfcbf5c14f3d29ffbb1f36d3d1be957289908bd79e942c25`（91 檔；`afa0dcd3…` 已作廢），確認 CI 全綠後決定是否合併；
+  8. 合併後：你手動觸發 `attest-sigtest.yml` 一次；第三方以 `gh` v2.102.0 以上執行報告 §5 的正向與反向驗證，並交付 run／attempt／commit、subject digest、`gh` 的版本與參數、退出碼、`gh-stdout.json`、`result.json`；審查通過後才記錄 C-2 驗收完成；
+  9. 之後：C-3（Environment `s2-attest`，Settings 由你操作）。
 - 四個 hosted run 的 artifact 原檔重播仍待處理，需要你提供原檔給 ChatGPT。
 - **PASS 啟用的門檻**（依 Q-B 的選擇；**選擇之前 `PASS_ENABLED=false`**）：
   - **流程 I（保留原門檻）**：A4／A10／A14 的 hosted 驗收、A18 的隔離測試簽章驗收（分為密碼學／身分層與 statement 政策層），以及第三方驗證腳本，**全部**完成並經獨立審查、負責人核准之後，才進入打開 PASS 的 PR。

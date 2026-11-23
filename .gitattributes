@@ -1,3 +1,4 @@
 # Stage 1 套件以 SHA-256 鎖定（contracts/source-lock.json、stage*-file-manifest.json）。
 # 停用行尾轉換，避免 Windows core.autocrlf 改動 CRLF/BOM 位元組而使雜湊失效。
 poc/stage1/** -text
+poc/stage2/sigtest/** -text

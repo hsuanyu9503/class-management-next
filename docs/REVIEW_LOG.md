@@ -1441,5 +1441,86 @@
   - 合成 JSON 不等於真實驗證；
   - 官方來源已列入計畫 §10。
 - 本段之後的 commit 只改文件（REVIEW_LOG、HANDOFF、C-2 計畫），錨定仍是 `d07dfc54…`。
-- 使用者決策：`待決`（核准錨定 `d07dfc54…`、合併 PR #15）
+- 使用者決策（2026-11-23）：
+  - 負責人更新了 `CMN_STAGE1_ANCHOR_SHA256`；
+  - 負責人指示「改好了，若CI 全綠，合併pr15」；
+  - 同 Head `586ccbf` 的 CI run 45101877596 attempt 2：`validate` success，`baseline-anchor` 為 `ANCHOR_OK`（`d07dfc54…`，85 檔）；
+  - PR #15 合併為 `da25061103bf25ca5f75494031198359849b3a9c`。
+
+### C-2（第三方驗證 A18 與流程 I 的測試簽章）：Claude 實作，待審查
+
+- 負責人指示（2026-11-23）：「開始C-2實作」。依計畫 v0.2 實作，詳見 `docs/stage2/S2B2-B3C2-REPORT.md`。
+- 內容：
+  - `trust-policy.mjs`：新增 `validAt`，parser 檢查 `validTo > validFrom`；
+  - `third-party.mjs`（判定核心）、`verify-attestation.mjs`（CLI）；
+  - `attest-sigtest.yml`、固定的 `SIGTEST.txt`、測試身分政策 `S2B2-SIGTEST-POLICY.json`（依 Q3 提出紀錄 `SIGTEST-001`）；
+  - 攻擊計畫 §5.2 的措辭更正。
+- 提交者的證據（審查者尚未重跑）：
+  - `npm run check`、`npm test` 20/20、`stage1:all` 通過；
+  - `s2:test` 160/160（含 `c2-unit` 11 項）；
+  - mutation X1～X36 全部被抓到；既有 56 項與 W1～W16 也全部被抓到；
+  - 以假 `gh` 與本機 bare repo 做的端到端模擬。**這不是密碼學驗證**。
+- 錨定：`afa0dcd3bf824a17de45d5af883666d3f93be2b8352be1e831f8aacf2469822d`（90 檔），需要負責人重新核准。
+- 送審重點（報告 §3）：
+  - targets 的 `anchorDigest` 由已核准工具鏈 commit 自己的錨定腳本算出，只在 toolchain 紀錄有效後才執行；
+  - subject 要求「至少一個」相符；
+  - 測試身分政策的 `reviewRef` 與 `validFrom`。
+- 使用者決策：`待決`（見下方 R1）
+
+### PR #16 審查（ChatGPT）：CHANGES REQUESTED（PR16-REV001 P1、PR16-REV002 P2）→ Claude R1 修正
+
+- Reviewed Head：`1164c40dba63081448e091a02ff8b09dc0dc8132`
+- 審查者的發現：
+  - **PR16-REV001（P1）**：錨定不符等拒絕之後，official 分支仍呼叫 `targetsAt`。CLI 的 `targetsAt` 會執行候選 commit 的腳本，最後才 `REJECTED`，無法撤銷副作用；
+  - **PR16-REV002（P2）**：兩份有效的 official 證據共用工具鏈時，第二次解開會 `EEXIST`，被轉成 `TARGETS_UNAVAILABLE#1`。
+- 審查者的證據：
+  - Head、Base 與附件一致，ZIP 內 10 份檔案與 Head 逐字一致；
+  - 在 Windows／Node 26.13.1 上：`c2-unit` 11/11、`repo_policy` 7/7；`anchor_coverage` 因 Windows 路徑分隔符失敗 1 項（不列為 finding）；
+  - 兩個反例都重現；
+  - 獨立重算錨定 90 檔，與提交值一致；
+  - **沒有**重跑：160/160、B3、mutation；也沒有執行真實的 `gh`。
+- 審查者對設計問題的答覆：
+  - subject「至少一個相符」可以接受；
+  - 執行歷史工具鏈的腳本不是天然安全的讀檔操作；
+  - 測試身分政策的生效依賴已錨定的 `main`，審查不等於負責人核准。
+- Claude R1 修正（報告 §3、§7）：
+  - REV001：
+    - protected 清單改為已驗證的資料檔 `scripts/anchor-paths.json`，驗證者用自己的程式計算候選 commit 的錨定值，**不執行候選程式**；
+    - 兩階段判定，無副作用的檢查全部通過且政策沒過期，才讀取候選 commit；
+    - 錨定清單拒絕符號連結與不安全的路徑；
+  - REV002：核心依（commit，testId）快取，CLI 依完整 SHA 快取解開的結果；
+  - 另外修正 `anchor_coverage` 的 POSIX 路徑。
+- R1 的本機結果（提交者證據）：
+  - `npm run check`、`npm test` 20/20、`stage1:all` 通過；
+  - `s2:test` 165/165：`c2-unit` 13 項；`c2-cli` 3 項，用本機 bare repo、假的 `gh` 和 sentinel；
+  - `s2:b3` 33/33（`S2B2B3A-20261123T054522Z-751913ee`）；
+  - mutation：
+    - Y1～Y10 中 9 項被抓到；Y5（CLI 解開快取）是等價的 mutation，因為一次 CLI 只有一個 testId，核心快取已經涵蓋；
+    - 既有的 56＋16＋36 項全部被抓到。protected 清單移到資料檔後，R11、R12、W15、X34 改指向 `anchor-paths.json`，X25 改指向第二階段的比對。
+- 新錨定：`060c588e4f919f48bfcbf5c14f3d29ffbb1f36d3d1be957289908bd79e942c25`（91 檔）。送審時的 `afa0dcd3…` 已作廢。
+- 使用者決策：`待決`（見下方 R1 複審）
+
+### PR #16 R1 複審（ChatGPT）：程式複審通過；PR16-REV001、PR16-REV002 CLOSED
+
+- Reviewed Head：`d6d51020c6c969c36ac4cb82596ba25d844e783e`（前次 `1164c40`；相對前次 11 個檔案）
+- 結論：**R1 程式複審通過**，兩項 finding 都關閉，沒有新的阻擋項目。這不是 GitHub approval，也不代表 C-2 的真實簽章驗收完成。
+- 審查者的證據：
+  - 附件 8 份檔案與 Head 逐字一致；
+  - 在 Windows／Node 26.13.1 上：`c2-unit` 13/13、`repo_policy` 7/7、`anchor_coverage` 2/2（Windows 路徑問題已修正），合計 22/22；
+  - 重播前次的兩個反例：錨定錯誤時 `targetsCalls=0`；重複的 official 證據 `ACCEPTED`，只計算一次；
+  - 獨立重算錨定 91 檔 `060c588e…`，與文件及 CI log 一致；
+  - CI 45120068776：`validate` success；`baseline-anchor` 為預期的 `ANCHOR_MISMATCH`。
+- 審查者**沒有**獨立執行，仍是提交者的證據：
+  - `c2-cli`（bare repo、假的 `gh`、sentinel）、165/165、B3 33/33；
+  - mutation。Y1～Y10 的紀錄是 9 項被抓到、**Y5 未被抓到**，不得改寫成全部抓到；之後若支援多個 subject，要重新檢視這個等價性。
+- 剩餘限制（審查者界定）：
+  - 候選 tree 必須有有效的 `anchor-paths.json`，缺少時失敗，不能退回執行歷史腳本；
+  - 錨定資料清單本身受保護，仍是審查重點，不代表可以任意縮小保護範圍；
+  - 合成輸出與 sentinel 測試不能代替密碼學驗證；sigtest 成功只代表測試身分層被接受。
+- 交接要求：PR 說明已更新為 R1 的計算方式、測試、複審結果與 91 檔的新錨定。
+- 合併後的驗收交付（審查者指定）：
+  - run ID／attempt／實際的 commit、subject digest；
+  - `gh` 的版本與實際參數、退出碼、`gh-stdout.json`、`result.json`；
+  - 正向（`SIGTEST_IDENTITY_ACCEPTED`）與反向結果：official profile 混用、錯誤的錨定要拒絕；政策撤銷、過期與路徑的反向重播，要標明證據來源。
+- 使用者決策：`待決`（核准錨定 `060c588e…`、合併；合併後手動觸發 `attest-sigtest.yml`）
 
