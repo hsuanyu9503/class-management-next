@@ -1600,5 +1600,24 @@
 - 錨定：`49fbdb250364aaa3f2f81d41f3bef3a4e65e1046601a68ba40e06e3c48327455`（92 檔），**待審查與負責人核准**。
   - 相對已核准的 main `060c588e…`：新增 `src/b3/git-snapshot.mjs`；修改 `scripts/verify-attestation.mjs`、`src/b3/third-party.mjs`、`poc/stage2/package.json`；
   - 相對審查過的 `a4e2078`（`e2701771…`，已作廢）：修改 `scripts/verify-attestation.mjs`、`src/b3/third-party.mjs`。
-- 使用者決策：`待決`（複審、核准錨定、合併；之後在 Windows 上重跑 `c2-snapshot` 與三次本機驗證）
+- 使用者決策：`待決`（見下方 R1 複審）
+
+### PR #17 R1 複審（ChatGPT）：程式修正複審通過；PR17-REV001～003 CLOSED
+
+- Reviewed Head：`990e855b678a2c3e80a4fccb5e8a5d2c6b3ccdd4`。前次 `a4e2078`，增量 8 檔，+200／−46。
+- 結論：**R1 程式修正複審通過**，三項都關閉，增量沒有需要阻擋合併的新問題。這**不是** GitHub approval、合併授權或 C-2 最終驗收。
+- 審查者在 Windows 實機（win32/x64、Node v26.13.1、`gh` 2.103.3）上的證據：
+  - 10 個檔案的 blob hash 與 API 一致；附件檔案與 Head 逐位元組相同；
+  - `c2-snapshot` 5/5、`c2-unit` 14/14、`c2-cli` 正確略過 1 項；合計 20 個測試：19 通過、0 失敗、1 略過，exit 0；
+  - REV001：真實 `gh` 再次出現 Sigstore 初始化錯誤時，CLI 現在 exit 3，結果為 `NOT_RUN ENVIRONMENT_ERROR`，stage `gh-verify`；沒有 `policyResult`，保留 `gh` 的 exit 1、stderr 與 stdout；
+  - 錨定 92 檔 `49fbdb25…`，獨立重算一致；
+  - CI 45129542570：`validate` success，`baseline-anchor` 為 `ANCHOR_MISMATCH`（approved=`060c588e…`）。
+- `gh` 參數的調整（只帶 `--repo`，由核心精確比對）：**可以接受**。核心仍逐份檢查憑證身分、signer commit、blob、可信時間、subject、政策有效期間、外部錨定與新鮮度；任何一份失敗就拒絕。PR16 的兩階段判定與完整 SHA 快取都保留。所有非零退出都判為 `NOT_RUN` 是診斷粒度上的取捨，不構成繞過。
+- 審查者界定的限制：
+  - POSIX 的 CLI 整合測試沒有獨立執行；
+  - Linux 174/174、B3 33/33 與 mutation 是提交者的證據；Y5 維持未被抓到；
+  - official 混用只有單元測試，**不是**真實簽章的證據。
+- 真實 `gh` 的狀態：用 R1 的 verifier 加已核准的錨定 `060c588e…` 重播，結果 CLI exit 3／`gh` exit 1，Sigstore 初始化失敗，原因尚未確定，**沒有**取得正向接受，兩項反向驗收也還沒完成。既有簽章（run 45121359992、attestation 70952425）仍然適用，不需要重新簽章。
+- **C-2 仍未驗收。**
+- 使用者決策：`待決`（核准錨定 `49fbdb25…`、確認 CI 全綠、合併；之後先處理驗證環境的 Sigstore 初始化問題，再做三項真實驗證）
 
