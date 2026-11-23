@@ -88,7 +88,7 @@
   6. ChatGPT 已審查 `1164c40`：CHANGES REQUESTED（PR16-REV001 P1、PR16-REV002 P2）。Claude 在 R1 修正後，**R1 複審 `d6d5102` 通過，兩項 CLOSED**；
   7. **已完成**：錨定 `060c588e…`（91 檔）已核准，CI 全綠，PR #16 已合併為 `b8d3ba4`（2026-11-23）；
   8. 合併後：你已觸發 `attest-sigtest.yml`，run **45121359992** attempt 1 成功，subject `63515e7c…`，Rekor `logIndex=4050349070`。接下來：第三方以 `gh` v2.102.0 以上執行報告 §5 的正向與反向驗證，並交付 run／attempt／commit、subject digest、`gh` 的版本與參數、退出碼、`gh-stdout.json`、`result.json`；審查通過後才記錄 C-2 驗收完成；
-  9. **C-2 本機驗證受阻，尚未驗收**（2026-11-23）：
+  9. **已結案（C-2 已於 2026-11-23 驗收，見第 10 項）**。以下是當時的歷史紀錄：C-2 本機驗證受阻（2026-11-23）：
      - Windows 的 `tar` 無法解開中文檔名，三次驗證都在快照階段中斷，沒有執行 `gh`；
      - Claude 已改為不使用 `tar` 的快照，並讓環境錯誤以 `NOT_RUN`（exit 3）回報（報告 §8）；
      - PR #17 審查（`a4e2078`）：CHANGES REQUESTED，REV001～003。已修正（報告 §9）：未完成的 `gh` 執行回報 `NOT_RUN`；`gh` 只帶 `--repo`；Windows 上的測試資料與略過都已修正。**R1 複審 `990e855` 通過，三項 CLOSED**（審查者在 Windows 實機上：`c2-snapshot` 5/5、`c2-unit` 14/14、`c2-cli` 正確略過）。錨定 `49fbdb250364aaa3f2f81d41f3bef3a4e65e1046601a68ba40e06e3c48327455`（92 檔）**已核准**，CI 全綠，**PR #17 已合併為 `40bd998`**（2026-11-23）；
