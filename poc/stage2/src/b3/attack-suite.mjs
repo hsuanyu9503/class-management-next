@@ -11,7 +11,7 @@ import { createHash } from 'node:crypto';
 import { runVerifyJob } from './attest-verify.mjs';
 import { readPackageSafe, writePackage } from './package.mjs';
 
-export const SUITE_VERSION = 's2-attack-suite-v4';   // v4: PR14-REV001 — a failed original-ID download is attributed to shadowing only with evidence   // v3: same-name stage AFTER the main verification (hosted run 45088076830: the platform accepted the
+export const SUITE_VERSION = 's2-attack-suite-v5';   // v5: C-1f — A14-1b blocked before the digest check (precondition) is INCONCLUSIVE, not BREACHED   // v4: PR14-REV001 — a failed original-ID download is attributed to shadowing only with evidence   // v3: same-name stage AFTER the main verification (hosted run 45088076830: the platform accepted the
                                                    // same-name upload and the newer artifact shadowed the original ID for download-artifact)   // v2: C1-REV001 — a failed platform step is never DEFENDED by itself
 
 /** Platform error lines of a job log ("##[error]" lines only), bounded — kept for the reviewer and for the
@@ -194,7 +194,16 @@ export function runSameNameVerify(io) {
   if (!accepted) add('A14-1b', { testOutcome: 'NOT_RUN', platformOutcome: 'NO_SECOND_ARTIFACT', verifierOutcome: 'NOT_REACHED', notRunReason: 'the platform did not accept a same-named artifact' });
   else if (!sn.list) add('A14-1b', { testOutcome: 'INCONCLUSIVE', platformOutcome: 'SUBSTITUTE_NOT_DOWNLOADED', verifierOutcome: 'NOT_REACHED', manualReview: 'the accepted same-named artifact could not be downloaded by its ID' });
   else { const r = verify(expEnv(a.outputs, a.scenario, { EXP_ARTIFACT_ID: sn.artifactId }), sn.list, sn.read);
-    add('A14-1b', { testOutcome: blockedWith(r, 'PACKAGE_DIGEST_MISMATCH') ? 'DEFENDED' : 'BREACHED', platformOutcome: 'SUBSTITUTE_DOWNLOADED_BY_ITS_ID', verifierOutcome: vOut(r), expected: 'BLOCKED PACKAGE_DIGEST_MISMATCH' }); }
+    // C-1f (PR #14 R1 follow-up): the label follows what was actually established.
+    //   BLOCKED with PACKAGE_DIGEST_MISMATCH → DEFENDED (the expected rejection);
+    //   NOT blocked (the substitute was accepted: PASS / UNATTESTED) → BREACHED;
+    //   BLOCKED for another reason (a precondition such as TOOLCHAIN_COMMIT_MISMATCH) → INCONCLUSIVE: the
+    //   substitute was not accepted, but the digest check under test was never reached. Reason codes are kept and
+    //   the stage is not DEFENDED_WHERE_RUN, so the CLI still exits non-zero.
+    const expected = 'BLOCKED PACKAGE_DIGEST_MISMATCH';
+    if (blockedWith(r, 'PACKAGE_DIGEST_MISMATCH')) add('A14-1b', { testOutcome: 'DEFENDED', platformOutcome: 'SUBSTITUTE_DOWNLOADED_BY_ITS_ID', verifierOutcome: vOut(r), expected });
+    else if (r.result !== 'BLOCKED') add('A14-1b', { testOutcome: 'BREACHED', platformOutcome: 'SUBSTITUTE_DOWNLOADED_BY_ITS_ID', verifierOutcome: vOut(r), expected });
+    else add('A14-1b', { testOutcome: 'INCONCLUSIVE', platformOutcome: 'SUBSTITUTE_DOWNLOADED_BY_ITS_ID', verifierOutcome: vOut(r), expected, reasonCodes: codesOf(r), manualReview: 'the Verifier blocked the substitute before the package digest check (precondition): not accepted, but the tested invariant was not exercised' }); }
 
   // A14-2s: the ORIGINAL ID after shadowing
   if (!accepted) add('A14-2s', { testOutcome: 'NOT_RUN', platformOutcome: 'NO_SHADOWING', verifierOutcome: 'NOT_REACHED', notRunReason: 'no same-named artifact exists' });

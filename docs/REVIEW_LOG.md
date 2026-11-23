@@ -1403,3 +1403,13 @@
 - 機器可讀的結果在審查者本機：`work/hosted45094456766/a14-3b-replay-results.json`。這是審查者的證據，不在本 repository。
 - 下一步：Claude 提出 C-2 計畫（`docs/stage2/S2B2-B3C2-PLAN.md`，草案），經審查與負責人確認後才實作。
 
+### C-1f（PR #14 R1 的兩個非阻擋追蹤項目）：Claude 實作，待審查
+
+- 負責人決定（2026-11-23）：C-2 計畫的 Q1～Q4 都依建議處理（計畫 §8），Q1 是先開這個小 PR。
+- 內容（報告 §13）：
+  - A14-1b：前置條件擋下 → `INCONCLUSIVE`，保留 reason code（`attack-suite.mjs` v5）；
+  - `attest.yml`：新增 `availability` job，只有 `actions: read`，只在 verify 失敗時保存有上限的診斷；
+  - 同名重跑的評估（推論，未在 hosted 測試）。
+- 錨定會改變（85 檔，新增 `scripts/attest-availability.mjs`、`src/b3/availability.mjs`），需要負責人重新核准。
+- 同一個 PR 也帶入 C-2 計畫草案 v0.1，請一併審查；C-2 尚未實作。
+

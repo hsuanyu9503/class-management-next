@@ -81,8 +81,9 @@
   2. 正常 `attest.yml` 的可用性診斷：下載失敗時保存有上限的診斷，並評估同一個 run 重跑或新增上傳者時的同名情況。
 - 下一位負責人：
   1. 你：已觸發 `attest-attack.yml`，run **45094456766** attempt 1。7 個 job 全部 success，兩個階段都是 `DEFENDED_WHERE_RUN`，A10 為 9/9，詳見 REVIEW_LOG。ChatGPT 已核對 8 份原檔與舊 run 的封裝，A14-3b-i/ii 的重播也與 hosted 一致：**C-1 的 hosted 證據已收尾**（報告 §12）；
-  2. ChatGPT：審查 C-2 計畫草案 `docs/stage2/S2B2-B3C2-PLAN.md`（v0.1）；
-  3. 你：決定計畫 §8 的問題（追蹤項目的處理方式、第三方取得錨定值的方式），核准後 Claude 才實作 C-2。
+  2. 你已決定 C-2 計畫 §8 的 Q1～Q4（都依建議）。Claude 已實作 C-1f（報告 §13），和 C-2 計畫草案放在同一個 PR；
+  3. ChatGPT：審查 C-1f（L3）與 C-2 計畫 v0.1；
+  4. 你：核准新錨定（見 PR），確認 CI 全綠後決定是否合併；C-2 的實作等計畫審查通過才開始。
 - 四個 hosted run 的 artifact 原檔重播仍待處理，需要你提供原檔給 ChatGPT。
 - **PASS 啟用的門檻**（依 Q-B 的選擇；**選擇之前 `PASS_ENABLED=false`**）：
   - **流程 I（保留原門檻）**：A4／A10／A14 的 hosted 驗收、A18 的隔離測試簽章驗收（分為密碼學／身分層與 statement 政策層），以及第三方驗證腳本，**全部**完成並經獨立審查、負責人核准之後，才進入打開 PASS 的 PR。

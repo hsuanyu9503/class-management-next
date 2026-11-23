@@ -345,3 +345,57 @@ PR #13 合併後（`b5ae349`），負責人在 2026-11-23 觸發 `attest-attack.
   - `PASS_ENABLED=false`、POC-009 BLOCKED、Stage 1 的 72 筆 NOT_RUN；
   - N5、N7、main 摘要、NOTE-c（原文缺失，待確認）都不因此結案。
 
+## 13. C-1f：PR #14 R1 的兩個非阻擋追蹤項目（負責人 2026-11-23 決定 Q1：在 C-2 之前另開小 PR）
+
+### 13.1 A14-1b 的標籤（`attack-suite.mjs` v5）
+
+| Verifier 對同名替代品的結果 | 舊（v4） | 新（v5） |
+|---|---|---|
+| BLOCKED，含 `PACKAGE_DIGEST_MISMATCH` | DEFENDED | DEFENDED（不變） |
+| 沒有被擋下（PASS／UNATTESTED：替代品被接受） | BREACHED | BREACHED（不變） |
+| BLOCKED，但原因是前置條件，例如 `TOOLCHAIN_COMMIT_MISMATCH`、`ARTIFACT_SELECTION_MISMATCH` | BREACHED | **INCONCLUSIVE**：保留 `reasonCodes`，附 `manualReview` |
+
+- 依審查者的原則：替代品沒有被接受，但受測的 digest 檢查沒有被執行到，所以不能判 DEFENDED，也不是 BREACHED。
+- INCONCLUSIVE 會讓同名階段的 overall 不是 `DEFENDED_WHERE_RUN`，CLI 仍以非零狀態退出。
+- hosted run 45094456766 的 A14-1b 是第一列（DEFENDED），這次修改不影響它的結果。
+
+### 13.2 `attest.yml` 的可用性診斷
+
+- 新增 `availability` job：
+  - 執行條件：`needs: [execute, verify]`，且 execute 成功、verify 失敗；
+  - 權限只有 `contents: read`、`actions: read`，沒有 id-token、attestations，也不下載 artifact；
+  - 只執行 `scripts/attest-availability.mjs`；
+  - `github.token` 只出現在這個 job。簽章用的 verify job 權限**不變**。
+- 診斷內容由純函式 `src/b3/availability.mjs` 產生，全部有上限：
+  - 本 run 的 artifact 清單：最多 100 筆，只有 id、name、大小、digest、expired；
+  - 預期 ID 是否在清單中、所有同名 ID；
+  - verify job 的 `##[error]` 行：最多 10 行，每行 300 字元。
+- `hints` 是給人看的標籤，**不是判定**：
+  - `SAME_NAME_PRESENT`、`ID_NOT_FOUND_ERROR`、`EXPECTED_ID_NOT_LISTED`；
+  - `LISTING_UNAVAILABLE`、`LISTING_TRUNCATED`、`VERIFY_LOG_UNAVAILABLE`、`EXPECTED_OUTPUTS_INVALID`。
+  - 未知的情況保持 null，例如清單不完整時，不推論「不在清單中」。
+- 產出：未簽章的 `s2-availability-<testId>`，保存 30 天。它不影響 Verifier 的結果、PASS 或簽章。
+
+### 13.3 同一個 run 重跑或新增上傳者時的同名情況（**推論，未在 hosted 測試**）
+
+- hosted run 45094456766 觀察到的現象：**較新的**同名 artifact 會讓**較舊的** ID 無法被 download-artifact 下載（fail closed）。
+- 推論：
+  - 只重跑失敗的 verify job：execute 的 outputs 沿用第一次的 ID，那仍是唯一、也是最新的同名 artifact，預期可以下載；
+  - 整個 run 重跑：新的 execute 會上傳新的同名 artifact，並以新 ID 交給 verify。新 ID 是最新的，預期可以下載；舊 attempt 的 ID 會被遮蔽，但不再被使用；
+  - 新增上傳者：`attest.yml` 中只有 execute 上傳 `package-<testId>.tar`。verify 上傳的是 `s2-verify-*`，availability 上傳的是 `s2-availability-*`，名稱都不同。若之後有其他 job 在 execute 之後上傳同名檔，verify 會失敗（fail closed），availability 會記錄 `SAME_NAME_PRESENT` 與 `ID_NOT_FOUND_ERROR`。
+- 以上都沒有在 hosted 執行驗證。若要驗證，需要負責人另外觸發，本 PR 不觸發。
+
+### 13.4 測試
+
+- `attack-suite-unit`：前置條件擋下 → INCONCLUSIVE，保留 reason code，overall 不是 `DEFENDED_WHERE_RUN`；選擇錯誤 → INCONCLUSIVE；被接受 → 仍是 BREACHED。
+- `availability-unit` 4 項：
+  - hosted 的遮蔽模式；
+  - 預期 ID 不在清單中；
+  - 未知保持未知（沒有清單、沒有 log、清單被截斷、outputs 不合法）；
+  - 上限與格式錯誤的欄位。
+- `repo_policy`：
+  - attest.yml 的 job 集合；
+  - availability 的條件、權限與唯一的 run 行；
+  - token 只在 availability；verify job 沒有 `actions: read`。
+- mutation W1～W16。
+

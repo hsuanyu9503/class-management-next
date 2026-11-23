@@ -22,8 +22,16 @@ test('attest.yml：只在 main 觸發、逐 job 最小權限、action 以完整 
   assert.match(w, /execute:\s*\n(?:.*\n)*?\s+if: github\.ref == 'refs\/heads\/main'/);
   // job sections: the lines from "  <name>:" up to the next two-space-indented job key (or end of file)
   const jobs = Object.fromEntries(w.slice(w.indexOf('\njobs:\n') + 7).split(/\n(?=  [a-z][a-z0-9-]*:\n)/).map((t) => [t.trim().split(':')[0], t]));
-  assert.deepEqual(Object.keys(jobs).sort(), ['execute', 'verify']);
-  const ex = jobs.execute; const ve = jobs.verify;
+  assert.deepEqual(Object.keys(jobs).sort(), ['availability', 'execute', 'verify']);
+  const ex = jobs.execute; const ve = jobs.verify; const av = jobs.availability;
+  // C-1f: the availability job only runs after a failed verify, can read Actions data, and can never sign
+  assert.match(av, /needs: \[execute, verify\]\n    if: always\(\) && needs\.execute\.result == 'success' && needs\.verify\.result == 'failure'\n/);
+  assert.match(av, /\n    permissions:\n      contents: read\n      actions: read\n    steps:/);
+  const avCode = av.split('\n').filter((l) => !/^\s*#/.test(l)).join('\n');                  // full-line comments describe what is absent
+  assert.doesNotMatch(avCode, /id-token|attestations|attest-build-provenance|download-artifact|npm /);
+  assert.deepEqual(runLines(av), ['node poc/stage2/scripts/attest-availability.mjs']);
+  assert.equal((w.match(/github\.token/g) || []).length, 1); assert.match(av, /GITHUB_TOKEN: \$\{\{ github\.token \}\}/);   // the token only here
+  assert.doesNotMatch(ve, /actions: read|github\.token/);                                         // the signing job gains nothing
   assert.match(ve, /needs: execute/);
   assert.match(ex, /permissions:\s*\n\s*contents: read\s*\n\s*env:/);
   assert.doesNotMatch(ex, /id-token|attestations: write|attest-build-provenance/);
