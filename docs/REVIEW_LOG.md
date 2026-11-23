@@ -1267,3 +1267,71 @@
 - 本段記錄是在 Reviewed Head 之後新增的文件 commit，只改 `docs/REVIEW_LOG.md` 與 `docs/HANDOFF.md`。新 Head **不是**審查者已審的版本。
 - 使用者決策：`待決`（核准錨定 `31c23e4d…`、合併、合併後觸發 hosted 攻擊驗收）
 
+### PR #13 合併
+
+- 負責人（2026-11-23）：「錨定已核准，pr13合併」。
+- 合併前的檢查：
+  - 第一次重跑時，`baseline-anchor` 讀到的仍是舊值 `fe954c3a…`，Claude 因此先停止合併，並請負責人確認 repository variable；
+  - 負責人更新變數後，`baseline-anchor` 重跑結果為 `ANCHOR_OK`：83 個受保護檔案與 `31c23e4dc7bafdf80943581e459576bd0afef9a9f495fc6d046911a36fadb8d3` 一致；
+  - Head `fd4e565` 的 `validate` 與 `baseline-anchor` 都通過。
+- 合併：merge commit `b5ae349f1498620ac55fd38cbe888e5d77b40aa9`，`expectedHeadSha` 為 `fd4e565`。
+- 合併後：
+  - `main` 的 CI 45087498485：success；
+  - push 觸發的 `attest.yml` run 45087498469：POC-001，`EXP_SCENARIO: honest` → `UNATTESTED [TRUST_ROOT_NOT_CONFIGURED]`，statement `21ca461a…`，簽章 skipped；
+  - 封裝 artifact 14780101081，digest `d3dfaacf31a0bb68c13469ebda2370975ae57786577f7cfd3c2f440320de985b`，上傳與下載一致；
+  - 以上只來自 job log。
+- 尚未執行：hosted 的 `attest-attack.yml`，由負責人觸發。
+- 使用者決策：合併 `已核准`；錨定 `已核准`
+
+### 第一次 hosted attest-attack（run 45088076830）與同名階段的修正（Claude 送審）
+
+- 負責人在 PR #13 合併後觸發（2026-11-23），輸入 `previousRunId=45087498469`、`previousArtifactId=14780101081`。
+- 結果（只來自 job log 與 artifact 清單）：
+  - `a10`：9/9 符合預期，A10-main 以**真實目標**判 `DEFENDED`；
+  - `verify-attack`：在 A14 正向控制的下載就失敗；A14 與 A4 都沒有判定，記為 **NOT_RUN**。
+- 發現：
+  - 平台接受了同一個 run 中的同名上傳（`overwrite: false` 沒有拒絕）；
+  - 比較新的同名 artifact 會把原本的 ID 蓋住，`download-artifact` 找不到原本的封裝。這是 fail closed，但有可用性上的影響。
+- 修正：same-name 改在主要驗證之後執行；新增 `verify-same-name` 與 A14-2s；`attack-suite` v3。詳見 REPORT §10。
+- 錨定：`d0b815eae57482e06fd66ca31af7eac84d657508667345deb02bde78c5f2d45f`（83 檔，保護範圍不變）。需要審查並由負責人重新核准。
+- 使用者決策：負責人 2026-11-23「同意」開始修正 PR；合併與錨定 `待決`
+
+### PR #14 審查（ChatGPT）與 R1 回應
+
+- Reviewed Head：`18a5ecc9e07fc5c7f6fb5b398bfcaeb01cea2a1e`
+- 結論：**REQUEST_CHANGES**，有一項 P2。
+  - **PR14-REV001**：一般的下載失敗被寫成「同名遮蔽」的確定事實。審查者以 ETIMEDOUT 重現，輸出仍是 shadowing 的 finding。
+  - 調整 job 順序是合理的；沒有擴大簽章權限，也沒有讓 Verifier 放行。
+- 審查者的證據：
+  - 附件 SHA-256 一致；
+  - 在 Windows 上重跑單元測試 39/39；
+  - 獨立重算 83 檔的錨定；
+  - 核對了 run 45088076830 的 same-name 與 verify-attack job log；
+  - **沒有**重跑 mutation 或整合測試。
+- R1（Claude）：
+  - 新增 `probe-original` job，讀取它自己的錯誤 log 作為原因證據；
+  - 只有出現 ID-not-found 錯誤、而且清單同時列出兩個 ID 時，才記錄 shadowing；其他失敗只判有限命題，結果為 `CAUSE_UNVERIFIED`，不記錄 finding；
+  - 報告 §10 對 run 45088076830 的描述，改為區分「觀察到的事實」與「推論」；
+  - 逐項說明見 REPORT §11；
+  - 本機結果：`s2:test` 145/145、`s2:b3` 33/33、`s2:a10` 9/9、mutation 56/56。
+- 錨定：`7c4303b1d0e1906bf7b1bf8022ceaa72020667b91f59682bd62c8c3798205101`（83 檔）。`d0b815ea…` 已作廢。
+- 審查者建議另立追蹤的可用性項目（不阻擋本 PR）：下載失敗時保存有上限的 ID／清單／錯誤診斷，並評估同一個 run 重跑或新增上傳者時的同名情況。
+- 使用者決策：`待決`
+
+### PR #14 R1 複審（ChatGPT）：程式複審通過
+
+- Reviewed Head：`d2c1c09fcfe42ff5bcf1c97e4678b21d75e6ab8a`
+- 結論：**程式複審通過**。PR14-REV001（P2）已關閉，沒有新的阻擋項目。這不是 GitHub approval、不代表 CI 全綠，也不代表 hosted 攻擊驗收已完成。
+- 審查者的證據：
+  - Head、Base 與附件的 SHA-256 一致；
+  - 在 Windows 上重跑單元測試 40/40、`repo_policy` 6/6；
+  - 獨立重算 83 檔的錨定 `7c4303b1…`，與 CI log 一致；
+  - 獨立對照：ETIMEDOUT 與原因缺失 → `CAUSE_UNVERIFIED`，沒有 finding；目標錯誤 → `SHADOWED`，有 finding；
+  - **沒有**重跑 mutation 或 Linux／root 的整合測試；這些仍是提交者的證據。
+- 非阻擋的追蹤項目：
+  1. **A14-1b 的標籤語義**：工具鏈不符等前置條件錯誤時，目前判為 `BREACHED`，應改為 `INCONCLUSIVE`，並保留原 reason code，仍以非零狀態退出。原則：預期的 `PACKAGE_DIGEST_MISMATCH` → `DEFENDED`；確認替代品被接受，或受測的不變條件遭破壞 → `BREACHED`。
+  2. **正常 `attest.yml` 的可用性診斷**：下載失敗時保存有上限的 ID／清單／錯誤診斷，並評估同一個 run 重跑或新增上傳者時的同名情況。
+- 仍未完成：修正後的 hosted 執行；run 45088076830 原檔的核對。
+- 本段記錄是在 Reviewed Head 之後新增的文件 commit，只改 `docs/REVIEW_LOG.md` 與 `docs/HANDOFF.md`。新 Head **不是**審查者已審的版本。
+- 使用者決策：`待決`（核准錨定 `7c4303b1…`、合併、合併後觸發 hosted）
+

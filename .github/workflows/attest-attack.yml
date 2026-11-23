@@ -202,9 +202,11 @@ jobs:
           overwrite: false
 
   same-name:
-    # A14-2: a second artifact with the A14 package's name in the same run (expected: the platform rejects it)
-    needs: execute-a14
-    if: github.ref == 'refs/heads/main'
+    # A14-2: a second artifact with the A14 package's name in the same run. Runs only AFTER verify-attack has
+    # downloaded and judged the real package: hosted run 45088076830 showed the platform ACCEPTS the same name and
+    # the newer artifact then shadows the original ID for download-artifact.
+    needs: [execute-a14, verify-attack]
+    if: always() && github.ref == 'refs/heads/main' && needs.execute-a14.result == 'success'
     runs-on: ubuntu-24.04
     timeout-minutes: 10
     permissions: {}
@@ -240,7 +242,7 @@ jobs:
           overwrite: false
 
   verify-attack:
-    needs: [execute-a14, execute-a4, same-name]
+    needs: [execute-a14, execute-a4]
     if: always() && github.ref == 'refs/heads/main' && needs.execute-a14.result == 'success'
     runs-on: ubuntu-24.04
     timeout-minutes: 20
@@ -276,13 +278,6 @@ jobs:
         with:
           artifact-ids: ${{ needs.execute-a14.outputs.decoyArtifactId }}
           path: ${{ runner.temp }}/s2-decoy
-      - name: A14-1b 平台若接受了同名上傳，依該 ID 下載
-        if: needs.same-name.outputs.artifactId != ''
-        continue-on-error: true
-        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
-        with:
-          artifact-ids: ${{ needs.same-name.outputs.artifactId }}
-          path: ${{ runner.temp }}/s2-sn
       - name: A14-3a 在本次 run 下載其他 run 的 artifact ID（預期找不到）
         id: foreign
         if: inputs.previousArtifactId != ''
@@ -308,11 +303,10 @@ jobs:
         with:
           artifact-ids: ${{ needs.execute-a4.outputs.artifactId }}
           path: ${{ runner.temp }}/s2-a4
-      - name: 平台證據（本 run 的 artifact 清單與 same-name job 的錯誤行；唯讀 token）
+      - name: 平台證據（本 run 的 artifact 清單與外部 artifact 的查詢；唯讀 token）
         env:
           GITHUB_TOKEN: ${{ github.token }}
           OUT_FILE: ${{ runner.temp }}/s2-platform.json
-          SAMENAME_CONTROL_OUTCOME: ${{ needs.same-name.outputs.controlOutcome }}
           FOREIGN_ARTIFACT_ID: ${{ inputs.previousArtifactId }}
         run: node poc/stage2/scripts/attack-platform-evidence.mjs
       - name: 判定（只做安全解析，不執行任何 artifact 的內容；沒有簽章；非 DEFENDED_WHERE_RUN 時失敗）
@@ -335,9 +329,6 @@ jobs:
           DIR_A14: ${{ runner.temp }}/s2-a14
           DECOY_ARTIFACT_ID: ${{ needs.execute-a14.outputs.decoyArtifactId }}
           DIR_DECOY: ${{ runner.temp }}/s2-decoy
-          SAMENAME_OUTCOME: ${{ needs.same-name.outputs.outcome }}
-          SAMENAME_ARTIFACT_ID: ${{ needs.same-name.outputs.artifactId }}
-          DIR_SAMENAME: ${{ runner.temp }}/s2-sn
           FOREIGN_ARTIFACT_ID: ${{ inputs.previousArtifactId }}
           FOREIGN_RUN_ID: ${{ inputs.previousRunId }}
           FOREIGN_OUTCOME: ${{ steps.foreign.outcome }}
@@ -361,6 +352,108 @@ jobs:
         with:
           name: s2-attack-summary
           path: ${{ runner.temp }}/s2-attack
+          retention-days: 30
+          if-no-files-found: error
+          overwrite: false
+
+  probe-original:
+    # PR14-REV001: the ORIGINAL ID re-downloaded in its OWN job, so that its error (if any) can be read from the job
+    # log afterwards and a failure is attributed to shadowing only with that evidence. No checkout, no code.
+    needs: [execute-a14, same-name]
+    if: always() && github.ref == 'refs/heads/main' && needs.execute-a14.result == 'success'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      actions: read
+    outputs:
+      outcome: ${{ steps.dl.outcome }}
+    steps:
+      - name: 依原本的 ID 再次下載真封裝（只為了留下這一步自己的錯誤訊息）
+        id: dl
+        continue-on-error: true
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          artifact-ids: ${{ needs.execute-a14.outputs.artifactId }}
+          path: ${{ runner.temp }}/s2-probe
+
+  verify-same-name:
+    # A14-2 / A14-1b / A14-2s, AFTER the same-name upload: platform acceptance (finding), the substitute by its own
+    # ID (Verifier must block it), and the ORIGINAL ID again (sealed bytes or fail closed — never other bytes)
+    needs: [execute-a14, same-name, probe-original]
+    if: always() && github.ref == 'refs/heads/main' && needs.execute-a14.result == 'success'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    permissions:
+      contents: read
+      actions: read
+    steps:
+      - name: Checkout 可信工具鏈（不 checkout Adapter 或 artifact 的任何內容）
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ vars.CMN_S2_TRUSTED_TOOLCHAIN_SHA || github.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Checkout 目前的 main（只讀批准紀錄）
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: main
+          path: policy-main
+          persist-credentials: false
+      - name: Node.js 22
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: '22'
+      - name: A14-1b 平台若接受了同名上傳，依該 ID 下載
+        if: needs.same-name.outputs.artifactId != ''
+        continue-on-error: true
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          artifact-ids: ${{ needs.same-name.outputs.artifactId }}
+          path: ${{ runner.temp }}/s2-sn
+      - name: A14-2s 依原本的 ID 再次下載真封裝（同名上傳之後）
+        id: orig
+        continue-on-error: true
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          artifact-ids: ${{ needs.execute-a14.outputs.artifactId }}
+          path: ${{ runner.temp }}/s2-orig
+      - name: 平台證據（本 run 的 artifact 清單與 same-name job 的錯誤行；唯讀 token）
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          OUT_FILE: ${{ runner.temp }}/s2-platform-sn.json
+          SAMENAME_CONTROL_OUTCOME: ${{ needs.same-name.outputs.controlOutcome }}
+          PROBE_ORIGINAL_OUTCOME: ${{ needs.probe-original.outputs.outcome }}
+        run: node poc/stage2/scripts/attack-platform-evidence.mjs
+      - name: 判定 A14-2／A14-1b／A14-2s（只做安全解析；沒有簽章；非 DEFENDED_WHERE_RUN 時失敗）
+        env:
+          STAGE: same-name
+          PLATFORM_FILE: ${{ runner.temp }}/s2-platform-sn.json
+          OUT_DIR: ${{ runner.temp }}/s2-attack-sn
+          POLICY_DIR: ${{ github.workspace }}/policy-main
+          WORKFLOW_SHA: ${{ github.workflow_sha }}
+          CMN_STAGE1_ANCHOR_SHA256: ${{ vars.CMN_STAGE1_ANCHOR_SHA256 }}
+          CMN_S2_TRUSTED_TOOLCHAIN_SHA: ${{ vars.CMN_S2_TRUSTED_TOOLCHAIN_SHA }}
+          CMN_S2_SIGNING_POLICY_BLOB: ${{ vars.CMN_S2_SIGNING_POLICY_BLOB }}
+          A14_SCENARIO: attack-a14
+          A14_TEST_ID: ${{ needs.execute-a14.outputs.testId }}
+          A14_ARTIFACT_ID: ${{ needs.execute-a14.outputs.artifactId }}
+          A14_PACKAGE_SHA256: ${{ needs.execute-a14.outputs.packageSha256 }}
+          A14_MANIFEST_SHA256: ${{ needs.execute-a14.outputs.manifestSha256 }}
+          A14_NONCE: ${{ needs.execute-a14.outputs.attestationNonce }}
+          A14_PLATFORM_SUPPORTED: ${{ needs.execute-a14.outputs.platformSupported }}
+          A14_TOOLCHAIN_COMMIT: ${{ needs.execute-a14.outputs.toolchainCommit }}
+          SAMENAME_OUTCOME: ${{ needs.same-name.outputs.outcome }}
+          SAMENAME_ARTIFACT_ID: ${{ needs.same-name.outputs.artifactId }}
+          DIR_SAMENAME: ${{ runner.temp }}/s2-sn
+          ORIGINAL_OUTCOME: ${{ steps.orig.outcome }}
+          DIR_ORIGINAL: ${{ runner.temp }}/s2-orig
+        run: node poc/stage2/scripts/attack-verify.mjs
+      - name: 上傳同名階段的摘要（未簽章診斷，保存 30 天）
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: s2-attack-summary-same-name
+          path: ${{ runner.temp }}/s2-attack-sn
           retention-days: 30
           if-no-files-found: error
           overwrite: false

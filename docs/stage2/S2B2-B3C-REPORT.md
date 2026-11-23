@@ -234,3 +234,78 @@ hosted 的實際行為仍待驗收。
 
 以上判定都只經過本機單元測試與合成證據的驗證；GitHub artifact API 的實際回應要等 hosted 執行。
 
+## 10. 第一次 hosted 攻擊驗收（run 45088076830），以及同名階段的修正
+
+PR #13 合併後（`b5ae349`），負責人在 2026-11-23 觸發 `attest-attack.yml`：
+- run：[45088076830](https://github.com/hsuanyu9503/class-management-next/actions/runs/45088076830)
+- 輸入：`previousRunId=45087498469`、`previousArtifactId=14780101081`
+
+以下內容只來自 job log 與 artifact 清單；artifact 的原檔還沒有經過審查者核對。
+
+| job | 結果 | 說明 |
+|---|---|---|
+| `a10` | success；9/9 符合預期 | A10-main 判 `DEFENDED`，用的是**真實目標**：<br>- runner 安裝目錄由 `/proc` 找到：`RUNNER_INSTALL_DIR`、`.runner`、`.credentials`、`_diag`；<br>- `GITHUB_OUTPUT`／`GITHUB_ENV`／`GITHUB_PATH`／`GITHUB_STEP_SUMMARY`／`GITHUB_STATE`；<br>- docker 與 containerd 的 socket 都是 `DEFENDED`；<br>- `ACTIONS_*`、`GITHUB_TOKEN` 不在 step 環境中，判 `N/A_HOST_ABSENT`。<br>N-1～N-8 都符合預期。artifact：`s2-attack-a10`（14779079759） |
+| `execute-a14`、`execute-a4` | success | 封裝：A14 為 `package-POC-001.tar`（14779838237，87,552 bytes）；誘餌（14779798585）；A4-1 為 `package-POC-002.tar`（14779932872） |
+| `same-name` | success | 控制上傳成功；**同名上傳也成功**：出現第二個 `package-POC-001.tar`（14780032521，4,096 bytes，隨機內容） |
+| `verify-attack` | **failure** | 第一步「A14 正向控制：依本次 ID 下載」失敗：`Found 5 artifact(s)`，`None of the provided artifact IDs were found`。之後的步驟都被略過，沒有 `s2-attack-summary` |
+
+**平台層的發現**：
+1. 在同一個 run 中，`upload-artifact`（v7.0.2，`archive: false`，`overwrite: false`）**接受了**第二個同名的 artifact。計畫原本預期它會被拒絕（A14-2）。
+2. 之後 `download-artifact`（v8.0.2）的 log 寫著 `Found 5 artifact(s)` 與 `None of the provided artifact IDs were found`；而本 run 的 artifact 清單在那個時間點有 6 個，其中兩個名稱相同。
+   - **觀察到的事實**：用原本的 ID 下載失敗，錯誤是「找不到這個 ID」。
+   - **推論**（PR14-REV001 之後明確標示為推論）：比較新的同名 artifact 把原本的 ID 蓋住了。這是從這次的 log 與清單推得的，不是對平台行為的一般性證明。此後的 run 只有在 `probe-original` 的 log 出現同一個錯誤、而且清單同時列出兩個 ID 時，才記錄為 shadowing（見 §11）。
+
+**安全面的意義**：
+- 這是 **fail closed**：Verifier 沒有收到其他的位元組，而是下載失敗、整個判定沒有執行。
+- 但這也表示，同一個 run 中任何能上傳的 job，都能讓驗證端無法取得封裝，造成可用性上的影響。
+- `attest.yml` 中只有 execute job 會上傳封裝，沒有其他 job 上傳同名 artifact，所以正常路徑不受影響。這一點仍應列入審查。
+
+**同一個缺陷也存在於 workflow 的設計**：
+- same-name 的上傳排在主要驗證的下載之前，所以第一次 hosted 執行沒有判定 A14 與 A4；
+- 這些情境維持 **NOT_RUN**，不能算成通過。
+
+**修正**（本 PR；錨定 `d0b815eae57482e06fd66ca31af7eac84d657508667345deb02bde78c5f2d45f`，83 檔）：
+
+| 部分 | 修改 |
+|---|---|
+| workflow | `verify-attack` 只等兩個 execute job，在同名上傳**之前**下載並判定 A14、誘餌、A14-3a／3b、A4，並上傳 `s2-attack-summary`。<br>`same-name` 改為在 `verify-attack` **之後**執行。<br>新增 `verify-same-name`（`contents: read`、`actions: read`）：<br>- 依原本的 ID 再下載一次真封裝；<br>- 依新 artifact 自己的 ID 下載替代品；<br>- 收集平台證據；<br>- 以 `STAGE=same-name` 判定；<br>- 上傳 `s2-attack-summary-same-name`。 |
+| `attack-suite.mjs` v3 | 主要階段（`runAttackVerify`）不再包含 A14-2。新增同名階段（`runSameNameVerify`）：<br>- **A14-2**（平台層）：有 conflict 證據的拒絕 → `DEFENDED`；平台接受，而且清單同時列出兩個 artifact → `PLATFORM_ACCEPTED`。後者記為**發現（finding）**，不算 Verifier 的失守；<br>- **A14-1b**（Verifier 層）：依替代品自己的 ID 取得並驗證，必須是 `BLOCKED PACKAGE_DIGEST_MISMATCH`；<br>- **A14-2s**（新增）：依原本的 ID 再次下載。只有兩種情況算 `DEFENDED`：取回的位元組正是封存的那份（digest 等於 `packageSha256`），或者下載失敗、而 API 清單仍列出原本的 artifact（`ORIGINAL_ID_SHADOWED_FAIL_CLOSED`，同時記為 finding）。取回其他位元組 → `BREACHED`；無法確認 → `INCONCLUSIVE`。<br>摘要多了 `findings` 欄位 |
+| CLI | `STAGE=main`／`same-name`，兩個階段都經由 `report()` 寫出摘要；只有 `DEFENDED_WHERE_RUN` 時 exit 0 |
+| 測試 | `attack-suite-unit` 13 項：<br>- hosted 重現（接受同名、替代品被擋、原本的 ID 被蓋住而 fail closed）；<br>- 原本的 ID 取回封存位元組、其他位元組、多個檔案；<br>- 清單不可用或不含原本的 artifact；<br>- 替代品下載不到；<br>- 清單沒有同時列出兩者；<br>- 被拒絕時 A14-1b 與 A14-2s 都是 NOT_RUN；<br>- A14-1b 必須依 Verifier 的判定（控制案例）。<br>`repo_policy` 強制 job 順序：`verify-attack` 不得依賴 `same-name`；`same-name` 必須在 `verify-attack` 之後；`verify-same-name` 在 `same-name` 之後；以及 token 的使用處 |
+
+**本機結果**（Claude，commit `5f4ea0d`，工作樹乾淨）：
+- `npm test` 19/19；`check` 通過；`stage1:all` 通過，Stage 1 沒有變更；
+- `s2:test` 144/144；
+- `s2:b3` 33/33（`S2B2B3A-20261123T003226Z-bd8956d6`）；
+- `s2:a10` 9/9（`S2B2A10-20261123T003329Z`）；
+- 兩個階段的本機模擬（**合成**證據）：
+  - 主要階段 → `DEFENDED_WHERE_RUN`；
+  - 同名階段：hosted 的情況 → `DEFENDED_WHERE_RUN`，有 2 項 findings；原本的 ID 取回其他位元組 → `BREACHED`，exit 1；
+- mutation 50/50 被測試抓到，沒有 SKIP 或 SURVIVED（M1～M17、R1～R14、S1～S7、T1～T5、U1～U7）。與 job 順序有關的舊目標字串因 workflow 新增 job 而不再唯一，已改用唯一的上下文，見 `S2B2-C1-FIX-mutations.txt`。
+
+**尚未完成**：
+- 修正後的 hosted 執行；
+- 第一次 run 的 artifact 原檔還沒有交給審查者核對，包括 `s2-attack-a10`。
+
+## 11. PR #14 審查回應（PR14-REV001，Reviewed Head `18a5ecc`）
+
+| ID | 問題 | 修正 | 位置 | 驗證 |
+|---|---|---|---|---|
+| PR14-REV001（P2） | 用原本的 ID 再下載只要失敗，就被寫成「同名遮蔽」的確定事實，例如 ETIMEDOUT 也會如此 | 採審查者提出的第一種策略，**收集可信的原因證據**：<br>- 新增 `probe-original` job：等 `execute-a14` 與 `same-name`；權限只有 `actions: read`；不 checkout、不執行任何程式；只在自己的 job 中用原本的 ID 下載一次，留下自己的錯誤訊息；<br>- `verify-same-name` 等它完成，平台證據步驟讀取它的 `##[error]` 行與 outcome。<br>A14-2s 只判定有限的命題：「原本的 ID 回傳封存的位元組，或不回傳任何位元組」。<br>- 只有三項都成立，才判 `ORIGINAL_ID_SHADOWED_FAIL_CLOSED` 並記錄 finding：`probe-original` 失敗、錯誤行含 `None of the provided artifact IDs were found`、清單同時列出兩個同名 ID；<br>- 其他失敗（逾時、5xx、401／403、原因不明、沒有 probe 的 log）→ `DEFENDED`，platformOutcome 為中性的 `ORIGINAL_DOWNLOAD_FAILED_CAUSE_UNVERIFIED`，`causeVerified: false`，**不**記錄 finding | `src/b3/attack-suite.mjs`（v4）、`scripts/attack-platform-evidence.mjs`、`attest-attack.yml`、`tests/repo_policy.test.mjs` | `attack-suite-unit` 14/14，新增 1 項：<br>- 目標錯誤 → shadowing；<br>- 逾時、503、403、沒有錯誤行 → 原因未證實；<br>- 有目標錯誤，但 probe 成功、probe 結果未知、沒有 probe 的 log、清單只列出一個 ID → 原因未證實；<br>- 審查者的 ETIMEDOUT 重現。<br>mutation V1～V6。<br>本機模擬（**合成**證據）：ID not found → `SHADOWED`；ETIMEDOUT → `CAUSE_UNVERIFIED` |
+
+**本機結果**（commit `0e26959`，程式與 Head 相同，之後只有文件）：
+- `npm test` 19/19；`check` 通過；`stage1:all` 通過，Stage 1 沒有變更；
+- `s2:test` 145/145；
+- `s2:b3` 33/33（`S2B2B3A-20261123T010603Z-ea6fb196`）；
+- `s2:a10` 9/9（`S2B2A10-20261123T010708Z`）；
+- mutation 56/56（M、R、S、T、U、V 各組），沒有 SKIP 或 SURVIVED。
+
+錨定：`7c4303b1d0e1906bf7b1bf8022ceaa72020667b91f59682bd62c8c3798205101`（83 檔，保護範圍不變）。送審時的 `d0b815ea…` 已作廢。
+
+**送審的問題**（不在本次修正範圍）：
+- A14-1b 若被 Verifier 以 `PACKAGE_DIGEST_MISMATCH` 以外的原因擋下（例如工具鏈不符），目前判為 `BREACHED`。這樣處理偏保守，但標籤可能誤導：替代品其實也沒有被接受。本機模擬用過期的封裝時遇到了這個情況。是否改為 `INCONCLUSIVE`，請審查者判斷。
+
+**仍未完成**：
+- 修正後的 hosted 執行；
+- run 45088076830 的原檔核對。
+

@@ -5,7 +5,7 @@ import { readFileSync as rf } from 'node:fs';
 import { createHash } from 'node:crypto';
 import { fileURLToPath as f2p } from 'node:url';
 import { writePackage, readPackageSafe } from '../src/b3/package.mjs';
-import { runAttackVerify, errorLines, saysConflict, foreignEvidenceFrom } from '../src/b3/attack-suite.mjs';
+import { runAttackVerify, runSameNameVerify, errorLines, saysConflict, saysIdNotFound, foreignEvidenceFrom } from '../src/b3/attack-suite.mjs';
 
 const sha = (b) => createHash('sha256').update(b).digest('hex');
 const FIX = f2p(new URL('./fixtures/b3a-honest-poc001/', import.meta.url));
@@ -39,29 +39,68 @@ const sc = (r, id) => r.scenarios.find((s) => s.id === id);
 test('attack suite: expected defences on the fixture (positive control, A14-1/2/3a/3b, A4-1/2/3)', () => {
   const r = runAttackVerify(io());
   assert.equal(sc(r, 'A14-positive').testOutcome, 'CONTROL_OK', sc(r, 'A14-positive').verifierOutcome);
-  for (const id of ['A14-1', 'A14-2', 'A14-3a', 'A14-3b-i', 'A14-3b-ii', 'A4-1', 'A4-2-i', 'A4-2-ii', 'A4-3']) assert.equal(sc(r, id).testOutcome, 'DEFENDED', `${id}: ${sc(r, id).verifierOutcome}`);
+  for (const id of ['A14-1', 'A14-3a', 'A14-3b-i', 'A14-3b-ii', 'A4-1', 'A4-2-i', 'A4-2-ii', 'A4-3']) assert.equal(sc(r, id).testOutcome, 'DEFENDED', `${id}: ${sc(r, id).verifierOutcome}`);
+  // the main stage runs BEFORE the same-name upload: A14-2 / A14-1b / A14-2s are not part of it
+  assert.equal(r.stage, 'main'); for (const id of ['A14-2', 'A14-1b', 'A14-2s']) assert.equal(sc(r, id), undefined, id);
   assert.equal(r.overall, 'DEFENDED_WHERE_RUN'); assert.deepEqual(r.notRun, []);
   assert.match(sc(r, 'A14-1').verifierOutcome, /ARTIFACT_SELECTION_MISMATCH/);
-  assert.equal(sc(r, 'A14-2').platformOutcome, 'UPLOAD_REJECTED_CONFLICT'); assert.equal(sc(r, 'A14-2').verifierOutcome, 'NOT_REACHED');
   assert.equal(sc(r, 'A14-3a').platformOutcome, 'DOWNLOAD_NOT_FOUND_IN_RUN');
   assert.match(sc(r, 'A14-3b-i').verifierOutcome, /PACKAGE_DIGEST_MISMATCH/); assert.match(sc(r, 'A14-3b-ii').verifierOutcome, /RUN_BINDING_MISMATCH/);
   assert.match(sc(r, 'A4-2-i').verifierOutcome, /PACKAGE_DIGEST_MISMATCH/); assert.match(sc(r, 'A4-2-ii').verifierOutcome, /PAYLOAD_SET_MISMATCH/);
   assert.ok(!JSON.stringify(r).includes('"statement'));                                          // no statements in the summary
 });
 
-test('attack suite: the platform accepting a same-name upload is recorded, and A14-1b still blocks it', () => {
-  const decoy = Buffer.from('not the sealed package');
-  const r = runAttackVerify(io({ a14: { sameName: { uploadOutcome: 'success', artifactId: '1004', list: one('package-POC-001.tar'), read: () => decoy } } }));
-  assert.deepEqual([sc(r, 'A14-2').testOutcome, sc(r, 'A14-2').platformOutcome], ['INCONCLUSIVE', 'UPLOAD_ACCEPTED']);
-  assert.equal(sc(r, 'A14-1b').testOutcome, 'DEFENDED'); assert.match(sc(r, 'A14-1b').verifierOutcome, /PACKAGE_DIGEST_MISMATCH/);
-  assert.equal(r.overall, 'INCONCLUSIVE');
+// ------------------------------------------------------------------ same-name stage (after the main verification)
+const ID_NOT_FOUND = '##[error]Unable to download artifact(s): None of the provided artifact IDs were found';   // as logged in run 45088076830
+const pkgA14Sha = createHash('sha256').update(pkgA14.packageBytes).digest('hex');
+const snIo = (o = {}) => ({ env: io().env, head: run0.trustedToolchainCommit, workflowBlob: 'b'.repeat(40), policy: null, caseSpecs: { 'POC-001': caseSpec001 }, now: () => new Date('2026-11-22T00:00:00Z'),
+  a14: { outputs: outputsOf(pkgA14), scenario: 'attack-a14' },
+  sameName: { uploadOutcome: 'success', artifactId: '1004', list: one('package-POC-001.tar'), read: () => Buffer.from('random same-named bytes') },
+  original: { downloadOutcome: 'failure' },
+  platform: platformOk({ artifacts: [...platformOk().artifacts, { id: '1004', name: 'package-POC-001.tar' }], sameNameErrorLines: [], probeOriginalOutcome: 'failure', probeOriginalErrorLines: [ID_NOT_FOUND] }), ...o });
+const snPlatform = (o) => snIo().platform && { ...snIo().platform, ...o };
+test('same-name stage: the hosted reproduction (run 45088076830) — accepted, substitute blocked, original shadowed fail closed', () => {
+  const r = runSameNameVerify(snIo());
+  assert.equal(r.stage, 'same-name');
+  assert.deepEqual([sc(r, 'A14-2').testOutcome, sc(r, 'A14-2').platformOutcome], ['PLATFORM_ACCEPTED', 'UPLOAD_ACCEPTED_SAME_NAME']);
+  assert.deepEqual([sc(r, 'A14-1b').testOutcome], ['DEFENDED']); assert.match(sc(r, 'A14-1b').verifierOutcome, /PACKAGE_DIGEST_MISMATCH/);
+  assert.deepEqual([sc(r, 'A14-2s').testOutcome, sc(r, 'A14-2s').platformOutcome], ['DEFENDED', 'ORIGINAL_ID_SHADOWED_FAIL_CLOSED']);
+  assert.equal(r.overall, 'DEFENDED_WHERE_RUN');
+  assert.deepEqual(r.findings.map((f) => f.id).sort(), ['A14-2', 'A14-2s']);                 // both platform facts are reported as findings
+  assert.deepEqual(sc(r, 'A14-2').evidence.sameNamedArtifactIds.sort(), ['1001', '1004']);
+});
+test('same-name stage: the original ID must return the sealed bytes or fail — never other bytes', () => {
+  const ok = runSameNameVerify(snIo({ original: { downloadOutcome: 'success', list: one('package-POC-001.tar'), read: () => pkgA14.packageBytes } }));
+  assert.deepEqual([sc(ok, 'A14-2s').testOutcome, sc(ok, 'A14-2s').platformOutcome], ['DEFENDED', 'ORIGINAL_STILL_DOWNLOADABLE']);
+  assert.equal(createHash('sha256').update(pkgA14.packageBytes).digest('hex'), pkgA14Sha);
+  const swap = runSameNameVerify(snIo({ original: { downloadOutcome: 'success', list: one('package-POC-001.tar'), read: () => Buffer.from('random same-named bytes') } }));
+  assert.deepEqual([sc(swap, 'A14-2s').testOutcome, sc(swap, 'A14-2s').platformOutcome], ['BREACHED', 'ORIGINAL_ID_RETURNED_OTHER_BYTES']); assert.equal(swap.overall, 'BREACHED');
+  const two = runSameNameVerify(snIo({ original: { downloadOutcome: 'success', list: () => [{ name: 'a', isFile: true }, { name: 'b', isFile: true }], read: () => pkgA14.packageBytes } }));
+  assert.equal(sc(two, 'A14-2s').testOutcome, 'BREACHED');
+  // failure, but the listing does not confirm the original still exists → INCONCLUSIVE
+  for (const platform of [platformOk({ artifactsOk: false }), platformOk({ artifacts: [{ id: '1004', name: 'package-POC-001.tar' }] }), null]) {
+    const r = runSameNameVerify(snIo({ platform }));
+    assert.notEqual(sc(r, 'A14-2s').testOutcome, 'DEFENDED'); assert.equal(r.overall, 'INCONCLUSIVE');
+  }
+  // control: A14-1b follows the Verifier's verdict, never assumes it — if what was fetched under the substitute ID
+  // verifies (here: the sealed bytes themselves), A14-1b must NOT be DEFENDED
+  const acceptedSub = runSameNameVerify(snIo({ sameName: { uploadOutcome: 'success', artifactId: '1004', list: one('package-POC-001.tar'), read: () => pkgA14.packageBytes } }));
+  assert.equal(sc(acceptedSub, 'A14-1b').testOutcome, 'BREACHED'); assert.doesNotMatch(sc(acceptedSub, 'A14-1b').verifierOutcome, /PACKAGE_DIGEST_MISMATCH/);
+  // accepted, but the substitute could not be downloaded by its ID → INCONCLUSIVE (not DEFENDED)
+  assert.equal(sc(runSameNameVerify(snIo({ sameName: { uploadOutcome: 'success', artifactId: '1004' } })), 'A14-1b').testOutcome, 'INCONCLUSIVE');
+  // accepted per the step, but the listing does not show both artifacts → A14-2 INCONCLUSIVE
+  assert.equal(sc(runSameNameVerify(snIo({ platform: platformOk() })), 'A14-2').testOutcome, 'INCONCLUSIVE');
+  // a rejected upload (with conflict evidence) leaves A14-1b / A14-2s NOT_RUN with reasons
+  const rej = runSameNameVerify(snIo({ sameName: { uploadOutcome: 'failure' }, platform: platformOk() }));
+  assert.equal(sc(rej, 'A14-2').testOutcome, 'DEFENDED'); assert.equal(sc(rej, 'A14-1b').testOutcome, 'NOT_RUN'); assert.equal(sc(rej, 'A14-2s').testOutcome, 'NOT_RUN');
 });
 
 test('attack suite: missing inputs are NOT_RUN with a reason, never DEFENDED', () => {
-  const r = runAttackVerify(io({ a14: { decoy: null, sameName: { uploadOutcome: 'skipped' }, foreign: { artifactId: '' }, previous: { bytes: null, reason: 'expired' } }, a4: null }));
-  for (const id of ['A14-1', 'A14-2', 'A14-3a', 'A14-3b-i', 'A14-3b-ii', 'A4-1']) { assert.equal(sc(r, id).testOutcome, 'NOT_RUN', id); assert.ok(sc(r, id).notRunReason, id); }
+  const r = runAttackVerify(io({ a14: { decoy: null, foreign: { artifactId: '' }, previous: { bytes: null, reason: 'expired' } }, a4: null }));
+  for (const id of ['A14-1', 'A14-3a', 'A14-3b-i', 'A14-3b-ii', 'A4-1']) { assert.equal(sc(r, id).testOutcome, 'NOT_RUN', id); assert.ok(sc(r, id).notRunReason, id); }
+  assert.equal(sc(runSameNameVerify(snIo({ sameName: { uploadOutcome: 'skipped' } })), 'A14-2').testOutcome, 'NOT_RUN');
   assert.equal(sc(r, 'A14-3b-i').notRunReason, 'expired');
-  assert.deepEqual(r.notRun.sort(), ['A14-1', 'A14-2', 'A14-3a', 'A14-3b-i', 'A14-3b-ii', 'A4-1'].sort());
+  assert.deepEqual(r.notRun.sort(), ['A14-1', 'A14-3a', 'A14-3b-i', 'A14-3b-ii', 'A4-1'].sort());
 });
 
 test('attack suite: a failed positive control makes the whole suite INCONCLUSIVE', () => {
@@ -94,11 +133,11 @@ test('C1-REV001: a failed same-name upload is DEFENDED only with conflict eviden
     'no platform evidence at all': null,
   };
   for (const [n, platform] of Object.entries(variants)) {
-    const r = runAttackVerify(io({ platform }));
+    const r = runSameNameVerify(snIo({ sameName: { uploadOutcome: 'failure' }, platform }));
     assert.deepEqual([sc(r, 'A14-2').testOutcome, sc(r, 'A14-2').platformOutcome], ['INCONCLUSIVE', 'UPLOAD_FAILED_REASON_UNVERIFIED'], n);
     assert.ok(sc(r, 'A14-2').manualReview, n); assert.equal(r.overall, 'INCONCLUSIVE', n);
   }
-  assert.equal(sc(runAttackVerify(io()), 'A14-2').testOutcome, 'DEFENDED');
+  assert.equal(sc(runSameNameVerify(snIo({ sameName: { uploadOutcome: 'failure' }, platform: platformOk() })), 'A14-2').testOutcome, 'DEFENDED');
 });
 
 test('C1-REV001: a failed foreign download is DEFENDED only if the listing of THIS run confirms the ID is absent', () => {
@@ -121,8 +160,11 @@ test('C1-REV001: error-line extraction is bounded and keeps only platform error 
 
 test('C1 review: the verify CLI exits non-zero unless the summary is DEFENDED_WHERE_RUN (a green job is still not acceptance)', () => {
   const src = rf(f2p(new URL('../scripts/attack-verify.mjs', import.meta.url)), 'utf8');
-  assert.match(src, /process\.exit\(summary\.overall === 'DEFENDED_WHERE_RUN' \? 0 : 1\);\s*$/);
-  assert.ok(src.indexOf("writeFileSync(path.join(env.OUT_DIR, 'attack-summary.json')") < src.indexOf('process.exit(summary.overall'));   // summary first
+  // both stages go through report(): summary file first, then exit 0 only for DEFENDED_WHERE_RUN
+  const rep = src.slice(src.indexOf('function report('), src.indexOf('\n}\n', src.indexOf('function report(')));
+  assert.ok(rep.indexOf('writeFileSync(path.join(env.OUT_DIR, file)') > 0 && rep.indexOf('writeFileSync(path.join(env.OUT_DIR, file)') < rep.indexOf("process.exit(summary.overall === 'DEFENDED_WHERE_RUN' ? 0 : 1);"));
+  assert.match(src, /report\(summary, 'attack-summary\.json'\);\s*$/); assert.match(src, /'attack-summary-same-name\.json'\);/);
+  assert.equal((src.match(/process\.exit\(/g) || []).length, 3);   // report() + the ATTACK_VERIFY_NOT_RUN guard + unknown STAGE
 });
 
 // ------------------------------------------------------------------ C1-REV001 R2: A14-3a needs a VALID artifact of another run
@@ -190,5 +232,35 @@ test('C1-REV001 R3: API response → platform evidence keeps unknown fields unkn
   // the collector uses exactly this conversion
   const src = rf(f2p(new URL('../scripts/attack-platform-evidence.mjs', import.meta.url)), 'utf8');
   assert.match(src, /out\.foreign = foreignEvidenceFrom\(foreignId, r\.status, j\);/); assert.doesNotMatch(src, /j\.expired === true/);
+});
+
+// ------------------------------------------------------------------ PR14-REV001: a failure is not attributed without evidence
+test('PR14-REV001: shadowing is recorded only with the probe-original ID-not-found error, both IDs listed and both downloads failed', () => {
+  const r = runSameNameVerify(snIo());
+  assert.deepEqual([sc(r, 'A14-2s').testOutcome, sc(r, 'A14-2s').platformOutcome], ['DEFENDED', 'ORIGINAL_ID_SHADOWED_FAIL_CLOSED']);
+  assert.equal(sc(r, 'A14-2s').evidence.causeVerified, true); assert.match(sc(r, 'A14-2s').finding, /attributed by the probe-original log/);
+  const unverified = {
+    'timeout': ['##[error]Unable to download artifact(s): connect ETIMEDOUT 140.82.112.21:443'],
+    'service failure': ['##[error]Failed request: (503) Service Unavailable'],
+    'permission': ['##[error]Unable to download artifact(s): Resource not accessible by integration (403)'],
+    'unknown / no error line': [],
+  };
+  for (const [n, lines] of Object.entries(unverified)) {
+    const x = runSameNameVerify(snIo({ platform: snPlatform({ probeOriginalErrorLines: lines }) }));
+    const t = sc(x, 'A14-2s');
+    assert.deepEqual([t.testOutcome, t.platformOutcome], ['DEFENDED', 'ORIGINAL_DOWNLOAD_FAILED_CAUSE_UNVERIFIED'], n);   // limited proposition only
+    assert.equal(t.finding, undefined, n); assert.equal(t.evidence.causeVerified, false, n); assert.match(t.note, /CAUSE of the failure is not established/, n);
+    assert.ok(!x.findings.some((f) => f.id === 'A14-2s'), n);
+  }
+  // the target error line, but the other evidence is missing → still not attributed
+  for (const [n, o] of Object.entries({ 'probe succeeded': { probeOriginalOutcome: 'success' }, 'probe outcome unknown': { probeOriginalOutcome: null }, 'no probe log': { probeOriginalErrorLines: undefined } })) {
+    assert.equal(sc(runSameNameVerify(snIo({ platform: snPlatform(o) })), 'A14-2s').platformOutcome, 'ORIGINAL_DOWNLOAD_FAILED_CAUSE_UNVERIFIED', n);
+  }
+  const notBoth = runSameNameVerify(snIo({ platform: snPlatform({ artifacts: [{ id: '1001', name: 'package-POC-001.tar' }] }) }));
+  assert.equal(sc(notBoth, 'A14-2s').platformOutcome, 'ORIGINAL_DOWNLOAD_FAILED_CAUSE_UNVERIFIED');
+  // the reviewer's probe: an ETIMEDOUT diagnostic no longer yields the shadowing finding
+  const probe = runSameNameVerify(snIo({ platform: snPlatform({ probeOriginalErrorLines: ['##[error]connect ETIMEDOUT'] }) }));
+  assert.notEqual(sc(probe, 'A14-2s').platformOutcome, 'ORIGINAL_ID_SHADOWED_FAIL_CLOSED');
+  assert.equal(saysIdNotFound([ID_NOT_FOUND]), true); assert.equal(saysIdNotFound(['##[error]ETIMEDOUT']), false); assert.equal(saysIdNotFound(undefined), false);
 });
 
