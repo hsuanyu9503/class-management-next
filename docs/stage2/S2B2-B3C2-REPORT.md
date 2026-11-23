@@ -242,3 +242,18 @@
 
 見 HANDOFF。三次驗證都使用既有的簽章，不重新觸發 hosted。每次都要保留：退出碼、`result.json`、`gh-stdout.json`，以及 `gh --version` 的輸出。
 
+## 9. PR #17 審查的回應（Reviewed Head `a4e2078`）
+
+**狀態：C-2 本機驗證受阻，尚未驗收。**
+
+審查者在 Windows（win32/x64、Node v26.13.1、`gh` 2.103.3）上確認：中文檔名的快照問題已經解決。真實的 CLI 已完成 main 的快照與錨定值計算（`060c588e…`），才進入 `gh`。
+
+| ID | 問題 | 修正 | 驗證 |
+|---|---|---|---|
+| PR17-REV001（P2） | `gh` 已啟動但沒有完成（真實案例：`error creating Sigstore verifier: no valid Sigstore verifiers could be initialized`，exit 1），卻被記為政策的 `REJECTED GH_VERIFY_FAILED`／exit 1 | 1. `classifyGhRun()`：只有 exit 0 而且輸出是 JSON 陣列，才算驗證結果。其他情況一律「驗證未完成」，CLI 回報 `NOT_RUN ENVIRONMENT_ERROR`／**exit 3**，**不產生**政策結果：無法啟動、**任何非零退出**、輸出無法使用。保留原始的退出碼、stderr（另存 `gh-stderr.txt`）與 stdout。<br>2. `ghVerifyArgs()`：`gh` 只帶 `--repo`，不再帶 `--signer-workflow`／`--source-ref`。workflow 路徑與 ref 由核心對 `gh` 回傳的**每一份**證據做精確、大小寫敏感的比對（`parseSignerUri`、`SOURCE_REF`）。<br>因此 official profile 混用時，`gh` 會成功，核心給出**具體**的 `REJECTED SIGNER_WORKFLOW_MISMATCH`；不會再因為 `gh` 失敗而無法分類，也不會用非零退出碼去推論政策拒絕。`gh` 仍然負責驗證簽章、憑證鏈、透明度日誌／時間戳，並確認憑證屬於本 repository | `c2-unit`：初始化失敗、401、DNS、`Verification failed`、exit 2、沒有 stderr、被 signal 中止、spawn ENOENT、非 JSON、非陣列，**全部**是「未完成」；`gh` 的參數只有 `--repo`；official profile 用在測試簽章上 → `SIGNER_WORKFLOW_MISMATCH#0`。<br>`c2-cli`：stub 的 init-fail、not-json、not-array，在兩個 profile 下都是 exit 3、`NOT_RUN`，沒有 `reasons`／`policyResult`，保留 stderr；official 混用 → exit 1 `SIGNER_WORKFLOW_MISMATCH#0`；錯誤錨定 → exit 1 `ANCHOR_MISMATCH`（`gh` exit 0）。<br>mutation A1～A5、A1c |
+| PR17-REV002（P2） | Windows 的 Git 依 `core.protectNTFS` 拒絕把 `a:b.txt` 寫入 index（`Ignoring path`），測試資料因此變成空 tree，測試其實沒有測到目標的拒絕 | 測試資料改用 `git mktree -z`，從 tree 物件直接建立 commit，不經過 index 的路徑過濾，**只用測試自己的暫存 repository**，不讀也不改任何全域或使用者設定。測試先用原始的 `git ls-tree -r -z` 斷言 fixture 確實含有預期的路徑、mode 與數量，再比對**具體**的拒絕原因（每個案例一個 regex） | `c2-snapshot` 5/5（Linux）。Windows 的 5/5 **待審查者執行** |
+| PR17-REV003（P2） | `c2-cli` 的 POSIX skip 只套用在各個 test 上，頂層的 clone、commit、sentinel 對照組在 Windows 上仍然會執行 | 整個 fixture、stub、測試與 cleanup 都移進 `if (process.platform !== 'win32') { … }`。Windows 上只註冊一個 skipped test，任何準備動作都不執行 | 模擬 `process.platform = 'win32'`（`node --import` 預載）：1 個 skipped，exit 0，**沒有**建立任何暫存目錄。真實 Windows 上的證據待審查者執行 |
+
+- 審查者觀察到的 Sigstore 初始化失敗，原因尚未確定。可能是環境無法取得 Sigstore 的 TUF trusted root（例如 `tuf-repo-cdn.sigstore.dev` 被擋），或是快取目錄無法寫入。這只是推測，並不代表遠端簽章無效。修正後，這種情況會清楚回報為 `NOT_RUN`。
+- 與計畫 v0.2 §2.1 的差異：`gh` 命令不再帶 `--signer-workflow`／`--source-ref`。理由如上：核心本來就會做精確比對，而保留 `gh` 的過濾會讓反向測試的原因無法分類。`gh` ≥ 2.102.0 的門檻仍然保留。請審查者確認這個差異。
+
