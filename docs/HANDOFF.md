@@ -103,7 +103,7 @@
       - 錯誤錨定 `REJECTED ANCHOR_MISMATCH`（exit 1）。
       見報告 §10。這不是正式 PASS 的驗收；
   11. 下一步：C-3（Environment `s2-attest`）。計畫草案是 `docs/stage2/S2B2-B3C3-PLAN.md`。你已決定 Q1～Q3（都依建議，2026-11-23）。接下來：ChatGPT 審查計畫；你已建立 `s2-attest`。18:35 的 API 回應證明伺服器端狀態：`can_admins_bypass=false`，只有 `main`；secrets 與 variables 都是空的。**C-3 實作已在 PR #18 完成，審查通過**（Head `cc0c503`）。
-      - 接下來：你核准錨定 `caee16535e4b76d301e7f911cdb8fbd1c1dd2874636310710d3acf3532e56b13`（92 檔），確認同 Head 的 CI 全綠後，決定是否合併；
+      - **已完成**：錨定 `caee1653…`（92 檔）已核准，CI 全綠，PR #18 已合併為 `824dcbf`（2026-11-23）；
       - 合併後：
         1. 收集自動觸發的 `attest.yml` run：run、attempt、commit、`verify` 的 `s2-attest` 部署紀錄、UNATTESTED、簽章步驟沒有執行；
         2. 你觸發一次新的 `attest-sigtest.yml`；
