@@ -1338,3 +1338,29 @@
   - 負責人明確指示「pr14合併」。PR #14 於 Head `7223ff5` 合併為 `2f78f9b72fe8492ae3b3aaba8d06ff234a1fe73f`；
   - 修正後的 hosted `attest-attack.yml` 待負責人觸發。
 
+### 修正後的 hosted `attest-attack.yml`：run 45094456766 attempt 1（Claude 從 log 讀出；不是審查者證據）
+
+- 觸發：負責人，workflow_dispatch，main `2f78f9b72fe8492ae3b3aaba8d06ff234a1fe73f`。工具鏈 commit 也是 `2f78f9b…`（`CMN_S2_TRUSTED_TOOLCHAIN_SHA` 未設定）。錨定 `7c4303b1…`。沒有簽章。
+- 7 個 job 全部 success。Node v22.23.5；runner image ubuntu-24.04 20261116.133.1。
+- A10：`checks=9/9`、`A10_OK`。A10-main 與 N-1、N-3、N-4 為 DEFENDED；N-2、N-5、N-8 為預期的 BREACHED（負控制）；N-6、N-7 為預期的 INCONCLUSIVE。
+  - 4 個 `ENV_*` 為 `N/A_HOST_ABSENT`，`PORT_18300/18302/18399` 為 `N/A_HOST_UNREACHABLE`，其餘目標都是 DEFENDED。
+- 主要階段：`ATTACK_SUMMARY stage=main overall=DEFENDED_WHERE_RUN notRun=- findings=0`。
+  - A14-positive 的 `CONTROL_OK` 結果是 UNATTESTED（`TRUST_ROOT_NOT_CONFIGURED`、`SCENARIO_NOT_HONEST`）；
+  - A14-1、A14-3a、A14-3b-i/ii、A4-1、A4-2-i/ii、A4-3 都是 DEFENDED。
+- 同名階段：`ATTACK_SUMMARY stage=same-name overall=DEFENDED_WHERE_RUN notRun=- findings=2`。
+  - A14-2 為 `PLATFORM_ACCEPTED`：同名 artifact 被接受，ID 14783000880；
+  - A14-1b 為 DEFENDED（`PACKAGE_DIGEST_MISMATCH`）；
+  - A14-2s 為 DEFENDED（`ORIGINAL_ID_SHADOWED_FAIL_CLOSED`）。
+- `probe-original` 的錯誤行：`Unable to download artifact(s): None of the provided artifact IDs were found`（原 ID 14782373665；`Found 6 artifact(s)`）。
+- Artifact digest：
+  - `s2-attack-a10` 14782333832，`be9a8e74…`
+  - `s2-attack-summary` 14781973556，`449e7ff4…`
+  - `s2-attack-summary-same-name` 14781888957，`853d8435…`
+  - 原封裝 14782373665，`0f91173c…`
+  - 誘餌 14782523179，`f1cffd08…`
+  - A4 封裝 14782727619，`3bdbbda7…`
+  - 同名封裝 14783000880，`b4589cdf…`
+  - 控制檔 14782990640，`bc3978ab…`
+- 待審查者確認：主要階段的平台證據行是 `sameNameLogOk=false … errors=1`。推論：主要階段執行時同名 job 尚未執行，所以查不到它的 log。這一點需要用原檔確認。
+- 仍未完成：ChatGPT 以原檔做 hosted 驗收；run 45088076830 原檔的核對。
+
