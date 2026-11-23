@@ -56,11 +56,17 @@
     - `9e4db47`：CHANGES REQUESTED（C1-REV001～005），R1 已修正，見 REPORT §7；
     - `d0ab942`：CHANGES REQUESTED（剩 A14-3a 與短秘密兩項），R2 已修正，見 REPORT §8；
     - `e4aee0d`：CHANGES REQUESTED（剩 A14-3a 的欄位驗證），R3 已修正，見 REPORT §9。
+    - **`60169cf`：程式審查通過**。C1-REV001～005 全部結案；hosted 驗收仍待完成。這不是合併授權。
   - 錨定 digest（R3）：`31c23e4dc7bafdf80943581e459576bd0afef9a9f495fc6d046911a36fadb8d3`（83 檔）。`e2149bd9…`、`fb0f85b0…`、`f79ade1e…` 都已作廢。在負責人重新核准之前，`baseline-anchor` 會失敗。
   - 本機結果（R3）：`npm test` 19/19、`s2:test` 143/143、`s2:b3` 33/33、`s2:a10` 9/9、mutation 43/43、attest-attack 的本機模擬。
   - **hosted 的 `attest-attack.yml` 尚未執行**（NOT_RUN）。合併並重新核准錨定之後，由負責人手動觸發。
   - `PASS_ENABLED=false`；沒有簽章權限；沒有設定任何變數或 Settings。
-- 下一位負責人：ChatGPT（複審 C-1 R3，L3）→ 你（核准合併、重新核准錨定、手動觸發 `attest-attack.yml`，並把 artifact 原檔交給審查者）→ Claude（C-2）。
+- 下一位負責人：你。
+  1. 核准錨定 `31c23e4dc7bafdf80943581e459576bd0afef9a9f495fc6d046911a36fadb8d3`（83 檔）；
+  2. 確認同 Head 的 CI 全部通過（含 `baseline-anchor`）後，決定是否合併；
+  3. 合併後手動觸發 `attest-attack.yml`：`previousRunId` 與 `previousArtifactId` 填仍在保存期內的其他 run，並保存 `s2-attack-a10`、`s2-attack-summary`，以及 A14、誘餌、A4-1 三個封裝與各自的 run／artifact ID。
+
+  之後交給 ChatGPT 做 hosted 驗收，再由 Claude 進行 C-2（A18 流程 I）。
 - 四個 hosted run 的 artifact 原檔重播仍待處理，需要你提供原檔給 ChatGPT。
 - **PASS 啟用的門檻**（依 Q-B 的選擇；**選擇之前 `PASS_ENABLED=false`**）：
   - **流程 I（保留原門檻）**：A4／A10／A14 的 hosted 驗收、A18 的隔離測試簽章驗收（分為密碼學／身分層與 statement 政策層），以及第三方驗證腳本，**全部**完成並經獨立審查、負責人核准之後，才進入打開 PASS 的 PR。
@@ -205,5 +211,6 @@
 | 2026-11-22 | Claude → ChatGPT | C-1 R2（錨定 `f79ade1e…`，83 檔） | 複審 |
 | 2026-11-23 | ChatGPT → Claude | R2 複審 `e4aee0dbef22`：CHANGES REQUESTED（A14-3a 的必要欄位） | R3 修正 |
 | 2026-11-23 | Claude → ChatGPT | C-1 R3（錨定 `31c23e4d…`，83 檔） | 複審 |
+| 2026-11-23 | ChatGPT → Claude | R3 審查 `60169cfaf9b3`：程式審查通過（C1-REV001～005 結案；hosted 驗收待完成） | 負責人核准錨定與合併 |
 
 > 規格的正式變更請同步修改 SPEC／TECH，不要只在這裡留下新決策。

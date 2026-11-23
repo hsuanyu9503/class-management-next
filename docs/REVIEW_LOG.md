@@ -1247,3 +1247,23 @@
 - 錨定：`31c23e4dc7bafdf80943581e459576bd0afef9a9f495fc6d046911a36fadb8d3`（83 檔，保護範圍不變）。先前三個 digest 都已作廢。
 - 使用者決策：`待決`
 
+### PR #13 R3 審查（ChatGPT）：程式審查通過
+
+- Reviewed Head：`60169cfaf9b3155fe911adb0cebeb6f751a7f1aa`
+- 結論：**程式審查通過**。C1-REV001～005 全部結案，本輪沒有新的阻擋項，hosted 驗收仍待完成。這不是 GitHub 的正式核准、不是合併授權，也不代表 PASS 可以啟用。
+- 審查者的證據：
+  - 增量為 6 個檔案（+123／−17），只涉及三份文件、平台證據收集器、攻擊判定與對應測試；
+  - CI 45044919834：`validate` success；`baseline-anchor` 為 `ANCHOR_MISMATCH`，屬待核准狀態；
+  - 獨立重算 83 檔的錨定 `31c23e4dc7bafdf80943581e459576bd0afef9a9f495fc6d046911a36fadb8d3`，與附件及 CI log 一致；
+  - 在 Windows 上重跑單元測試 38/38；
+  - **沒有**重跑 Linux／root 的整合測試或 mutation；這些數字仍是提交者的證據。
+- 殘餘風險（審查者列出）：
+  - hosted 的 attest-attack 仍是 NOT_RUN，包括 409 訊息、artifact API、實際下載與 Linux 沙箱的行為；
+  - A14-3a／3b 需要有效的其他 run artifact；
+  - exit 0 或 `DEFENDED_WHERE_RUN` 不代表所有案例都已執行，要逐項核對 `notRun`；
+  - A10 的結論限於列出的操作與目標；
+  - 四個正常路徑 hosted run 的原檔重播仍待完成。
+- 作廢的 digest：`e2149bd9…`、`fb0f85b0…`、`f79ade1e…`。
+- 本段記錄是在 Reviewed Head 之後新增的文件 commit，只改 `docs/REVIEW_LOG.md` 與 `docs/HANDOFF.md`。新 Head **不是**審查者已審的版本。
+- 使用者決策：`待決`（核准錨定 `31c23e4d…`、合併、合併後觸發 hosted 攻擊驗收）
+
