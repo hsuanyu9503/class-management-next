@@ -257,3 +257,40 @@
 - 審查者觀察到的 Sigstore 初始化失敗，原因尚未確定。可能是環境無法取得 Sigstore 的 TUF trusted root（例如 `tuf-repo-cdn.sigstore.dev` 被擋），或是快取目錄無法寫入。這只是推測，並不代表遠端簽章無效。修正後，這種情況會清楚回報為 `NOT_RUN`。
 - 與計畫 v0.2 §2.1 的差異：`gh` 命令不再帶 `--signer-workflow`／`--source-ref`。理由如上：核心本來就會做精確比對，而保留 `gh` 的過濾會讓反向測試的原因無法分類。`gh` ≥ 2.102.0 的門檻仍然保留。請審查者確認這個差異。
 
+## 10. 真實 sigtest 本機驗收（2026-11-23）：C-2 本階段驗收完成
+
+- 執行者：負責人，在自己的 Windows 機器上執行（win32/x64、Node v26.13.1、`gh` 2.103.3、Git 2.56.1.windows.1）。
+  - 使用新的 clone `C:\work\class-management-next`，main `40bd998`（PR #17 的合併 commit）；
+  - 先確認 `gh attestation verify … --repo …` 顯示 `✓ Verification succeeded`；
+  - 在使用者的一般 PowerShell 中，**沒有**出現先前的 Sigstore 初始化失敗。這不代表每台機器上的初始化原因都已經排除。
+- 使用的簽章：既有的 `attest-sigtest.yml` run 45121359992 attempt 1，attestation 70952425。**沒有**重新簽章，也沒有觸發 hosted。
+
+| 項目 | `gh` exit | CLI exit | 結果與原因 | 審查結論 |
+|---|---:|---:|---|---|
+| sigtest 正向 | 0 | 0 | `SIGTEST_IDENTITY_ACCEPTED`，reasons=[] | 通過 |
+| official 混用反向 | 0 | 1 | `REJECTED`：`SIGNER_WORKFLOW_MISMATCH#0`、`SIGNING_POLICY_NOT_VALID_AT_SIGNING_TIME#0`、`STATEMENT_INVALID#0` | 通過：測試簽章不能作為正式 statement |
+| 錯誤錨定反向 | 0 | 1 | `REJECTED`：`ANCHOR_MISMATCH` | 通過 |
+
+- 三次 `gh` 都成功完成，stderr 為空，所以兩個反向結果是**具體的政策拒絕**，不是環境錯誤。
+- 簽章的身分與政策：
+  - signer：`hsuanyu9503/class-management-next`，`.github/workflows/attest-sigtest.yml@refs/heads/main`；
+  - signer commit：`b8d3ba4096033105f9149600f3138311e1443045`；
+  - runInvocationURI 對應 run 45121359992／attempt 1；
+  - signing-policy blob：`d8820ae8…`，核准紀錄 `SIGTEST-001`；
+  - trusted timestamp：Tlog，2026-11-23T14:01:22+08:00；
+  - subject：`63515e7c…`。
+- 政策與錨定：
+  - 政策來源 commit：`40bd998fca16d8ae9654f5867d46dc5a95ef9e5f`，三次都有實際的 `fetchedAt`，都未過期；
+  - 正向與 official 反向的預期錨定、實際錨定都是 `49fbdb25…`（92 檔）；
+  - 錯誤錨定反向刻意傳入 64 個 0。
+- ChatGPT 的審查證據（審查者本機，不在 repository 中）：
+  - 三份 `gh-stdout.json` 的 SHA-256 都與各自的 `result.json` 一致（`f92bd5a3…`）；
+  - 以已審的 `judgeAttestation`，使用原紀錄的判定時間、實際的政策位元組、重新計算的錨定、Git 中的 workflow blob 與 `SIGTEST.txt` 重播，三項結果與完整的 reasons 都相同；兩份政策的 SHA-256 也一致；
+  - 沒有呼叫候選工具鏈的 targets。
+- 證據來源的區分：
+  - 簽章的**密碼學驗證成功**，來自負責人機器上真實 `gh` 的交付物與截圖；
+  - 審查者獨立完成的是**原始紀錄的一致性**與**政策重播**；
+  - `result.json` 本身是未簽章的驗證紀錄。
+- PR16-REV001／002、PR17-REV001～003 都已關閉。
+- **結論：C-2 本階段驗收完成**（流程 I 的密碼學與身分層，以及 statement 政策層的單元測試）。這**不是**正式 PASS 簽章的驗收，也不授權開啟 PASS：測試身分被接受，不能代替正式 statement 被接受。
+

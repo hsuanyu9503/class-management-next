@@ -1625,3 +1625,23 @@
   - PR #17 合併為 `40bd998fca16d8ae9654f5867d46dc5a95ef9e5f`；
   - **C-2 仍未驗收**。下一步：處理驗證環境的 Sigstore 初始化問題，然後用既有簽章做三項真實驗證。
 
+### C-2 真實 sigtest 本機驗收（ChatGPT 審查負責人的交付物）：三項通過 → **C-2 本階段驗收完成**
+
+- 交付物：
+  - `out-sigtest-pos.zip`：三個輸出資料夾，各有 `result.json`、`gh-stdout.json`、`gh-stderr.txt`；
+  - 截圖：CLI 退出碼 0／1／1；
+  - 環境：`gh` 2.103.3、Node v26.13.1、win32/x64、Git 2.56.1.windows.1。
+- 版本：PR #17 合併 `40bd998`。相對已審的 `990e855`，只多了 HANDOFF 與 REVIEW_LOG 的文件改動。
+- 結果：
+  - sigtest 正向：`SIGTEST_IDENTITY_ACCEPTED`（`gh` 0／CLI 0）；
+  - official 混用：`REJECTED`，`SIGNER_WORKFLOW_MISMATCH#0`、`SIGNING_POLICY_NOT_VALID_AT_SIGNING_TIME#0`、`STATEMENT_INVALID#0`（`gh` 0／CLI 1）；
+  - 錯誤錨定：`REJECTED ANCHOR_MISMATCH`（`gh` 0／CLI 1）。
+- 審查者的證據：
+  - stdout 的 SHA-256 與 `result.json` 一致；
+  - 以 `judgeAttestation` 重播，三項結果與完整 reasons 都相同；政策 SHA-256 一致。
+  - signer commit `b8d3ba4`、blob `d8820ae8…`（`SIGTEST-001`）、run 45121359992／1、Tlog 2026-11-23T14:01:22+08:00、政策來源 `40bd998`、錨定 `49fbdb25…`。
+- 證據來源的區分：密碼學驗證成功來自負責人機器上的真實 `gh`；審查者獨立完成紀錄一致性與政策重播，**沒有**在自己的環境重新完成密碼學驗證（審查者的環境仍有初始化問題）。
+- 結論：**C-2 本階段驗收完成**。先前的 Windows `tar` 問題與 Sigstore 初始化問題，不再列為本次驗收的阻塞；但不宣稱每台機器的初始化原因都已排除。
+- 這不是正式 PASS 簽章的驗收，也不授權開啟 PASS。`PASS_ENABLED=false`、POC-009 BLOCKED、Stage 1 的 72 筆 NOT_RUN 維持不變；其他歷史殘餘門檻仍依原流程處理。
+- 下一步：C-3（Environment `s2-attest`）計畫，`docs/stage2/S2B2-B3C3-PLAN.md`（草案）。
+

@@ -97,7 +97,12 @@
        2. 用既有的簽章（run 45121359992）重跑三次驗證，保留退出碼、`result.json`、`gh-stdout.json` 與 `gh --version`；
        3. `--anchor` 使用屆時**已核准**的錨定值；
      - 三次結果經 ChatGPT 逐項核對後，才記錄 C-2 驗收完成；
-  10. 之後：C-3（Environment `s2-attest`，Settings 由你操作）。
+  10. **C-2 本階段驗收完成**（2026-11-23）。負責人在 Windows 上，用既有簽章（run 45121359992）跑三項真實驗證，ChatGPT 核對原檔並重播政策：
+      - 正向 `SIGTEST_IDENTITY_ACCEPTED`（exit 0）；
+      - official 混用 `REJECTED SIGNER_WORKFLOW_MISMATCH…`（exit 1）；
+      - 錯誤錨定 `REJECTED ANCHOR_MISMATCH`（exit 1）。
+      見報告 §10。這不是正式 PASS 的驗收；
+  11. 下一步：C-3（Environment `s2-attest`）。計畫草案是 `docs/stage2/S2B2-B3C3-PLAN.md`，請 ChatGPT 審查，並由你決定計畫 §6 的問題。Settings 一律由你操作，**而且要在合併 C-3 的 PR 之前**完成。
 - 四個 hosted run 的 artifact 原檔重播仍待處理，需要你提供原檔給 ChatGPT。
 - **PASS 啟用的門檻**（依 Q-B 的選擇；**選擇之前 `PASS_ENABLED=false`**）：
   - **流程 I（保留原門檻）**：A4／A10／A14 的 hosted 驗收、A18 的隔離測試簽章驗收（分為密碼學／身分層與 statement 政策層），以及第三方驗證腳本，**全部**完成並經獨立審查、負責人核准之後，才進入打開 PASS 的 PR。
