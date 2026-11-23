@@ -1364,3 +1364,26 @@
 - 待審查者確認：主要階段的平台證據行是 `sameNameLogOk=false … errors=1`。推論：主要階段執行時同名 job 尚未執行，所以查不到它的 log。這一點需要用原檔確認。
 - 仍未完成：ChatGPT 以原檔做 hosted 驗收；run 45088076830 原檔的核對。
 
+### run 45094456766 原檔審查（ChatGPT，2026-11-23）
+
+- 結論：**八份原始附件核對通過**。可重播的 A14／A4 案例與 A10 診斷判定，都與 hosted 摘要一致；沒有新的產品阻擋缺陷。這不是 GitHub approval，也不授權開啟 PASS、簽章或更改 Settings。
+- 審查者的證據：
+  - 從實際位元組重算 8 份附件的 SHA-256，逐項符合 GitHub artifact digest。兩個 `package-POC-001.tar` 中，87552 bytes 是原封裝，4096 bytes 是同名替代品；
+  - 用已審的判定程式重播（不執行封裝內容）：A14-positive（UNATTESTED）、A14-1、A14-1b、A4-1、A4-2-i/ii 符合；A14-2、A14-2s、A14-3a、A4-3 以 API 清單與 job 日誌交叉核對；
+  - A10：九組情境的 overall 與逐目標 outcome 重算一致。A10-main 為 `REAL_TARGETS_ONLY`，五個必要目標都是 DEFENDED。N-2、N-5、N-8 的 BREACHED 是負控制成功被抓到。
+- 審查者界定的證據限制：
+  - `ENV_*` 為 `N/A_HOST_ABSENT`，不能宣稱這次測到了實際 token 的阻擋；
+  - `PORT_183xx` 為 `N/A_HOST_UNREACHABLE`，不能當成防禦成功；
+  - 安全診斷沒有保留完整的沙箱原始資料。這次是一致性重算，不是獨立觀測主機；N7 主機來源的信任限制仍在；
+  - 平台證據 JSON 沒有獨立隨附件提供，用 API 清單、日誌與摘要欄位交叉核對；當時的清單與日誌是有時間點的證據；
+  - 同名可用性問題只是在該 action 版本與該次 run 下觀察到的，不能推廣成一般保證。
+- **待補**：A14-3b-i/ii 是「hosted 已執行、原檔獨立重播待補」。缺的是舊 run 45087498469 的 artifact 14780101081（`package-POC-001.tar`，87552 bytes，`d3dfaacf31a0bb68c13469ebda2370975ae57786577f7cfd3c2f440320de985b`）。
+  - Claude 以 API 確認（2026-11-23）：該 artifact 屬於 run 45087498469，未過期，到期日 2026-12-23；
+  - 補齊後只需重播這兩項，不必重跑 hosted。
+- 保留：
+  - A14-2 `PLATFORM_ACCEPTED` 與同名可用性 finding；
+  - A14-1b 標籤改進（非阻擋）；
+  - run 45088076830 原檔核對、四個正常 hosted run 的原檔重播（與本次分開）；
+  - `PASS_ENABLED=false`、POC-009 BLOCKED、Stage 1 的 72 筆 NOT_RUN；
+  - N5、N7、main 摘要、NOTE-c 原文缺失不因本次結果結案。
+

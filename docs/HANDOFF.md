@@ -80,7 +80,7 @@
   1. A14-1b 在工具鏈不符等前置條件錯誤時判 `BREACHED`，應改為 `INCONCLUSIVE`（保留 reason code，仍以非零狀態退出）；
   2. 正常 `attest.yml` 的可用性診斷：下載失敗時保存有上限的診斷，並評估同一個 run 重跑或新增上傳者時的同名情況。
 - 下一位負責人：
-  1. 你：已觸發 `attest-attack.yml`，run **45094456766** attempt 1。7 個 job 全部 success，兩個階段都是 `DEFENDED_WHERE_RUN`，A10 為 9/9，詳見 REVIEW_LOG。接下來請下載原檔交給 ChatGPT；
+  1. 你：已觸發 `attest-attack.yml`，run **45094456766** attempt 1。7 個 job 全部 success，兩個階段都是 `DEFENDED_WHERE_RUN`，A10 為 9/9，詳見 REVIEW_LOG。ChatGPT 已核對 8 份原檔並通過，A14-3b-i/ii 的獨立重播還待補。接下來請下載舊 run 45087498469 的 artifact 14780101081（`package-POC-001.tar`，87552 bytes，`d3dfaacf…`）交給 ChatGPT；補齊後由 Claude 整理 C-1 完成紀錄與 C-2 計畫；
   2. ChatGPT：以原檔做 hosted 驗收。需要交付：
      - run ID 與 attempt、實際的工具鏈版本；
      - `s2-attack-a10`、`s2-attack-summary`、`s2-attack-summary-same-name`；
