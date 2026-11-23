@@ -1441,5 +1441,9 @@
   - 合成 JSON 不等於真實驗證；
   - 官方來源已列入計畫 §10。
 - 本段之後的 commit 只改文件（REVIEW_LOG、HANDOFF、C-2 計畫），錨定仍是 `d07dfc54…`。
-- 使用者決策：`待決`（核准錨定 `d07dfc54…`、合併 PR #15）
+- 使用者決策（2026-11-23）：
+  - 負責人更新了 `CMN_STAGE1_ANCHOR_SHA256`；
+  - 負責人指示「改好了，若CI 全綠，合併pr15」；
+  - 同 Head `586ccbf` 的 CI run 45101877596 attempt 2：`validate` success，`baseline-anchor` 為 `ANCHOR_OK`（`d07dfc54…`，85 檔）；
+  - PR #15 合併為 `da25061103bf25ca5f75494031198359849b3a9c`。
 
