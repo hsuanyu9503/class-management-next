@@ -1544,3 +1544,30 @@
   - ChatGPT 審查交付物：run、attempt、commit、subject digest、`gh` 的版本與參數、退出碼、`gh-stdout.json`、`result.json`。
   - 通過後才記錄 C-2 驗收完成。
 
+### C-2 本機驗證：Windows 受阻（負責人回報）→ Claude 修正，待審查
+
+- **狀態：C-2 本機驗證受阻，尚未驗收。** 三次非零退出都**不是**政策拒絕，不能算是反向測試通過。
+- 負責人回報的事實：
+  - 在 Windows 上，sigtest 正向、official 反向、錯誤錨定反向三次，都在 `verify-attestation.mjs:57` 的 `extract()` 中斷（呼叫端第 63 行，main 的快照）；
+  - `tar` 解開 `poc/stage1/docs/` 的中文檔名時失敗：`Invalid empty pathname: Unknown error`，exit status 1；
+  - 三個輸出資料夾都沒有 `result.json`；`gh attestation verify` 沒有執行。
+- 既有的簽章不需要重新觸發：run 45121359992 attempt 1；attestation 70952425。
+- 修正（報告 §8）：
+  - `src/b3/git-snapshot.mjs`（新）：用 `git ls-tree -z` 與 `git cat-file --batch` 讀取，每個 blob 重新計算物件雜湊，由驗證者自己的程式寫出，不再使用 `tar`；
+  - 不支援的 repository 形狀一律 fail closed，回報 `SNAPSHOT_FAILED[stage]`；
+  - CLI 在環境錯誤時輸出 `NOT_RUN ENVIRONMENT_ERROR`，exit 3，並一律寫出 `result.json`。以前 main 的錨定值算不出來時，會被吞掉、變成政策的 `ANCHOR_MISMATCH`，現在也改成環境錯誤；
+  - 保留：不執行候選程式、依完整 SHA 快取、所有信任檢查、完整的錨定驗證。
+- 位元組一致性的證據：
+  - 以新的快照程式重建 main `b8d3ba4`，算出的錨定值是 `060c588e…`，等於**已核准**的值；
+  - `c2-snapshot` 確認每一行都等於直接從 Git 物件計算的值，並在 Linux 上與 `tar` 路徑交叉比對。
+- 提交者的證據（Linux；**沒有** Windows 的執行證據）：
+  - `npm run check`、`npm test` 20/20、`stage1:all` 通過；
+  - `s2:test` 171/171：`c2-snapshot` 5 項，`c2-cli` 4 項，其中 1 項是新的環境錯誤測試；
+  - `s2:b3` 33/33（`S2B2B3A-20261123T063712Z-02049f91`）；
+  - mutation：Z1～Z12 全部被抓到；既有的 56＋16＋36 項全部被抓到；Y1～Y10 中 9 項被抓到，Y5 未被抓到（等價，維持原紀錄）。Y1 的目標字串因改名而重新指定。
+- 錨定的變更（相對已核准的 `060c588e…`，91 檔）：
+  - 新增 `poc/stage2/src/b3/git-snapshot.mjs`；
+  - 修改 `poc/stage2/scripts/verify-attestation.mjs`、`poc/stage2/package.json`；
+  - 新值 `e27017712cceded2852150fdd705974d8b1447620e3668b85c12cfe7f466cc4c`（92 檔），**待審查與負責人核准**；這是 Claude 自己算出的值，不是已核准的錨定。
+- 使用者決策：`待決`（審查、核准錨定、合併；之後在 Windows 上重跑 `c2-snapshot` 與三次本機驗證）
+

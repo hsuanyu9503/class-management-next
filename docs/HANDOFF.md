@@ -88,7 +88,15 @@
   6. ChatGPT 已審查 `1164c40`：CHANGES REQUESTED（PR16-REV001 P1、PR16-REV002 P2）。Claude 在 R1 修正後，**R1 複審 `d6d5102` 通過，兩項 CLOSED**；
   7. **已完成**：錨定 `060c588e…`（91 檔）已核准，CI 全綠，PR #16 已合併為 `b8d3ba4`（2026-11-23）；
   8. 合併後：你已觸發 `attest-sigtest.yml`，run **45121359992** attempt 1 成功，subject `63515e7c…`，Rekor `logIndex=4050349070`。接下來：第三方以 `gh` v2.102.0 以上執行報告 §5 的正向與反向驗證，並交付 run／attempt／commit、subject digest、`gh` 的版本與參數、退出碼、`gh-stdout.json`、`result.json`；審查通過後才記錄 C-2 驗收完成；
-  9. 之後：C-3（Environment `s2-attest`，Settings 由你操作）。
+  9. **C-2 本機驗證受阻，尚未驗收**（2026-11-23）：
+     - Windows 的 `tar` 無法解開中文檔名，三次驗證都在快照階段中斷，沒有執行 `gh`；
+     - Claude 已改為不使用 `tar` 的快照，並讓環境錯誤以 `NOT_RUN`（exit 3）回報（報告 §8）。新錨定 `e2701771…`（92 檔）待審查與核准；
+     - 修正合併後，請在 Windows 上：
+       1. 執行 `node --test test/c2-snapshot.test.mjs`（在 `poc/stage2` 中）；
+       2. 用既有的簽章（run 45121359992）重跑三次驗證，保留退出碼、`result.json`、`gh-stdout.json` 與 `gh --version`；
+       3. `--anchor` 使用屆時**已核准**的錨定值；
+     - 三次結果經 ChatGPT 逐項核對後，才記錄 C-2 驗收完成；
+  10. 之後：C-3（Environment `s2-attest`，Settings 由你操作）。
 - 四個 hosted run 的 artifact 原檔重播仍待處理，需要你提供原檔給 ChatGPT。
 - **PASS 啟用的門檻**（依 Q-B 的選擇；**選擇之前 `PASS_ENABLED=false`**）：
   - **流程 I（保留原門檻）**：A4／A10／A14 的 hosted 驗收、A18 的隔離測試簽章驗收（分為密碼學／身分層與 statement 政策層），以及第三方驗證腳本，**全部**完成並經獨立審查、負責人核准之後，才進入打開 PASS 的 PR。
