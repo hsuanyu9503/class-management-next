@@ -1498,5 +1498,29 @@
     - Y1～Y10 中 9 項被抓到；Y5（CLI 解開快取）是等價的 mutation，因為一次 CLI 只有一個 testId，核心快取已經涵蓋；
     - 既有的 56＋16＋36 項全部被抓到。protected 清單移到資料檔後，R11、R12、W15、X34 改指向 `anchor-paths.json`，X25 改指向第二階段的比對。
 - 新錨定：`060c588e4f919f48bfcbf5c14f3d29ffbb1f36d3d1be957289908bd79e942c25`（91 檔）。送審時的 `afa0dcd3…` 已作廢。
-- 使用者決策：`待決`（R1 複審、核准錨定、合併；合併後手動觸發 `attest-sigtest.yml`）
+- 使用者決策：`待決`（見下方 R1 複審）
+
+### PR #16 R1 複審（ChatGPT）：程式複審通過；PR16-REV001、PR16-REV002 CLOSED
+
+- Reviewed Head：`d6d51020c6c969c36ac4cb82596ba25d844e783e`（前次 `1164c40`；相對前次 11 個檔案）
+- 結論：**R1 程式複審通過**，兩項 finding 都關閉，沒有新的阻擋項目。這不是 GitHub approval，也不代表 C-2 的真實簽章驗收完成。
+- 審查者的證據：
+  - 附件 8 份檔案與 Head 逐字一致；
+  - 在 Windows／Node 26.13.1 上：`c2-unit` 13/13、`repo_policy` 7/7、`anchor_coverage` 2/2（Windows 路徑問題已修正），合計 22/22；
+  - 重播前次的兩個反例：錨定錯誤時 `targetsCalls=0`；重複的 official 證據 `ACCEPTED`，只計算一次；
+  - 獨立重算錨定 91 檔 `060c588e…`，與文件及 CI log 一致；
+  - CI 45120068776：`validate` success；`baseline-anchor` 為預期的 `ANCHOR_MISMATCH`。
+- 審查者**沒有**獨立執行，仍是提交者的證據：
+  - `c2-cli`（bare repo、假的 `gh`、sentinel）、165/165、B3 33/33；
+  - mutation。Y1～Y10 的紀錄是 9 項被抓到、**Y5 未被抓到**，不得改寫成全部抓到；之後若支援多個 subject，要重新檢視這個等價性。
+- 剩餘限制（審查者界定）：
+  - 候選 tree 必須有有效的 `anchor-paths.json`，缺少時失敗，不能退回執行歷史腳本；
+  - 錨定資料清單本身受保護，仍是審查重點，不代表可以任意縮小保護範圍；
+  - 合成輸出與 sentinel 測試不能代替密碼學驗證；sigtest 成功只代表測試身分層被接受。
+- 交接要求：PR 說明已更新為 R1 的計算方式、測試、複審結果與 91 檔的新錨定。
+- 合併後的驗收交付（審查者指定）：
+  - run ID／attempt／實際的 commit、subject digest；
+  - `gh` 的版本與實際參數、退出碼、`gh-stdout.json`、`result.json`；
+  - 正向（`SIGTEST_IDENTITY_ACCEPTED`）與反向結果：official profile 混用、錯誤的錨定要拒絕；政策撤銷、過期與路徑的反向重播，要標明證據來源。
+- 使用者決策：`待決`（核准錨定 `060c588e…`、合併；合併後手動觸發 `attest-sigtest.yml`）
 
