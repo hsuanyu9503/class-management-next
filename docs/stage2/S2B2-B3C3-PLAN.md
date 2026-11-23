@@ -1,4 +1,4 @@
-# S2-B2 第 3 批 C-3｜Environment `s2-attest`：計畫 v0.2
+# S2-B2 第 3 批 C-3｜Environment `s2-attest`：計畫 v0.3
 
 > 狀態：**草案，尚未核准實作**。依 `S2B2-B3C-ATTACK-PLAN.md` v0.4 §4.2、§7，以及負責人的決定：
 > - Q-C（2026-11-22）：「是：加入 Environment `s2-attest`，只作為額外保護，不是安全邊界」；
@@ -23,7 +23,7 @@
 | 簽章的 job | `attest.yml` 的 `verify`（`id-token: write`、`attestations: write`，只在 PASS 時簽章）；`attest-sigtest.yml` 的 `sigtest` | 兩個都可以加 `environment: s2-attest`。哪些要加，見 Q1 |
 | 既有的分支限制 | `attest.yml` 的 `execute`、`attest-sigtest.yml` 的 `sigtest` 都有 `if: github.ref == 'refs/heads/main'`；`verify` 依賴 `execute` | 在目前的 workflow 中，從其他分支觸發時 job 會先被 `if` 略過，**不會**走到 Environment 的檢查。Environment 只在 workflow 檔被改壞（例如拿掉 `if`）時才是第二道保護。見 §4 的驗證限制 |
 | Environment 不存在時的行為 | 據審查者先前核對的官方文件：job 引用不存在的 Environment 時，平台會**自動建立一個沒有保護規則的** Environment | **負責人必須在合併 C-3 的 PR 之前**，先在 Settings 建立並設定好 `s2-attest`（§3） |
-| OIDC 與 Sigstore 憑證 | job 引用 Environment 後，OIDC token 的 `sub` 會變成 `repo:hsuanyu9503/class-management-next:environment:s2-attest`，不再是 `repo:…:ref:refs/heads/main`（據官方文件，**待審查者確認**）。C-2 的驗證只使用 `buildSignerURI`、`buildSignerDigest`、`sourceRepositoryURI`／`Ref` 與可信時間，不使用 `sub` | 預期**不影響** C-2 的驗證結果，但不能假定，要用 Q3 的真實簽章確認。**限制**（v0.2）：任何以 OIDC `sub` 的格式做信任判斷的外部設定（例如雲端的 workload identity federation），都要改成新的格式。本 PoC 沒有這類設定。另外，Sigstore 憑證是否、以及在哪個欄位記錄 Environment，要以 Q3 的實際憑證為準，只記錄，不作為條件 |
+| OIDC 與 Sigstore 憑證 | job 引用 Environment 後，OIDC token 的 `sub` 會改成以 Environment 為主的形式，典型是 `repo:hsuanyu9503/class-management-next:environment:s2-attest`，不再是 `repo:…:ref:refs/heads/main`。**完整的 `sub` 格式不保證固定**：可能包含 immutable ID，或被 repository／organization 自訂（v0.3，依 2026-11-23 審查）。C-2 的驗證只使用 `buildSignerURI`、`buildSignerDigest`、`sourceRepositoryURI`／`Ref` 與可信時間，不使用 `sub` | 預期**不影響** C-2 的驗證結果，但不能假定，要用 Q3 的真實簽章確認。**限制**：任何以 OIDC `sub` 的格式做信任判斷的外部設定（例如雲端的 workload identity federation），都要依實際的格式調整，不能假定格式固定。本 PoC 沒有這類設定。紀錄中不得輸出任何原始、仍可使用的 token。另外，Sigstore 憑證是否、以及在哪個欄位記錄 Environment，要以 Q3 的實際憑證為準，只記錄，不作為條件 |
 | 錨定 | `attest.yml`、`attest-sigtest.yml` 都受保護 | 修改後錨定改變，需要負責人重新核准 |
 | `attest-sigtest.yml` 的 blob | 測試身分政策 `SIGTEST-001` 核准的是 `d8820ae8…` | 若在 `attest-sigtest.yml` 加上 Environment，blob 會改變，需要新的測試身分紀錄 `SIGTEST-002`（Q3） |
 
@@ -57,7 +57,7 @@
 
 ### 3.1 完整的設定證據（v0.2）
 
-截圖只能證明當下畫面上的狀態，不能證明已經儲存。請提供下列**任一種**；兩種都提供更好：
+截圖只能證明當下畫面上的狀態，不能證明已經儲存。保護規則與分支限制，請提供下列**任一種**，兩種都提供更好。secrets 與 variables 是否為空，另外需要**空清單的截圖**，或對應的清單 API（`…/environments/s2-attest/secrets`、`…/variables`）——下面兩個 API 回應本身不能證明它們是空的：
 
 - **截圖**：按 **Save protection rules**，**重新整理**頁面後再截圖。畫面要包含：
   - 頁首的 repository 名稱與 Environment 名稱 `s2-attest`；
@@ -110,7 +110,7 @@
 4. ChatGPT 審查；負責人核准錨定並決定是否合併。
 5. 合併後：
    - 讀取自動觸發的 `attest.yml` run，確認 `verify` 有 Environment 的部署紀錄；
-   - 若選擇 Q3，執行 sigtest 與第三方驗證；
+   - 依既定的 Q3，執行 sigtest 與第三方驗證；
    - 記錄 C-3 完成。
 
 ### 5.1 測試身分政策換版：UTC cutoff 與最後的錨定審查順序（v0.2）
@@ -160,11 +160,9 @@
 
 ## 7. 未驗證與限制
 
-- 以下事實需要審查者以官方文件確認，Claude 的環境無法連線：
-  - Environment 不存在時會被自動建立；
-  - deployment branch rule 的行為；
-  - OIDC `sub` 會因為 Environment 改變；
-  - Sigstore 憑證中是否出現 Environment。
+- 官方文件的事實（Environment 不存在時會被自動建立、deployment branch rule 的行為、OIDC `sub` 的改變）已在前次審查中處理（審查檔的原文 Claude 未收到）。本計畫**不**以這些事實作為任何安全條件。
+- Settings 已由 2026-11-23 18:35 的 API 回應截圖證明是已儲存的伺服器端狀態，加上 18:19 secrets／variables 的空清單截圖（§3.1、REVIEW_LOG）。這**不是**實際觀察到 Environment 擋下非 `main` 的執行。
+- Sigstore 憑證中是否、以及在哪個欄位出現 Environment，以 Q3 的新 sigtest 實際證據記錄，不作為接受條件。
 - Environment 只保護有引用它的 job，不是安全邊界；惡意 workflow 仍然可以在透明度日誌中留下簽章，只是第三方驗證不會接受。
 - 負向的阻擋行為不會以實際執行驗證（§4）。
 - C-3 不改變 PASS 的門檻。打開 PASS 仍需要另一個 PR、新的工具鏈 commit、批准紀錄、兩個指標與錨定，並重新審查。
@@ -179,9 +177,16 @@
 | 完整的設定證據方式 | 截圖必須在儲存並重新整理後拍攝，並包含頁首；或用 `gh api` 讀取伺服器端狀態，附上預期值 | §3.1 |
 | Environment 不是正式 PASS 的安全條件，要與 C-3 本身的完成條件區分 | §0 分成兩種條件；新增 §4.1 C-3 完成條件 | §0、§4.1 |
 | Q3 已經決定，不再標為「可選」 | §4 的表格改為「已決定執行」；也列入 §4.1 | §4、§4.1 |
-| OIDC subject 格式的限制 | 新格式 `repo:…:environment:s2-attest`；以 `sub` 做信任判斷的外部設定要更新（本 PoC 沒有）；Environment 是否出現在憑證中只記錄 | §1 |
+| OIDC subject 格式的限制 | 典型形式 `repo:…:environment:s2-attest`，但完整格式不保證固定（v0.3）；以 `sub` 做信任判斷的外部設定要依實際格式調整（本 PoC 沒有）；不輸出原始 token；Environment 是否出現在憑證中只記錄 | §1 |
 | 政策換版的 UTC cutoff 與最後的錨定審查順序 | 固定 cutoff `2026-11-23T10:30:00Z`；舊紀錄正常退役、新紀錄同時生效；最後一個受保護 commit → 審查 → 錨定 → CI → 合併 → sigtest | §5.1 |
 | HANDOFF 中 C-2 的歷史阻塞標為已結案 | HANDOFF 第 9 項標為「已結案（C-2 已驗收）」 | HANDOFF |
 
-另外，2026-11-23 的設定截圖：只允許 `main`、不允許管理員略過、不要求 reviewer、沒有 secrets／variables。**是否已儲存，還要依 §3.1 補上證據**，必須在合併本 PR 之前完成。
+另外，2026-11-23 的設定證據：只允許 `main`、不允許管理員略過、不要求 reviewer、沒有 secrets／variables。**已儲存**：18:35 的 API 回應截圖顯示 `can_admins_bypass=false`，`protection_rules` 只有 `branch_policy`，branch policy 只有一筆 `main`／branch（PR #18 C-3 實作審查，Head `cc0c503`）。
+
+### v0.3（PR #18 C-3 實作審查，Head `cc0c503`；非阻擋的文件收尾）
+
+- §3.1：兩個 API 回應不能單獨證明 secrets／variables 是空的，另需空清單的截圖或清單 API。
+- §5：改為「依既定的 Q3」。
+- §1、§7：OIDC `sub` 的完整格式不保證固定；不輸出原始 token；以 18:35 的 API 證據取代「是否已儲存待確認」；官方事實已在前次審查中處理。
+- 受保護的程式與政策（含 cutoff）**沒有**變更，錨定仍是 `caee1653…`。
 

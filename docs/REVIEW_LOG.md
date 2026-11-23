@@ -1693,5 +1693,27 @@
   - 審查；錨定核准與 CI；
   - 合併後的 hosted 部署紀錄；
   - Q3 sigtest 的驗證。
-- 使用者決策：`待決`（補上 Settings 的儲存證據、審查、核准錨定、合併；合併後觸發 sigtest）
+- 使用者決策：`待決`（見下方 C-3 實作審查）
+
+### PR #18 C-3 實作審查（ChatGPT）：審查通過；Settings 的儲存疑點關閉
+
+- Reviewed Head：`cc0c5039aae4219559df87f214ce38869c5489fc`（Base `40bd998`）。
+- 結論：**C-3 實作審查通過**，沒有需要阻擋合併的程式問題。這不是 GitHub approval，也不是合併或執行 hosted 的授權。C-3 的最終驗收還要等合併後的證據。
+- 審查者的證據：
+  - 附件 7 個原始檔的 Git blob hash 與 Head 一致；
+  - 只有 `verify` 與 `sigtest` 加了 Environment，權限、觸發條件、`main` 限制、SHA 固定都保留；判定核心與正式政策沒有變更，正式政策仍是空的；
+  - 新 blob `a1b93f96…` 與 `SIGTEST-002` 一致；cutoff 的設計正確，run 45121359992（06:01:22Z）仍有效；
+  - 在 Windows／Node v26.13.1 上，`repo_policy` 7 項、`c2-unit` 15 項，合計 22/22 通過；
+  - 錨定 92 檔 `caee1653…`，獨立計算一致；
+  - CI 45157040189：`validate` success，`baseline-anchor` 為 `ANCHOR_MISMATCH`（尚未全綠）；
+  - E1～E10 的 log 是提交者的證據；Y5 維持未被抓到。
+- Settings：負責人 18:35:27 的 API 回應截圖（repository 與 `s2-attest` 都明確）：
+  - `can_admins_bypass=false`；
+  - `protection_rules` 只有 `branch_policy`；
+  - `protected_branches=false`、`custom_branch_policies=true`；
+  - branch policies `total_count=1`，`main`／branch。
+  - 加上 18:19 的 secrets／variables 空清單截圖，**「是否已儲存」的疑點關閉**。沒有實際觀察到 Environment 擋下非 `main` 的執行。
+- cutoff 是固定的政策邊界，不是合併時間；審查**不等於**負責人已授權 `SIGTEST-002`，要以政策描述中「明確的合併指示」為準。
+- 非阻擋的文件收尾已在計畫 v0.3 完成（§3.1 的空清單證據、§5 依既定 Q3、OIDC `sub` 格式不保證固定、更新為 API 證據）。**受保護檔案沒有變更**，錨定仍是 `caee1653…`。
+- 使用者決策：`待決`（核准錨定 `caee1653…`、確認同 Head 的 CI 全綠、合併）
 

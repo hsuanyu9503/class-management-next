@@ -102,7 +102,13 @@
       - official 混用 `REJECTED SIGNER_WORKFLOW_MISMATCH…`（exit 1）；
       - 錯誤錨定 `REJECTED ANCHOR_MISMATCH`（exit 1）。
       見報告 §10。這不是正式 PASS 的驗收；
-  11. 下一步：C-3（Environment `s2-attest`）。計畫草案是 `docs/stage2/S2B2-B3C3-PLAN.md`。你已決定 Q1～Q3（都依建議，2026-11-23）。接下來：ChatGPT 審查計畫；你已建立 `s2-attest`，截圖顯示：只允許 `main`、不要求 reviewer、不允許管理員略過、沒有 secrets 或 variables（請確認已按 Save）；計畫審查通過後由 Claude 實作。Settings 一律由你操作，**而且要在合併 C-3 的實作 PR 之前**完成。
+  11. 下一步：C-3（Environment `s2-attest`）。計畫草案是 `docs/stage2/S2B2-B3C3-PLAN.md`。你已決定 Q1～Q3（都依建議，2026-11-23）。接下來：ChatGPT 審查計畫；你已建立 `s2-attest`。18:35 的 API 回應證明伺服器端狀態：`can_admins_bypass=false`，只有 `main`；secrets 與 variables 都是空的。**C-3 實作已在 PR #18 完成，審查通過**（Head `cc0c503`）。
+      - 接下來：你核准錨定 `caee16535e4b76d301e7f911cdb8fbd1c1dd2874636310710d3acf3532e56b13`（92 檔），確認同 Head 的 CI 全綠後，決定是否合併；
+      - 合併後：
+        1. 收集自動觸發的 `attest.yml` run：run、attempt、commit、`verify` 的 `s2-attest` 部署紀錄、UNATTESTED、簽章步驟沒有執行；
+        2. 你觸發一次新的 `attest-sigtest.yml`；
+        3. 第三方用 CLI 驗證，結果應為 `SIGTEST_IDENTITY_ACCEPTED`、exit 0，而且採用 `SIGTEST-002`；記錄憑證中是否出現 Environment；
+      - 以上核對通過後，才記錄 C-3 完成。Settings 一律由你操作，**而且要在合併 C-3 的實作 PR 之前**完成。
 - 四個 hosted run 的 artifact 原檔重播仍待處理，需要你提供原檔給 ChatGPT。
 - **PASS 啟用的門檻**（依 Q-B 的選擇；**選擇之前 `PASS_ENABLED=false`**）：
   - **流程 I（保留原門檻）**：A4／A10／A14 的 hosted 驗收、A18 的隔離測試簽章驗收（分為密碼學／身分層與 statement 政策層），以及第三方驗證腳本，**全部**完成並經獨立審查、負責人核准之後，才進入打開 PASS 的 PR。
