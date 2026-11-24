@@ -159,18 +159,33 @@ export function checkCommitWriteSet({ attempt, pre, command, principalId }) {
   return { ok: problems.length === 0, problems, committedAt, receiptPath, revisionPath, requestHash: hash, eventPath: ev?.path ?? null, currentPath, previousVersion: v, currentVersion: nv };
 }
 
-/** POC-017 (plan §2.1, implementation-review check 1): the two requests' transactions overlap in time.
- *  Established iff BOTH first attempts began and made their first in-transaction read STRICTLY BEFORE the earliest
- *  successful commit (of either) finished. Intervals are back-proxy [at, endedAt]; ties are NOT overlap. */
+/** POC-017 (plan §2.1, implementation-review check 1; REV-21-02): the two requests' transactions overlap in time.
+ *  Established iff, for BOTH requests, the FIRST attempt (a) began, and (b) every in-transaction read it made — at
+ *  least the receipt and the current leave record — SUCCEEDED (HTTP 200, a found / missing result, valid
+ *  [at, endedAt] with at ≤ endedAt) and FINISHED strictly before the earliest successful commit (of either) finished.
+ *  So both transactions held their reads of the current record while neither had committed yet. A read that is still
+ *  running, failed, has no usable end time or ends exactly at that commit end is NOT overlap → INCONCLUSIVE.
+ *  Intervals are back-proxy [at, endedAt] (one process clock); file order is never used. */
 export function concurrencyOf(back, traceIds) {
   const views = traceIds.map((t) => ({ traceId: t, ...transactionsOf(back, t) }));
   const commitEnds = views.flatMap((v) => v.attempts.filter((a) => a.commit?.ok).map((a) => tEnd(a.commit.e)));
-  const firstCommitEnd = commitEnds.length ? Math.min(...commitEnds) : null;
+  const firstCommitEnd = commitEnds.length && commitEnds.every(Number.isFinite) ? Math.min(...commitEnds) : null;
+  const okTime = (e) => { const a = tStart(e); const b = tEnd(e); return Number.isFinite(a) && Number.isFinite(b) && a <= b; };
   const per = views.map((v) => {
-    const a0 = v.attempts[0]; const r0 = a0?.reads[0];
-    return { traceId: v.traceId, firstBeginAt: a0 ? tStart(a0.begin) : null, firstReadAt: r0 ? tStart(r0.e) : null, attempts: v.attempts.length };
+    const a0 = v.attempts[0]; const why = [];
+    if (!a0) why.push('NO_TRANSACTION');
+    const reads = a0 ? a0.reads.filter((r) => !a0.commit || tStart(r.e) <= tStart(a0.commit.e)) : [];
+    if (a0 && !reads.length) why.push('NO_READ');
+    for (const r of reads) {
+      if (r.failed || r.e.status !== 200 || typeof r.found !== 'boolean') why.push('READ_FAILED');
+      else if (!okTime(r.e)) why.push('READ_TIME_INVALID');
+      else if (firstCommitEnd === null || !(tEnd(r.e) < firstCommitEnd)) why.push('READ_NOT_FINISHED_BEFORE_COMMIT_END');
+    }
+    if (a0 && !reads.some((r) => /\/leaveRecords\/[^/]+$/.test(r.path || '') && r.found === true)) why.push('NO_CURRENT_READ');
+    if (a0 && !(okTime(a0.begin) && firstCommitEnd !== null && tStart(a0.begin) < firstCommitEnd)) why.push('BEGIN_NOT_BEFORE_COMMIT_END');
+    return { traceId: v.traceId, firstBeginAt: a0 ? tStart(a0.begin) : null, firstReadEnds: reads.map((r) => tEnd(r.e)), attempts: v.attempts.length, why: [...new Set(why)] };
   });
-  const established = firstCommitEnd !== null && per.length === 2 && per.every((x) => x.firstBeginAt !== null && x.firstReadAt !== null && x.firstBeginAt < firstCommitEnd && x.firstReadAt < firstCommitEnd);
+  const established = firstCommitEnd !== null && per.length === 2 && per.every((x) => x.why.length === 0);
   return { established, firstCommitEnd, per };
 }
 

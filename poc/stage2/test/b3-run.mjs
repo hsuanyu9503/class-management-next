@@ -23,7 +23,7 @@ import { collectKnownSecrets } from '../src/b3/mask-list.mjs';
 import { javaVersion } from '../src/b3/env-info.mjs';
 import { writePackage } from '../src/b3/package.mjs';
 import { buildCaseInput } from '../src/b3/case-input.mjs';
-import { verifyPackage, PAYLOAD, CASE_ACTORS, SCENARIO_RE, frontFaultsFor } from '../src/b3/verifier.mjs';
+import { verifyPackage, PAYLOAD, CASE_ACTORS, SCENARIO_RE, frontFaultsFor, backFaultsFor } from '../src/b3/verifier.mjs';
 import { stableJson, sha256Hex } from '../src/stable.mjs';
 import { executeCase } from '../../stage1/src/runner.mjs';
 import { createFixtureHash } from '../../stage1/src/common.mjs';
@@ -110,8 +110,8 @@ async function attestedRun(label, { testId, entry = '/adapter/main.mjs', cfg = s
   const users = await h.seedWorld(); rl('setup', 'seed-world');                                 // T1
   const sock = path.join(entryDir, 'front.sock'); rmSync(sock, { force: true });
   const frontFile = path.join(dir, 'trace-front.jsonl'), backFile = path.join(dir, 'trace-back.jsonl');
-  // B4: per-case front faults come ONLY from the trusted table (POC-017 sync point, POC-021 lost response)
-  const stack = await h.startStack({ frontFile, backFile, frontSocketPath: sock, frontFaults: frontFaultsFor(testId) });
+  // B4: per-case front / back arrangements come ONLY from the trusted tables (POC-017 sync point + commit hold, POC-021 lost response)
+  const stack = await h.startStack({ frontFile, backFile, frontSocketPath: sock, frontFaults: frontFaultsFor(testId), backFaults: backFaultsFor(testId) });
   const iso = simulateUnsupported ? { platformSupported: false, reason: 'simulated (A9)', selfCheckRaw: null, sandboxPolicyDigest: configDigest(cfg) }
     : await runSelfCheck({ cfg, pathMap, hostPaths, outputChannels, workDir, startSentinel });
   rl('setup', 'isolation-self-check');

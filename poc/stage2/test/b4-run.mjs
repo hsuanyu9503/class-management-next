@@ -19,7 +19,7 @@ import { createHarness, PORTS } from '../src/harness.mjs';
 import { observe } from '../src/observer.mjs';
 import { verdict } from '../src/verdict.mjs';
 import { reconcile } from '../src/b3/reconcile.mjs';
-import { CASE_ACTORS, checkFrontFaults, frontFaultsFor } from '../src/b3/verifier.mjs';
+import { CASE_ACTORS, checkFrontFaults, frontFaultsFor, checkBackFaults, backFaultsFor } from '../src/b3/verifier.mjs';
 import { transactionsOf } from '../src/b4/commit-trace.mjs';
 import { stableJson, sha256Hex } from '../src/stable.mjs';
 import { runWriteCase, writeClaimFrom } from '../adapter-b3/core.mjs';
@@ -66,18 +66,18 @@ export function judge({ testId, front, back, pre, post, caseWindow, claim = null
   const rec = reconcile({ front, back, pre, post, runnerLog: [], caseWindow, markerPath: '_none/none', expectedMarker: undefined, ownershipMarkerPath: `${MARKER_COLLECTION}/${nonce}` });
   const obs = observe({ testId, actor: CASE_ACTORS[testId], front, back, pre, post });
   const v = verdict({ caseSpec: caseSpecs[testId], observation: obs, adapterOutput: claim, stage1Result: null, inputDigestsVerified: true });
-  const faults = checkFrontFaults(front, testId);
+  const faults = [...checkFrontFaults(front, testId), ...checkBackFaults(back, testId)];
   const problems = [...rec.problems, ...faults, ...v.problems.filter((x) => !rec.problems.includes(x))];
   return { accepted: v.contractMatch === 'MATCH' && rec.problems.length === 0 && faults.length === 0, contractMatch: v.contractMatch, observed: v.observedCanonical, oracleFailures: v.oracleFailures, problems, reconciliation: rec.counts, evidence: obs.evidence, assertions: obs.assertions, adapterClaimAgrees: v.adapterClaimAgreesWithObserver };
 }
 
 /** One captured case. opts (tests only): mutation (API), frontFaults override, plan override, backendOrigin, setup. */
-async function capture(testId, { label = testId, mutation, frontFaults = frontFaultsFor(testId), plan, backendOrigin, setup } = {}) {
+async function capture(testId, { label = testId, mutation, frontFaults = frontFaultsFor(testId), backFaults = backFaultsFor(testId), plan, backendOrigin, setup } = {}) {
   const users = await h.seedWorld();
   if (setup) await setup(users);
   const dir = path.join(runDir, 'cases', label); mkdirSync(dir, { recursive: true });
   const frontFile = path.join(dir, 'trace-front.jsonl'), backFile = path.join(dir, 'trace-back.jsonl');
-  const stack = await h.startStack({ frontFile, backFile, mutation, frontFaults, ...(backendOrigin ? { backendOrigin } : {}) });
+  const stack = await h.startStack({ frontFile, backFile, mutation, frontFaults, backFaults, ...(backendOrigin ? { backendOrigin } : {}) });
   const pre = await h.exportState();
   const start = Date.now();
   const send = sendVia(stack.frontOrigin, users['ACTOR-SC01-TEACHER'].token);
@@ -103,7 +103,9 @@ for (const t of WRITE) {
   const x = await capture(t); honest[t] = x;
   log(x.accepted, `HONEST ${t}`, `${brief(x)} reconcile=${JSON.stringify(x.reconciliation)}`);
 }
-{ const e = honest['POC-017'].evidence; log(e?.concurrency?.established === true, 'POC-017 concurrency established from back-trace intervals (same proxy clock)', JSON.stringify(e?.concurrency)); }
+{ const e = honest['POC-017'].evidence; const holds = honest['POC-017'].back.filter((b) => b.hold);
+  log(e?.concurrency?.established === true && e.concurrency.per.every((x) => x.why.length === 0 && x.firstReadEnds.every((t) => t < e.concurrency.firstCommitEnd)) && holds.length > 0 && holds.every((b) => b.hold.complete === true),
+    'POC-017 concurrency: both first attempts COMPLETED their reads (receipt + current) strictly before the earliest commit ended (same proxy clock); every commit was held until both current reads completed', JSON.stringify({ concurrency: e?.concurrency, holds: holds.map((b) => b.hold) })); }
 // INFO only (not a pass condition): how the Emulator serialized the two overlapping transactions in THIS run —
 // either one commit ABORTED (lock timeout) and the API retried in a new transaction, or the second read waited
 // behind the first commit. Retry handling itself is covered deterministically by b4-unit and NEG-7.
@@ -121,6 +123,8 @@ const MUT = [
   { label: 'MUT-receipt-writes-POC-021', testId: 'POC-021', opts: { mutation: { receiptWrites: true } }, why: 'receipt query writes (derivedProgress) — negative test 5', reconcileProblem: 'transactionOrWriteWithoutCommit' },
   { label: 'MUT-fake-transaction-ref-POC-016', testId: 'POC-016', opts: { mutation: { reportTransactionRef: () => 'FAKE-TXN-REF' } }, why: 'API self-reports a transaction id the Emulator never issued — negative test 3a' },
   { label: 'MUT-sequential-adapter-POC-017', testId: 'POC-017', opts: { plan: async ({ send }) => { const c = fixtures.canonicalCommand; const a = await send('/v1/commit', { command: { ...c, operationId: randomUUID() }, claimedScope: S }); const b = await send('/v1/commit', { command: { ...c, operationId: randomUUID(), intent: { ...c.intent, coverageChange: 'AM_TO_PM' } }, claimedScope: S }); return { claim: null, raw: { a, b } }; } }, why: 'the Adapter submits one after the other (the sync point times out): overlap not established → INCONCLUSIVE, never a pass', expectProblem: 'INCONCLUSIVE:CONCURRENCY_NOT_ESTABLISHED', onlyProblem: true },
+  { label: 'MUT-wrong-intent-POC-016', testId: 'POC-016', opts: { plan: async ({ send }) => { const c = fixtures.canonicalCommand; const r = await send('/v1/commit', { command: { ...c, intent: { ...c.intent, coverageChange: 'AM_TO_PM' } }, claimedScope: S }); return { claim: null, raw: { r } }; } }, why: 'REV-21-01: a CORRECT execution of another intent (AM→PM) is not POC-016 (AM→全天)', expectProblem: 'CASE_OPERATION_MISMATCH:intent[0]' },
+  { label: 'MUT-no-back-hold-POC-017', testId: 'POC-017', opts: { backFaults: null }, why: 'REV-21-02: the trusted commit hold was not configured → the Verifier-level arrangement check fails', expectProblem: 'BACK_FAULT_MISMATCH:hold' },
   { label: 'MUT-no-drop-POC-021', testId: 'POC-021', opts: { frontFaults: null }, why: 'response not actually lost → the recovery is not demonstrated → INCONCLUSIVE', expectProblem: 'INCONCLUSIVE:RESPONSE_LOSS_NOT_ESTABLISHED' },
 ];
 const mutResults = [];

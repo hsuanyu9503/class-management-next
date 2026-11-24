@@ -7,6 +7,7 @@
  *  it runs in the same process/user as the Adapter and gives no isolation. */
 import { stableJson, sha256Hex } from './stable.mjs';
 import { transactionsOf, successfulCommits, checkCommitWriteSet, concurrencyOf, attemptSummary } from './b4/commit-trace.mjs';
+import { checkCaseOperation } from './b4/case-ops.mjs';
 
 const AUDIT_RE = /(^|\/)(auditLog|auditLogUnscoped)\/[^/]+$/;
 const isAudit = (p) => AUDIT_RE.test(p);
@@ -88,6 +89,8 @@ const LEAVE_MUTABLE = new Set(['version', 'coverageSegments', 'lastOperationId',
 /** A command projection is usable only when every field the judges need was recorded (no { valueRecorded:false }). */
 const fullyRecorded = (c) => !!c && !JSON.stringify(c).includes('"valueRecorded":false');
 const keysUnder = (state, re) => Object.keys(state).filter((k) => re.test(k));
+/** REV-21-01: the case is satisfied only by ITS operation (trusted table), never by whatever the Adapter sent. */
+const bindCase = (testId, rs, lv, problems) => { for (const x of checkCaseOperation(testId, { commands: rs.map((r) => ({ command: r.command, claimedScope: r.claimedScope })), lv })) problems.push(x); };
 const esc = (x) => x.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 function leaveTarget(pre, post, command) {
   const hits = findDoc(pre, 'leaveRecords', command?.targetId);
@@ -130,6 +133,7 @@ const OBSERVERS = {
     if (!fullyRecorded(r.command)) { problems.push('COMMAND_NOT_FULLY_RECORDED'); return null; }
     const lv = leaveTarget(pre, post, r.command);
     if (!lv) { problems.push('TARGET_NOT_RESOLVED_IN_PRE_STATE'); return null; }
+    bindCase('POC-016', [r], lv, problems);
     const all = reqs.map((x) => x.traceId);
     const succ = successfulCommits(back, all);
     const ws = succ.length === 1 ? checkCommitWriteSet({ attempt: succ[0].attempt, pre, command: r.command, principalId: actor }) : { ok: false, problems: [`SUCCESSFUL_COMMITS:${succ.length}`] };
@@ -169,6 +173,7 @@ const OBSERVERS = {
     if (!(ca.operationId !== cb.operationId && ca.targetId === cb.targetId && ca.expectedVersion === cb.expectedVersion && ca.intent.coverageChange !== cb.intent.coverageChange)) { problems.push('INCONCLUSIVE:CASE_PRECONDITIONS_NOT_MET'); return null; }
     const lv = leaveTarget(pre, post, ca);
     if (!lv || lv.pre.version !== ca.expectedVersion) { problems.push('INCONCLUSIVE:TARGET_NOT_AT_EXPECTED_VERSION'); return null; }
+    bindCase('POC-017', mine, lv, problems);
     const conc = concurrencyOf(back, [a.traceId, b.traceId]);
     if (!conc.established) problems.push('INCONCLUSIVE:CONCURRENCY_NOT_ESTABLISHED');
     const all = reqs.map((x) => x.traceId);
@@ -219,6 +224,7 @@ const OBSERVERS = {
     if (!sameCommand) { problems.push('INCONCLUSIVE:SUBMISSIONS_DIFFER'); return null; }
     const c = mine[0].command; const lv = leaveTarget(pre, post, c);
     if (!lv) { problems.push('TARGET_NOT_RESOLVED_IN_PRE_STATE'); return null; }
+    bindCase('POC-018', mine, lv, problems);
     const all = reqs.map((x) => x.traceId);
     const succ = successfulCommits(back, all);
     const ws = succ.length === 1 ? checkCommitWriteSet({ attempt: succ[0].attempt, pre, command: c, principalId: actor }) : { ok: false, problems: [`SUCCESSFUL_COMMITS:${succ.length}`] };
@@ -258,6 +264,7 @@ const OBSERVERS = {
     if (!lost) problems.push('INCONCLUSIVE:RESPONSE_LOSS_NOT_ESTABLISHED');
     const lv = leaveTarget(pre, post, first.command);
     if (!lv) { problems.push('TARGET_NOT_RESOLVED_IN_PRE_STATE'); return null; }
+    bindCase('POC-021', commits, lv, problems);
     const op = first.command.operationId;
     const mineLookups = lookups.filter((r) => r.target?.operationId === op && r.claimedScope?.workspaceId === lv.ws && Date.parse(r.at) >= Date.parse(first.endedAt ?? first.at));
     const okLookup = mineLookups.find((r) => r.status === 200 && r.body?.code === 'OK' && r.delivered === true);

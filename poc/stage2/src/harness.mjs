@@ -93,8 +93,8 @@ export function createHarness({ cfg, nonce, fixtures, masker }) {
 
   /** Starts back proxy → API → front proxy. `authorizeFn` / `mutation` overrides are for mutation tests only;
    *  `frontFaults` (B4) comes from the trusted case table (CASE_FRONT_FAULTS), never from the Adapter. */
-  async function startStack({ frontFile, backFile, authorizeFn, mutation, backendOrigin, frontSocketPath, frontFaults = null } = {}) {
-    const back = createTraceProxy({ role: 'back', port: PORTS.back, masker, file: backFile, route: (u) => (u.startsWith('/identitytoolkit.googleapis.com/') ? cfg.auth.origin : cfg.firestore.origin) });
+  async function startStack({ frontFile, backFile, authorizeFn, mutation, backendOrigin, frontSocketPath, frontFaults = null, backFaults = null } = {}) {
+    const back = createTraceProxy({ role: 'back', port: PORTS.back, faults: backFaults, masker, file: backFile, route: (u) => (u.startsWith('/identitytoolkit.googleapis.com/') ? cfg.auth.origin : cfg.firestore.origin) });
     await back.listen();
     const api = createApi({ port: PORTS.api, projectId: cfg.projectId, backendOrigin: backendOrigin || `http://127.0.0.1:${PORTS.back}`, emulatorMode: true, ...(authorizeFn ? { authorizeFn } : {}), ...(mutation ? { mutation } : {}) });
     await api.listen();

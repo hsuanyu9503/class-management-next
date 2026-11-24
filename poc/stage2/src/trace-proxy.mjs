@@ -70,6 +70,10 @@ export function queryOf(url) {
  *     commits are held (or the timeout passes), then all are released together (POC-017 sync point).
  *   dropCommitResponses n: the first n POST /v1/commit are forwarded, the API's response is read, then the client
  *     connection is destroyed WITHOUT delivering it (POC-021, API → client boundary).
+ *  BACK (REV-21-02), commitHold { reads, timeoutMs }: every Firestore :commit is held until `reads` DIFFERENT requests
+ *     (traceIds) have COMPLETED a successful in-transaction read of a leave record (:batchGet, HTTP 200), or the
+ *     timeout passes; the entry records { hold: { arrivedAt, releasedAt, complete } }. It only arranges the overlap;
+ *     the judge still decides concurrency from the recorded intervals (b4/commit-trace.mjs concurrencyOf).
  *  Front entries of /v1/commit and /v1/receipt also record `receiptDigest` = sha256(stableJson(response.receipt))
  *  (scope: the `receipt` member only — the immutable receipt, not derivedStatus / code / traceId) and `delivered`. */
 export const RECEIPT_DIGEST_SCOPE = 'sha256(stableJson(responseBody.receipt))';
@@ -83,6 +87,14 @@ export function createTraceProxy({ role, route, masker, file = null, port, host 
   let seq = 0;
   const barrier = role === 'front' && faults?.commitBarrier ? { need: faults.commitBarrier.count, timeoutMs: faults.commitBarrier.timeoutMs, waiting: [], released: false, timedOut: false, timer: null } : null;
   let dropsLeft = role === 'front' && Number.isSafeInteger(faults?.dropCommitResponses) ? faults.dropCommitResponses : 0;
+  const hold = role === 'back' && faults?.commitHold ? { need: faults.commitHold.reads, timeoutMs: faults.commitHold.timeoutMs, readers: new Set(), waiting: [], released: false, timedOut: false, timer: null } : null;
+  const releaseHold = () => { if (!hold || hold.released) return; hold.released = true; hold.releasedAt = Date.now(); clearTimeout(hold.timer); hold.waiting.splice(0).forEach((w) => w(hold.releasedAt)); };
+  // a commit arriving after the release passes at once; the record still names WHEN and WHY the hold was released
+  const waitHold = () => new Promise((resolve) => {
+    if (!hold || hold.released) { resolve(hold ? hold.releasedAt : null); return; }
+    hold.waiting.push(resolve);
+    if (!hold.timer) hold.timer = setTimeout(() => { hold.timedOut = true; releaseHold(); }, hold.timeoutMs);
+  });
   const releaseAll = () => { if (!barrier || barrier.released) return; barrier.released = true; clearTimeout(barrier.timer); const at = Date.now(); barrier.waiting.splice(0).forEach((w) => w(at)); };
   const holdAtBarrier = () => new Promise((resolve) => {
     if (!barrier || barrier.released) { resolve(null); return; }
@@ -110,6 +122,12 @@ export function createTraceProxy({ role, route, masker, file = null, port, host 
         fault.barrierReleasedAt = releasedAt === null ? null : new Date(releasedAt).toISOString();
         fault.barrierComplete = releasedAt !== null && barrier.timedOut !== true;
       }
+      if (hold && req.method === 'POST' && /\/documents:commit$/.test(urlPath)) {
+        fault.holdArrivedAt = new Date().toISOString();
+        const releasedAt = await waitHold();
+        // complete: released because `reads` requests had completed their current read (not by the timeout)
+        fault.hold = { arrivedAt: fault.holdArrivedAt, releasedAt: releasedAt === null ? null : new Date(releasedAt).toISOString(), complete: releasedAt !== null && hold.timedOut !== true, readers: hold.readers.size };
+      }
       const origin = route(req.url);
       const url = `${origin}${req.url}`;
       assertLoopbackUrl(url);
@@ -119,6 +137,9 @@ export function createTraceProxy({ role, route, masker, file = null, port, host 
       if (traceId) headers[TRACE_HEADER] = traceId;
       const up = await fetch(url, { method: req.method, headers, body: ['GET', 'HEAD'].includes(req.method) ? undefined : reqText, redirect: 'error', signal: AbortSignal.timeout(8000) });
       status = up.status; resText = await up.text();
+      if (hold && !hold.released && traceId && req.method === 'POST' && /\/documents:batchGet$/.test(urlPath) && status === 200 && /\/leaveRecords\/[^/"]+"/.test(reqText)) {
+        hold.readers.add(traceId); if (hold.readers.size >= hold.need) releaseHold();
+      }
       if (role === 'front' && req.method === 'POST' && urlPath === ROUTES.commit && dropsLeft > 0) {
         // POC-021: the API answered; the client never receives it (connection destroyed, nothing written)
         dropsLeft -= 1; fault.delivered = false; fault.droppedAt = new Date().toISOString();
@@ -137,7 +158,8 @@ export function createTraceProxy({ role, route, masker, file = null, port, host 
       record({ role, seq: ++seq, traceId, at: new Date(started).toISOString(), endedAt: new Date(ended).toISOString(), durationMs: ended - started, method: req.method, path: urlPath, query: queryOf(req.url), authorizationRef: maskAuthorization(req.headers.authorization), requestBody: role === 'front' ? traceableBodyFor(urlPath, parseStrict(reqText)) : parseJson(reqText), status, responseBody: parseJson(resText),
         ...(isWriteRoute ? { receiptDigest: receiptDigestOf(resText), delivered: fault.delivered ?? false } : {}),
         ...(fault.barrierArrivedAt ? { barrier: { arrivedAt: fault.barrierArrivedAt, releasedAt: fault.barrierReleasedAt, complete: fault.barrierComplete } } : {}),
-        ...(fault.droppedAt ? { droppedAt: fault.droppedAt } : {}) });
+        ...(fault.droppedAt ? { droppedAt: fault.droppedAt } : {}),
+        ...(fault.hold ? { hold: fault.hold } : {}) });
     }
   });
   return {

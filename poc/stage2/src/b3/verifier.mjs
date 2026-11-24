@@ -32,6 +32,20 @@ export const CASE_FRONT_FAULTS = Object.freeze({
   'POC-017': Object.freeze({ commitBarrier: Object.freeze({ count: 2, timeoutMs: 5000 }) }),
   'POC-021': Object.freeze({ dropCommitResponses: 1 }),
 });
+/** REV-21-02: trusted BACK arrangement — POC-017 commits wait until both requests COMPLETED their current read. */
+export const CASE_BACK_FAULTS = Object.freeze({
+  'POC-017': Object.freeze({ commitHold: Object.freeze({ reads: 2, timeoutMs: 5000 }) }),
+});
+export const backFaultsFor = (testId) => (Object.hasOwn(CASE_BACK_FAULTS, testId) ? CASE_BACK_FAULTS[testId] : null);
+/** Hold records exactly where configured: on every Firestore commit of a configured case, nowhere else. */
+export function checkBackFaults(back, testId) {
+  const cfg = backFaultsFor(testId);
+  const backs = back.filter((e) => e.role === 'back');
+  const commits = backs.filter((e) => e.method === 'POST' && /\/documents:commit$/.test(e.path || ''));
+  const held = backs.filter((e) => e.hold !== undefined);
+  if (cfg?.commitHold) return held.length === commits.length && held.every((e) => commits.includes(e)) ? [] : ['BACK_FAULT_MISMATCH:hold'];
+  return held.length ? ['BACK_FAULT_MISMATCH:hold'] : [];
+}
 export const frontFaultsFor = (testId) => (Object.hasOwn(CASE_FRONT_FAULTS, testId) ? CASE_FRONT_FAULTS[testId] : null);
 /** The front trace shows exactly the configured faults: undelivered responses only where drops are configured (and
  *  exactly that many), barrier records only where a barrier is configured (on every commit). */
@@ -157,6 +171,7 @@ function verifyPackageUnguarded(packageBytes, trusted) {
   const rec = reconcile({ front, back, pre, post, runnerLog: rlog, caseWindow: { start: Date.parse(run.caseStartedAt), end: Date.parse(run.caseEndedAt) }, markerPath, expectedMarker, ownershipMarkerPath: run.ownershipMarkerPath });
   out.reconciliation = rec.counts; rec.problems.forEach(blocked);
   checkFrontFaults(front, trusted.testId).forEach(blocked);
+  checkBackFaults(back, trusted.testId).forEach(blocked);
   // 6. Observer with THIS toolchain + Stage 1 comparator
   const obs = observe({ testId: trusted.testId, actor: own(CASE_ACTORS, trusted.testId) ? CASE_ACTORS[trusted.testId] : null, front, back, pre, post });
   const v = contractVerdict({ caseSpec: trusted.caseSpec, observation: obs, adapterOutput: claim, stage1Result: null, inputDigestsVerified: true });

@@ -154,23 +154,40 @@ test('receipt digest scope is the receipt member only (not code / traceId / deri
 const iso = (ms) => new Date(ms).toISOString();
 const be = (traceId, verb, t0, t1, reqBody, resBody, status = 200) => ({ role: 'back', seq: t0, traceId, at: iso(t0), endedAt: iso(t1), durationMs: t1 - t0, method: 'POST', path: `/v1/projects/p/databases/(default)/documents:${verb}`, requestBody: reqBody, status, responseBody: resBody });
 const N = (p) => `projects/p/databases/(default)/documents/${p}`;
-function txnTrace(traceId, txn, t0, commitEnd, ok = true) {
+/** begin [t0,t0+2], receipt read [t0+3,t0+5] (missing), current read [t0+6, curEnd ?? t0+8] (found), commit [t0+9, commitEnd]. */
+function txnTrace(traceId, txn, t0, commitEnd, ok = true, { curEnd = t0 + 8, curStatus = 200, curRes } = {}) {
   return [be(traceId, 'beginTransaction', t0, t0 + 2, {}, { transaction: txn }), be(traceId, 'batchGet', t0 + 3, t0 + 5, { documents: [N('x/r')], transaction: txn }, [{ missing: N('x/r') }]),
-    be(traceId, 'commit', t0 + 6, commitEnd, { transaction: txn, writes: [] }, ok ? {} : { error: { status: 'ABORTED' } }, ok ? 200 : 409)];
+    be(traceId, 'batchGet', t0 + 6, curEnd, { documents: [N(LV)], transaction: txn }, curRes ?? [{ found: { name: N(LV), fields: { version: { integerValue: '5' } }, updateTime: 'u' } }], curStatus),
+    be(traceId, 'commit', Math.max(t0 + 9, curEnd + 1), commitEnd, { transaction: txn, writes: [] }, ok ? {} : { error: { status: 'ABORTED' } }, ok ? 200 : 409)];
 }
 test('POC-017 overlap is decided from back-proxy intervals, not file order; touching intervals are not overlap', () => {
   const ov = [...txnTrace('A', 'TA', 1000, 3000), ...txnTrace('B', 'TB', 1001, 3010, false)].reverse();   // file order reversed on purpose
   assert.equal(concurrencyOf(ov, ['A', 'B']).established, true);
   const seq = [...txnTrace('A', 'TA', 1000, 1020), ...txnTrace('B', 'TB', 1030, 1050)];
   assert.equal(concurrencyOf(seq, ['A', 'B']).established, false);
-  const touch = [...txnTrace('A', 'TA', 1000, 1020), ...txnTrace('B', 'TB', 1017, 1050)];   // B's first read starts exactly at A's commit end
+  const touch = [...txnTrace('A', 'TA', 1000, 1020), ...txnTrace('B', 'TB', 1012, 1050)];   // B's current read ENDS exactly at A's commit end
   assert.equal(concurrencyOf(touch, ['A', 'B']).established, false);
+  assert.ok(concurrencyOf(touch, ['A', 'B']).per[1].why.includes('READ_NOT_FINISHED_BEFORE_COMMIT_END'));
+});
+test('REV-21-02 overlap needs the first reads COMPLETED (successfully, with valid times) before the earliest commit end', () => {
+  // reviewer's counter-example: A's commit ends at 1020; B's current read starts at 1010 but only ends at 1030
+  const late = [...txnTrace('A', 'TA', 1000, 1020), ...txnTrace('B', 'TB', 1004, 1050, true, { curEnd: 1030 })];
+  const c1 = concurrencyOf(late, ['A', 'B']); assert.equal(c1.established, false); assert.deepEqual(c1.per[1].why, ['READ_NOT_FINISHED_BEFORE_COMMIT_END']);
+  const failed = [...txnTrace('A', 'TA', 1000, 3000), ...txnTrace('B', 'TB', 1001, 3010, false, { curStatus: 500, curRes: { error: {} } })];
+  assert.ok(concurrencyOf(failed, ['A', 'B']).per[1].why.includes('READ_FAILED'));
+  const noTime = [...txnTrace('A', 'TA', 1000, 3000), ...txnTrace('B', 'TB', 1001, 3010, false).map((e, i) => (i === 2 ? { ...e, endedAt: undefined, durationMs: undefined } : e))];
+  assert.ok(concurrencyOf(noTime, ['A', 'B']).per[1].why.includes('READ_TIME_INVALID'));
+  const backwards = [...txnTrace('A', 'TA', 1000, 3000), ...txnTrace('B', 'TB', 1001, 3010, false).map((e, i) => (i === 2 ? { ...e, endedAt: iso(1000) } : e))];
+  assert.ok(concurrencyOf(backwards, ['A', 'B']).per[1].why.includes('READ_TIME_INVALID'));
+  const noCurrent = [...txnTrace('A', 'TA', 1000, 3000), ...txnTrace('B', 'TB', 1001, 3010, false).filter((_, i) => i !== 2)];
+  assert.ok(concurrencyOf(noCurrent, ['A', 'B']).per[1].why.includes('NO_CURRENT_READ'));
+  assert.equal(concurrencyOf([...txnTrace('A', 'TA', 1000, 3000)], ['A', 'B']).established, false, 'one request only');
 });
 test('transactions: a call naming a transaction not begun by the same request is unbound; ids come from begin RESPONSES', () => {
-  const tr = [...txnTrace('A', 'TA', 1000, 1020)]; tr[2] = { ...tr[2], requestBody: { transaction: 'TB', writes: [] } };
+  const tr = [...txnTrace('A', 'TA', 1000, 1020)]; tr[3] = { ...tr[3], requestBody: { transaction: 'TB', writes: [] } };
   const v = transactionsOf(tr, 'A'); assert.equal(v.unboundTxnCalls.length, 1); assert.equal(v.attempts[0].commit, null);
   const other = [...txnTrace('B', 'TB', 1000, 1020)];
-  assert.equal(transactionsOf([...other, { ...tr[2], traceId: 'A' }], 'A').unboundTxnCalls.length, 1, 'another request\'s transaction id does not bind');
+  assert.equal(transactionsOf([...other, { ...tr[3], traceId: 'A' }], 'A').unboundTxnCalls.length, 1, 'another request\'s transaction id does not bind');
 });
 test('write decoding keeps kind, full path, precondition and flags masks / transforms / unknown keys', () => {
   const w = decodeWrite({ update: { name: N('a/b'), fields: { x: { integerValue: '1' } } }, currentDocument: { exists: false }, updateMask: { fieldPaths: ['x'] } });
@@ -208,4 +225,69 @@ test('front faults must match the trusted table exactly', () => {
   assert.deepEqual(checkFrontFaults([commit({ barrier: {} }), commit({ barrier: {} })], 'POC-017'), []);
   assert.ok(checkFrontFaults([commit({}), commit({})], 'POC-017').length);
   assert.ok(checkFrontFaults([commit({ barrier: {} })], 'POC-018').length);
+});
+
+// ---------------- REV-21-01: the case operation is bound by the trusted table, not by the command that was sent
+import { CASE_OPERATIONS, checkCaseOperation } from '../src/b4/case-ops.mjs';
+import { observe } from '../src/observer.mjs';
+import { verdict } from '../src/verdict.mjs';
+import { checkBackFaults, CASE_BACK_FAULTS } from '../src/b3/verifier.mjs';
+const caseSpecs = Object.fromEntries(JSON.parse(readFileSync(path.join(HERE, '../../stage1/contracts/canonical-oracles-v1.0.json'), 'utf8')).cases.map((c) => [c.testId, c]));
+test('case table equals the locked fixtures (canonicalCommand, SC01 leave v5 AM, scope)', () => {
+  const c = CASE_OPERATIONS['POC-016'].command; const { clientCreatedAt, ...fx } = CMD;
+  assert.deepEqual({ ...c, intent: { ...c.intent } }, fx);
+  const s = fixtures.datasets['SC01-20261116'];
+  assert.equal(CASE_OPERATIONS['POC-016'].preVersion, s.leave.version); assert.equal(CASE_OPERATIONS['POC-016'].preDayPart, s.leave.coverageSegments[0].dayPart);
+  assert.deepEqual(CASE_OPERATIONS['POC-016'].claimedScope, { workspaceId: s.workspaceId, classId: s.classId });
+  assert.equal(CASE_OPERATIONS['POC-016'].currentPath, `workspaces/${s.workspaceId}/classes/${s.classId}/leaveRecords/${s.leave.leaveRecordId}`);
+  for (const t of ['POC-018', 'POC-021']) assert.equal(CASE_OPERATIONS[t], CASE_OPERATIONS['POC-016']);
+  assert.deepEqual([...CASE_OPERATIONS['POC-017'].intents].sort(), ['AM_TO_FULL_DAY', 'AM_TO_PM']);
+});
+/** A complete, self-consistent synthetic POC-016 capture made with the REAL commit builder (reviewer's probe). */
+function synth016(intent) {
+  const command = { ...CMD, intent: { ...CMD.intent, coverageChange: intent } };
+  const committedAt = '2026-11-16T07:30:00.000Z'; const ut = '2026-11-16T07:20:00.000000Z'; const T = 'TR-00000000-0000-4000-8000-000000000001';
+  const ENTRY = 'workspaces/WS-SC01/classes/CLASS-606-SC01/attendanceSessions/AS-SC01-20261116-DAILY/entries/AT-20261116-07';
+  const pre = { [LV]: CURRENT, [ENTRY]: { workspaceId: 'WS-SC01', classId: 'CLASS-606-SC01', enrollmentId: CURRENT.enrollmentId, status: 'N', version: 4 }, 'authBindings/u1': { authUid: 'u1', principalId: P } };
+  const docs = buildCommitDocs({ command, scope: SCOPE, principalId: P, hash: requestHash({ command, scope: SCOPE, principalId: P }), currentPath: LV, current: CURRENT, committedAt, eventId: 'EV-1' });
+  const post = { ...pre, ...Object.fromEntries(docs.map((d) => [d.path, d.data])), 'workspaces/WS-SC01/auditLog/a1': { traceId: T, principalId: P, decision: 'allow', reasonCode: 'OK', action: 'leaveRecord.revise' } };
+  const receipt = receiptOut(docs.find((d) => d.kind === 'receipt').data);
+  const front = [{ role: 'front', traceId: T, at: iso(1000), endedAt: iso(1100), method: 'POST', path: '/v1/commit', authorizationRef: { claimedAuthUid: 'u1' }, requestBody: traceableCommitBody({ command, claimedScope: SCOPE }), status: 200, responseBody: { code: 'OK', receipt, traceId: T }, delivered: true, receiptDigest: receiptDigestOf(JSON.stringify({ receipt })) }];
+  const get = (p0, t0) => ({ role: 'back', seq: t0, traceId: T, at: iso(t0), endedAt: iso(t0 + 1), durationMs: 1, method: 'GET', path: `/v1/projects/p/databases/(default)/documents/${p0}`, requestBody: null, status: 200, responseBody: {} });
+  const back = [get('authBindings/u1', 1001), get(`principals/${P}`, 1002), { ...get('workspaces/WS-SC01:runQuery', 1003), method: 'POST' },
+    be(T, 'beginTransaction', 1010, 1011, {}, { transaction: 'TX1' }),
+    be(T, 'batchGet', 1012, 1013, { documents: [N(`workspaces/WS-SC01/operationReceipts/${command.operationId}`)], transaction: 'TX1' }, [{ missing: N(`workspaces/WS-SC01/operationReceipts/${command.operationId}`) }]),
+    be(T, 'batchGet', 1014, 1015, { documents: [N(LV)], transaction: 'TX1' }, [{ found: { name: N(LV), fields: toFields(CURRENT), updateTime: ut } }]),
+    be(T, 'commit', 1016, 1020, { transaction: 'TX1', writes: docs.map((d) => ({ update: { name: N(d.path), fields: toFields(d.data) }, currentDocument: d.kind === 'current' ? { updateTime: ut } : { exists: false } })) }, {})];
+  const obs = observe({ testId: 'POC-016', actor: P, front, back, pre, post });
+  return verdict({ caseSpec: caseSpecs['POC-016'], observation: obs, adapterOutput: null, stage1Result: null, inputDigestsVerified: true });
+}
+test('REV-21-01 POC-016: correct AM_TO_FULL_DAY capture MATCHes; a correctly executed AM_TO_PM is NOT this case', () => {
+  const ok = synth016('AM_TO_FULL_DAY');
+  assert.equal(ok.contractMatch, 'MATCH', JSON.stringify(ok.problems)); assert.deepEqual(ok.problems, []);
+  const wrong = synth016('AM_TO_PM');
+  assert.notEqual(wrong.contractMatch, 'MATCH');
+  assert.ok(wrong.problems.includes('CASE_OPERATION_MISMATCH:intent[0]') && wrong.problems.includes('CASE_OPERATION_MISMATCH:postDayPart'), JSON.stringify(wrong.problems));
+});
+test('case operation check names every deviation (target, version, scope, intents of POC-017)', () => {
+  const lv = { path: LV, pre: CURRENT, post: { ...CURRENT, coverageSegments: [{ ...CURRENT.coverageSegments[0], dayPart: 'FULL_DAY' }] } };
+  const r = (c, sc = SCOPE) => ({ command: { ...CMD, ...c }, claimedScope: sc });
+  assert.deepEqual(checkCaseOperation('POC-016', { commands: [r({})], lv }), []);
+  assert.ok(checkCaseOperation('POC-016', { commands: [r({ targetId: 'LV-008' })], lv }).includes('CASE_OPERATION_MISMATCH:targetId[0]'));
+  assert.ok(checkCaseOperation('POC-016', { commands: [r({ expectedVersion: 4 })], lv }).includes('CASE_OPERATION_MISMATCH:expectedVersion[0]'));
+  assert.ok(checkCaseOperation('POC-016', { commands: [r({ operationId: 'OP-X' })], lv }).includes('CASE_OPERATION_MISMATCH:operationId[0]'));
+  assert.ok(checkCaseOperation('POC-016', { commands: [r({}, { workspaceId: 'WS-SC01', classId: 'C-X' })], lv }).includes('CASE_OPERATION_MISMATCH:claimedScope[0]'));
+  assert.ok(checkCaseOperation('POC-016', { commands: [r({})], lv: { ...lv, pre: { ...CURRENT, version: 4 } } }).includes('CASE_OPERATION_MISMATCH:preVersion'));
+  const i = (cc) => r({ operationId: 'U', intent: { coverageChange: cc, reasonCode: 'SOURCE_CORRECTION' } });
+  assert.deepEqual(checkCaseOperation('POC-017', { commands: [i('AM_TO_FULL_DAY'), i('AM_TO_PM')], lv }), []);
+  assert.ok(checkCaseOperation('POC-017', { commands: [i('AM_TO_FULL_DAY'), i('AM_TO_FULL_DAY')], lv }).includes('CASE_OPERATION_MISMATCH:intents'));
+  assert.deepEqual(checkCaseOperation('POC-999', { commands: [], lv }), ['CASE_OPERATION_UNKNOWN']);
+});
+test('REV-21-02 back commit hold: recorded on every commit of POC-017 only', () => {
+  assert.deepEqual(Object.keys(CASE_BACK_FAULTS), ['POC-017']);
+  const c = (extra) => ({ role: 'back', method: 'POST', path: '/v1/projects/p/databases/(default)/documents:commit', ...extra });
+  assert.deepEqual(checkBackFaults([c({ hold: {} }), c({ hold: {} })], 'POC-017'), []);
+  assert.ok(checkBackFaults([c({ hold: {} }), c({})], 'POC-017').length);
+  assert.ok(checkBackFaults([c({ hold: {} })], 'POC-016').length);
+  assert.deepEqual(checkBackFaults([c({})], 'POC-016'), []);
 });
