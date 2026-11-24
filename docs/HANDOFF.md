@@ -285,5 +285,5 @@
 - 下一位負責人：
   1. PR #20 已合併（main `42db0e4`）。計畫審查通過；這不是 B4 功能驗收；實作時須核驗的 5 項見 REVIEW_LOG「PR #20 複審」；
   2. 負責人已依審查者建議答覆 Q1～Q3：採用四個案例；G-9／G-10 維持缺口追蹤，不擴張範圍；採用七項負向測試；
-  3. **B4 實作已完成**（L3 實作 PR，見 `docs/stage2/S2B2-B4-REPORT.md`），**未驗收**。ChatGPT 已審查 Head `047b05d`：要求修正 REV-21-01／02；Claude 已完成 R1（報告 §10）。待：ChatGPT 複審；你核准新錨定 `ad7d8670…`（96 檔）與合併；合併後由你逐一觸發 hosted（POC-016／017／018／021）。交付完整 API／Observer、授權 §8 對照、四個案例證據、mutation／回歸結果、受保護檔案變更與新錨定摘要；最後一個受保護 commit 須經獨立審查。
+  3. **B4 實作已完成**（L3 實作 PR，見 `docs/stage2/S2B2-B4-REPORT.md`），**未驗收**。R0（Head `047b05d`）要求修正 REV-21-01／02；**R1 複審通過**（Head `f9097dd`，最後受保護版本 `971a7d3`），兩項關閉。這是程式與本機證據的審查，不是 B4 驗收。待：你核准錨定 `ad7d8670dabfebf610278147c016d20acc4bc13ba2747732fadfe3a2a2395e0b`（96 檔）→ 重跑 `baseline-anchor` 確認通過 → 你決定合併；合併後由你逐一觸發 hosted（POC-016／017／018／021），每一項都保存 run ID／attempt、commit、package／manifest、verdict 與原始證據，交獨立核對；四項都核對完成後才收尾 B4，之後依你的決定開始規劃網頁。交付完整 API／Observer、授權 §8 對照、四個案例證據、mutation／回歸結果、受保護檔案變更與新錨定摘要；最後一個受保護 commit 須經獨立審查。
 

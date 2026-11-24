@@ -1879,3 +1879,30 @@
 - Windows 的 anchor CLI 問題另外追蹤（建議任務卡），不擴張 B4。
 - 使用者決策：`待決`。
 
+### PR #21 R1 複審（ChatGPT，Head `f9097dd`，最後受保護版本 `971a7d3`）：**程式與補件審查通過**，REV-21-01／02 關閉
+
+- 審查者的結論：沒有新的合併阻擋問題；建議負責人核准錨定，確認 `baseline-anchor` 通過後再合併。
+  - **B4 尚未正式驗收**：合併後還要做四項 hosted 驗證。
+  - 這不是正式 PASS。
+- 審查者的獨立核驗：
+  - 線上 Head 與補件一致；相對 `971a7d3` 只改測試與文件；
+  - `BUNDLE-MANIFEST` 的 147 個檔案，大小與 SHA-256 一致。這是附件內部的完整性核對，不是第三方簽章；
+  - b4-unit 23/23；
+  - 以固定 Head 的判定程式重播，19/19 相同（`REPLAY_SAME`）：inprocess 15 項、sandbox 套件 4 包；
+  - POC-017 的讀取完成時間都嚴格早於最早的成功 commit 結束時間；hold 紀錄 `complete=true`、`readers=2`；
+  - 獨立呼叫 `anchorListing`：96 檔，值與附件、CI 日誌一致；
+  - CI run 45347748696：`validate` success；`baseline-anchor` failure，原因是 `ANCHOR_MISMATCH`（已核准的值仍是 `caee1653…`），不是測試失敗。
+- 證據層級：
+  - 審查者是對已提供的原檔重新判定，沒有重啟 Emulator 或 Linux 隔離 Runner，也沒有觸發 hosted；
+  - 作者的整套 Linux 回歸與原始碼 mutation 仍屬作者證據；
+  - 並行證據只支持這次受控的 Emulator 測試，不外推到正式環境。
+- 建議核准的錨定：`ad7d8670dabfebf610278147c016d20acc4bc13ba2747732fadfe3a2a2395e0b`（96 檔，適用本 Reviewed Head）。舊的 `ddff49c6…` 不使用。
+- 保留限制：
+  - `PASS_ENABLED=false`、POC-009 BLOCKED；
+  - G-4：`periodRefs` 不重算；
+  - 稽核在提交之後另外寫入；
+  - 真機與正式環境未驗證；
+  - Stage 1 歷史紀錄不回填；
+  - Windows anchor CLI 問題另外追蹤。
+- 使用者決策：`待決`（核准錨定、合併、合併後逐一觸發 hosted）。本回報是審查建議，不是 GitHub Approve，也不是合併授權。
+
