@@ -1843,3 +1843,16 @@
   - Q3：不全面重跑 A1～A18 與 C-1～C-3；採用 §3.4 的七項新增路徑負向測試。
 - 下一步：B4 L3 實作（另開 PR）。實作審查時須核驗的 5 項見上一節。合併、錨定核准與 hosted 仍由負責人執行。
 
+### B4 實作（Claude，L3 實作 PR，待 ChatGPT 審查）
+
+- 依 `S2B2-B4-PLAN.md` v0.2 與負責人的 Q1～Q3 決定實作。報告：`docs/stage2/S2B2-B4-REPORT.md`（§2 授權 §8 對照、§4 實作審查 5 項、§5 七項負向測試、§6 mutation）。
+- 作者證據（本機 Linux；**不是**審查者的獨立重跑）：
+  - 沙箱 `s2:b3` 37/37：四個寫入案例都是 `UNATTESTED`，契約 `MATCH`；
+  - 程序內 `s2:b4` 27/27（兩次）：誠實案例、8 項情境 mutation、7 項負向測試；
+  - B4 原始碼 mutation 28/28；既有 mutation 組 145 被抓到，1 存活（Y5，等價）；
+  - 回歸：`check`、`npm test` 20/20、`stage1:all`、`s2:test` 191/191、`s2:cases`（71/71、7/7）。
+- 新錨定 `ddff49c60960495f44fa75b064b01968f1c01c23c96f324b46ebccb5fb364660`（95 檔），**待負責人核准**；在那之前 `baseline-anchor` 會失敗。
+- 已知限制：Emulator 的交易語意不等於正式環境；G-4（`periodRefs` 不重算）；稽核不在提交交易內（報告 §9）。
+- 狀態：**實作完成，未驗收**。hosted 未執行；`PASS_ENABLED=false`、POC-009 BLOCKED、72 筆 `NOT_RUN` 不變。
+- 使用者決策：`待決`（錨定核准、合併、合併後逐一觸發 hosted）。
+

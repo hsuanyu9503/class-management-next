@@ -112,15 +112,72 @@
 
 ### 6.1 原始碼 mutation 結果
 
-（執行後填入。）
+- **B4：28/28 被抓到**（`mutate-b4.py`）。
+  - API（F1～F9）：
+    - 收據沒有先讀；
+    - 不檢查版本；
+    - 重試上限改成 6；
+    - 交易競爭回報成 `VERSION_CONFLICT`；
+    - current 的前提條件改成 `exists:true`；
+    - 新建時沒有前提條件；
+    - `requestHash` 包含 `operationId`；
+    - 重用不符時洩漏收據；
+    - 重試沿用舊交易。
+  - 授權（A1～A5）：
+    - 不檢查收據本人；
+    - 不檢查 membership；
+    - 先讀收據才檢查身分；
+    - 讀取路由接受寫入操作；
+    - 查收據要求 `leave.revise`。
+  - 判定（T1～T7、V1～V2、P1）：
+    - 時間相同也算重疊；
+    - 依檔案順序判定；
+    - 接受未綁定的交易；
+    - 不核對寫入數量、前提條件、收據內容、讀取順序；
+    - 回應遺失與同步點的故障核對被移除；
+    - digest 涵蓋整個回應封套。
+  - 整合層（G1～G4，真的 Emulator）：
+    - reconcile 不比對 `transactionRef`；
+    - Observer 不要求交易重疊；
+    - reconcile 允許收據查詢使用交易；
+    - 收據查詢不做本人／membership 檢查。
+  - **G3 第一次沒有被抓到**。原因是 Observer 的 `lookupTracesReadOnly` 也會拒絕同一個情境，測試無法單獨證明 reconcile 這一層有效。
+    - 已在 `b4-run.mjs` 加上 `reconcileProblem`：受控的 mutation 必須**同時**被 reconcile 單獨點名；
+    - 重跑後 G3 被抓到。
+- **既有的 mutation 組**（C-1、C-1 R1～R5、C-1f、C-2、C-2 REV、C-2 Windows、C-3、PR #17）：145 被抓到，1 存活。
+  - 存活的是 Y5，與先前的紀錄相同，是等價 mutation；
+  - 沒有 SKIP-TARGET。
 
 ## 7. 回歸
 
-（執行後填入。）
+| 測試 | 結果 |
+|---|---|
+| `npm run check` | 通過 |
+| `npm test`（根目錄） | 20/20 |
+| `npm run stage1:all` | 通過；72 筆 `NOT_RUN` 計畫不變 |
+| `npm run s2:test`（Stage 2 單元，含 b4-unit） | 191/191 |
+| `s2:b3`（沙箱，Linux root） | run `S2B2B3A-20261124T022727Z-045298c0`，37/37 |
+| `s2:b4`（程序內，Emulator） | 27/27（`S2B2B4-20261124T023014Z-1a8b41bd`、`…T023110Z-61bd6918`） |
+| `s2:cases`（第 2 批讀取案例） | run `S2B2B2-20261124T024342Z-ab2261e4`：四個案例結果不變（POC-001／002／008 `MATCH`、POC-009 `PARTIAL_MATCH_REST_BLOCKED`）；負向控制 71/71；mutation 7/7 |
+| hosted | **未執行**：要在合併後，由負責人逐一觸發 |
+
+以上都是作者在本機（Linux）的結果，不是審查者的獨立重跑。
 
 ## 8. 受保護檔案與錨定
 
-（執行後填入。）
+- 改到的受保護檔案：
+  - `.github/workflows/attest.yml`
+  - `poc/stage2/package.json`
+  - `poc/stage2/scripts/run-attest-execute.mjs`
+  - `poc/stage2/test/b3-run.mjs`
+  - `poc/stage2/src/` 下的 `authz.mjs`、`harness.mjs`、`observer.mjs`、`trace-proxy.mjs`、`api/request-shape.mjs`、`api/server.mjs`、`b3/attest-verify.mjs`、`b3/reconcile.mjs`、`b3/verifier.mjs`
+  - 新增：`api/commit.mjs`、`api/txn.mjs`、`b4/commit-trace.mjs`（位於受保護的 `poc/stage2/src` 目錄）
+- 新錨定（`node scripts/verify-anchor.mjs --print`，95 檔）：
+  `ddff49c60960495f44fa75b064b01968f1c01c23c96f324b46ebccb5fb364660`。
+  - 原本的值是 `caee1653…`（92 檔）；
+  - 合併前要由負責人重新核准 repository variable `CMN_STAGE1_ANCHOR_SHA256`。Claude 不設定也不要求設定；
+  - 如果審查後還要修改受保護檔案，錨定會再改變，要以最後一個受保護 commit 為準。
+- 不受保護、依設計：受測的 Adapter（`adapter-b3/`）與單元測試；`test/b4-run.mjs`、`scripts/run-b4.mjs` 是本機測試，不是 hosted 的入口。
 
 ## 9. 已知限制
 

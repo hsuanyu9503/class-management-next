@@ -278,12 +278,12 @@
   - 決策紀錄：`docs/adr/ADR-001-backend-selection.md`；SPEC §4、TECH 已同步。
 - 鎖定的 Stage 1 契約、測資、測試矩陣、驗收標準與 72 筆 `NOT_RUN` **不改寫**；Firebase 的新結果另以可追溯的證據記錄。
 - 本 repository 繼續方向 A 的技術驗證，**不**開始網站頁面製作。
-- **下一批（B4）計畫**：`docs/stage2/S2B2-B4-PLAN.md`（草案）。
+- **B4**：計畫 `docs/stage2/S2B2-B4-PLAN.md`（已合併，計畫審查通過）；實作報告 `docs/stage2/S2B2-B4-REPORT.md`（待審）。
   - Firebase 受控寫入的核心：POC-016／017／018／021；
   - 案例盤點：已接上 4、被阻擋 4（POC-003、004、009、029；提議新缺口 G-9、G-10）、其餘依工作量分批；
   - 會改動受保護檔案（`attest.yml` 的 dispatch 選項、執行器白名單、判定程式、API），需要重新核准錨定（L3）。
 - 下一位負責人：
   1. PR #20 已合併（main `42db0e4`）。計畫審查通過；這不是 B4 功能驗收；實作時須核驗的 5 項見 REVIEW_LOG「PR #20 複審」；
   2. 負責人已依審查者建議答覆 Q1～Q3：採用四個案例；G-9／G-10 維持缺口追蹤，不擴張範圍；採用七項負向測試；
-  3. Claude：進行 L3 實作 PR。交付完整 API／Observer、授權 §8 對照、四個案例證據、mutation／回歸結果、受保護檔案變更與新錨定摘要；最後一個受保護 commit 須經獨立審查。
+  3. **B4 實作已完成**（L3 實作 PR，見 `docs/stage2/S2B2-B4-REPORT.md`），**未驗收**。待：ChatGPT 審查；你核准新錨定 `ddff49c6…`（95 檔）與合併；合併後由你逐一觸發 hosted（POC-016／017／018／021）。原文：Claude：進行 L3 實作 PR。交付完整 API／Observer、授權 §8 對照、四個案例證據、mutation／回歸結果、受保護檔案變更與新錨定摘要；最後一個受保護 commit 須經獨立審查。
 
