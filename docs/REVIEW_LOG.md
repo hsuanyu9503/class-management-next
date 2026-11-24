@@ -1932,3 +1932,12 @@
 - 不變：`PASS_ENABLED=false`、72 筆 `NOT_RUN`、POC-009 BLOCKED、G-4／G-9／G-10。殘餘風險見報告 §12。
 - 下一步：依負責人已決定的順序，Claude 提出第一批網頁製作的範圍與驗收條件（只是提案，待負責人決定與審查）。
 
+### WEB-B1 提案的負責人決定（2026-11-24）
+
+- D-W1：網站在另一個 repository `hsuanyu9503/Classroom-Managerment-Next` 製作（目前是空的 repository）。
+- D-W2：同意讀取既有規格。Claude 唯讀讀取 `Homework-manager-` `cdaf91e`（v2.103）；**M02-04／M02-05 找不到，原文缺失，待確認**，不推測其內容。
+- D-W3：採用候選流程（點名名冊與請假更正）。
+- 要求送 ChatGPT 審查並開 PR。
+- D-W4～D-W8 仍是 Claude 的建議，待負責人確認。
+- 使用者決策：`待決`（D-W4～D-W8、M02 來源、合併）。
+

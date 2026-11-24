@@ -1,8 +1,9 @@
-# WEB-B1｜第一批網頁製作：範圍與驗收條件提案 v0.1（草案）
+# WEB-B1｜第一批網頁製作：範圍與驗收條件提案 v0.2（草案）
 
 > ⚠️ **本 PoC 適用說明**：本 Repository 沒有 `pages.yml`、`release.yml`、`site/` 或網站建置步驟；本提案**不**新增任何部署或發行流程。GitHub Settings 已啟用 Pages，若發佈來源為 `main`，合併後的檔案仍可能被公開（D-W6）。
 
-> 狀態：**提案，待負責人決定 §2 的前置事項並經 ChatGPT 審查；核准前不寫任何網頁程式**。
+> 狀態：**提案，送 ChatGPT 審查；核准前不寫任何網頁程式**。
+> v0.2（2026-11-24）：負責人已決定 D-W1（另一個 repository：`hsuanyu9503/Classroom-Managerment-Next`）、D-W2（同意讀取既有規格）、D-W3（採用 §3 的候選流程），並要求送審與開 PR。D-W4～D-W7 仍是 Claude 的建議，待負責人確認。既有規格的讀取結果見 §2.1。
 > 依據：
 > - 負責人的順序「先完成 B4，再開始網頁」（2026-11-24）；
 > - B4 已完成約定的 Emulator／hosted 驗證（`docs/stage2/S2B2-B4-REPORT.md` §12）；
@@ -13,7 +14,7 @@
 > - `SPEC.md` §4 寫明「**不**開始網站頁面製作」；
 > - `DESIGN.md` 仍是範本（D0.1）。
 >
-> 開始實作前，負責人必須先決定 §2，並更新 SPEC 與 DESIGN（或指定另一個 repository）。本提案**不**修改 SPEC 或 DESIGN。
+> 處理（v0.2）：負責人指定網站在**另一個 repository**（D-W1），所以本 repository 的 SPEC §1／§4「不是網站、不製作頁面」**仍然成立**，只在 §4 加註網站的位置。網站本身的 SPEC 與 DESIGN，在新的 repository 中另外建立，送審之後才實作。
 >
 > 不授權：正式資料、正式雲端環境、部署、開啟 PASS、修改 Settings。
 
@@ -45,13 +46,36 @@
 
 | # | 決定事項 | Claude 的建議 |
 |---|---|---|
-| D-W1 | **在哪個 repository 開發**：本 repository 的新目錄（例如 `web/`），或另一個 repository | 另一個 repository，或本 repository 中獨立的 `web/`。若用本 repository，要更新 SPEC §1、§4；而且 GitHub Pages 已啟用，`main` 的內容可能被公開，見 D-W6 |
-| D-W2 | **既有產品與設計規格**：同意讓 Claude 讀取 `Homework-manager-` 與 M02-04／M02-05 的已定案規格 | 同意讀取（唯讀）。本 session 嘗試加入該 repository 時，**被權限政策拒絕**，需要你在 session 設定中允許，或直接提供文件 |
-| D-W3 | **第一個使用者流程** | §3 的候選批次：點名名冊與請假更正，只限導師、單一班級 |
+| D-W1 | **在哪個 repository 開發** | **已決定**：`hsuanyu9503/Classroom-Managerment-Next`（2026-11-24 時是空的 repository，沒有任何 commit）。本 session 目前只有唯讀；實作時需要 push 權限 |
+| D-W2 | **既有產品與設計規格** | **已決定：同意讀取**。結果見 §2.1：讀到 `Homework-manager-` v2.103；**M02-04／M02-05 沒有找到** |
+| D-W3 | **第一個使用者流程** | **已決定**：§3 的候選批次（點名名冊與請假更正，只限導師、單一班級） |
 | D-W4 | **資料** | 只用 Stage 1 的固定虛構測資；不接任何真實學生資料 |
 | D-W5 | **後端** | 本機 Emulator 加上已驗證的受控 API（`/v1/read`、`/v1/commit`、`/v1/receipt`）；不建立正式的 Firebase 專案，不部署 |
 | D-W6 | **公開風險** | 網頁只在本機執行；不使用 Pages 發佈；Pages 是否保留由你決定 |
-| D-W7 | **技術** | 等 D-W2 讀到既有規格之後再決定。未決定前，以不需要建置步驟的原生 HTML、CSS、JS 為預設，避免引入新的工具鏈 |
+| D-W7 | **技術** | 沿用 `Homework-manager-` 的作法：不需要建置步驟的原生 HTML、CSS、JS，沒有 CDN 或外部套件；測試用 Playwright（`Homework-manager-` 已在測試中使用） |
+| D-W8 | **（v0.2 新增）網站如何連到受控 API** | 受控 API 與 Emulator 在 `class-management-next/poc/stage2` 中，只在本機執行。網站 repository 加一個**只供開發的本機代理**：只轉送 `/v1/read`、`/v1/commit`、`/v1/receipt` 到 front 代理，不開 CORS 給任何其他來源，不含任何後端權限。API 的程式碼不複製到網站 repository |
+
+### 2.1 既有規格的讀取結果（D-W2，唯讀，2026-11-24）
+
+- **`hsuanyu9503/Homework-manager-`**：commit `cdaf91e`，Classroom Manager v2.103。
+  - 這是單一頁面的網站（`index.html`、`style.css`、`app.js`），資料存在瀏覽器的 localStorage／IndexedDB，以 GitHub Pages 部署。
+  - 規格只寫在 README 的版本紀錄中，沒有獨立的規格文件。
+- **M02-04／M02-05：在該 repository 中找不到這兩個編號。標示為「原文缺失，待確認」**：
+  - 不推測其內容；
+  - 請負責人提供文件，或指出所在位置。
+- **可以沿用的既有慣例**（這些不是 M02 的正式規格，只是現有網站的作法；採用與否在網站 repository 的 DESIGN 中定案）：
+  - 色彩 tokens：`--bg #f7fbff`、`--surface #fff`、`--text #243047`、`--muted #718096`、`--line #e3ebf6`、`--primary #6c63ff`、`--danger #e95d7b`、`--warning #e8922f`、`--success #26a879`；`--radius 18px`；字型 `system-ui … "Noto Sans TC"`；
+  - 版面：以 iPad 橫向為主（例如 1408 × 1056），窄螢幕改成兩欄或單欄，長名稱換行；
+  - 互動：
+    - Escape 或「返回」可以關閉，關閉後焦點回到原按鈕；
+    - 視窗內 Tab 焦點循環；
+    - 尊重減少動畫的系統偏好；
+    - 狀態有文字與語意標籤；
+  - 資料安全：多分頁同時修改時，顯示持續的警示，提供「重新載入最新資料」。這與 W1 的 `VERSION_CONFLICT` 畫面是同一種使用者體驗，可以沿用文字與流程。
+- **與 W1 不同、**不**沿用的部分**：
+  - 既有網站的出缺席登記，會「連動前一個實際上課日的作業」；
+  - W1 是受控 API 的新資料模型（請假不得自動改寫點名，`noAutomaticAttendanceRewriteFromLeave`），**不**把既有的連動規則帶入；
+  - 是否、如何與既有網站整合，**不在** W1 範圍內，另行決定。
 
 ## 3. 候選的第一批（W1）：導師的「點名名冊與請假更正」
 
@@ -111,6 +135,7 @@
 
 ## 6. 交付順序
 
-1. 你決定 D-W1～D-W7，特別是 D-W1、D-W2。
-2. Claude 讀取既有規格（D-W2）後，更新本提案為 v0.2，並提出 SPEC 與 DESIGN 的修改（PR，送 ChatGPT 審查）。
-3. 核准後才實作 W1：另開 PR，附截圖與端對端測試結果。
+1. **（已完成）** D-W1～D-W3 已決定；既有規格已讀取（§2.1）。
+2. 本提案 v0.2 以 PR 送 ChatGPT 審查。負責人確認 D-W4～D-W8，並說明 M02-04／M02-05 的來源。
+3. 審查通過後，Claude 在 `Classroom-Managerment-Next` 建立網站的 SPEC、DESIGN 與 CLAUDE.md（同一套流程與守則），以 PR 送審。這需要該 repository 的 push 權限。
+4. 核准後才實作 W1：另開 PR，附三種寬度的截圖與端對端測試結果。
