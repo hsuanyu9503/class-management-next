@@ -3,8 +3,9 @@
  *  §5 (preset upper bound) and §12 defaults. Pure logic: all state comes from an injected `store`
  *  that reads AUTHORITATIVE documents on every call (nothing is cached between requests).
  *
- *  Not implemented here (out of scope for batch 2, so the API exposes no such operation):
- *  branch W, C-sens / grants, self-read, receipts, writes. */
+ *  B4 adds ONE write operation (WRITE_OPERATIONS, §6.4 "改請假摘要", processed by api/commit.mjs per §6.5/§8)
+ *  and the receipt read rule (checkReceiptAccess, §6.4 "讀自己的收據", §8 "查詢收據").
+ *  Not implemented here: branch W, C-sens / grants, self-read of memberships. */
 import { parseUtcTimestamp, parseLocalDate, localDayOrdinal } from './time-validate.mjs';
 
 export const POLICY_VERSION = 's2b1-v0.7';
@@ -44,6 +45,13 @@ export const OPERATIONS = Object.freeze({
   'student.read': { capability: 'roster.read', collection: 'students', idField: 'studentId', workspaceLevel: true },
 });
 
+/** B4: write operations (§6.4, §6.5). Kept apart from OPERATIONS so /v1/read can never resolve a write op. */
+export const WRITE_OPERATIONS = Object.freeze({
+  'leaveRecord.revise': { capability: 'leave.revise', collection: 'leaveRecords', idField: 'leaveRecordId' },
+});
+/** B4: the receipt read (§6.4 / §8). No capability; resolved by workspace + operationId, never by collection group. */
+export const RECEIPT_OPERATION = 'operationReceipt.read';
+
 const MEMBERSHIP_REQUIRED = ['membershipId', 'version', 'principalId', 'workspaceId', 'scopeType', 'classId', 'rolePreset', 'rolePresetVersion', 'capabilities', 'status', 'validFrom'];
 export const ID_RE = /^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$/;
 const CLASS_PATH_RE = /^workspaces\/([^/]+)\/classes\/([^/]+)\/(?:.+\/)?([^/]+)\/([^/]+)$/;
@@ -72,10 +80,8 @@ export function effectiveClassCapabilities(m, { principalId, workspaceId, classI
 /** @param claims verified token claims { authUid, iat } (see api/token.mjs)
  *  @param store  { getBinding(uid), getPrincipal(pid), findTargets(collection, idField, id), listMemberships(wid, pid) }
  *  @returns { decision, reasonCode, principalId?, scope?, resource?, effectiveCapabilities? } */
-export async function authorize({ op, claims, target, claimedScope, nowMs, store }) {
-  // R1-N5: own keys only — prototype names (toString, __proto__, constructor …) are unknown operations
-  const def = typeof op === 'string' && Object.hasOwn(OPERATIONS, op) ? OPERATIONS[op] : null;
-  if (!def) return deny('UNKNOWN_OPERATION');
+/** §6.1 steps 1–2a (shared by every operation). Returns { principalId } or a deny. */
+async function resolvePrincipal(claims, store) {
   // §6.1 step 1 — token already verified by the caller; without verified claims nothing proceeds.
   if (!claims || typeof claims.authUid !== 'string' || !Number.isSafeInteger(claims.iat)) return deny('TOKEN_INVALID');
   // §6.1 step 2 — Auth Binding, re-read on every request.
@@ -89,7 +95,30 @@ export async function authorize({ op, claims, target, claimedScope, nowMs, store
   // §6.1 step 2a — Principal.
   const p = await store.getPrincipal(b.principalId);
   if (!p || p.principalId !== b.principalId || p.status !== 'active') return deny('PRINCIPAL_NOT_ACTIVE', { principalId: b.principalId });
-  const principalId = b.principalId;
+  return { decision: 'continue', principalId: b.principalId };
+}
+
+/** Union of effective class capabilities of the principal's VALID memberships for (wid, cid); null when none is valid. */
+async function validClassCapabilities(store, { principalId, workspaceId, classId, nowMs }) {
+  const todayOrdinal = localDayOrdinal(nowMs, MEMBERSHIP_DATE_TIME_ZONE);
+  const ms = await store.listMemberships(workspaceId, principalId);
+  const eff = new Set(); let anyValid = false;
+  for (const mem of ms) {
+    const caps = effectiveClassCapabilities(mem, { principalId, workspaceId, classId, todayOrdinal });
+    if (caps) { anyValid = true; caps.forEach((c) => eff.add(c)); }
+  }
+  return anyValid ? eff : null;
+}
+
+/** @param operations OPERATIONS (read API) or WRITE_OPERATIONS (commit API) — never merged, so a route can only
+ *         authorize its own operations. */
+export async function authorize({ op, claims, target, claimedScope, nowMs, store, operations = OPERATIONS }) {
+  // R1-N5: own keys only — prototype names (toString, __proto__, constructor …) are unknown operations
+  const def = typeof op === 'string' && Object.hasOwn(operations, op) ? operations[op] : null;
+  if (!def) return deny('UNKNOWN_OPERATION');
+  const who = await resolvePrincipal(claims, store);
+  if (who.decision !== 'continue') return who;
+  const principalId = who.principalId;
   // Capability not enabled (D-09) → refused for everyone, independent of the target.
   if (!ENABLED_CAPABILITIES.has(def.capability)) return deny('CAPABILITY_NOT_ENABLED', { principalId });
   // §6.1 step 3 — resolve the target from authoritative documents; scope from the PATH.
@@ -108,16 +137,32 @@ export async function authorize({ op, claims, target, claimedScope, nowMs, store
   }
   if (claimedScope.workspaceId !== scope.workspaceId || claimedScope.classId !== scope.classId) return deny('SCOPE_CLAIM_MISMATCH', { principalId, scope, resource: hit.path });
   // §6.2 step 5 — valid class memberships of THIS principal in THIS workspace/class (union).
-  const todayOrdinal = localDayOrdinal(nowMs, MEMBERSHIP_DATE_TIME_ZONE);
-  const ms = await store.listMemberships(scope.workspaceId, principalId);
-  const eff = new Set();
-  let anyValid = false;
-  for (const mem of ms) {
-    const caps = effectiveClassCapabilities(mem, { principalId, workspaceId: scope.workspaceId, classId: scope.classId, todayOrdinal });
-    if (caps) { anyValid = true; caps.forEach((c) => eff.add(c)); }
-  }
-  if (!anyValid) return deny('NO_VALID_MEMBERSHIP', { principalId, scope, resource: hit.path });
+  const eff = await validClassCapabilities(store, { principalId, workspaceId: scope.workspaceId, classId: scope.classId, nowMs });
+  if (!eff) return deny('NO_VALID_MEMBERSHIP', { principalId, scope, resource: hit.path });
   // §6.2 step 6 — capability.
   if (!eff.has(def.capability)) return deny('CAPABILITY_NOT_GRANTED', { principalId, scope, resource: hit.path, effectiveCapabilities: [...eff].sort() });
   return { decision: 'allow', reasonCode: 'OK', principalId, scope, resource: hit.path, target: hit, effectiveCapabilities: [...eff].sort() };
+}
+
+/** B4 (§6.4 "讀自己的收據", §8 "查詢收據"; plan v0.2 §3.1.2). NO capability is required. The receipt is read by the
+ *  SERVER (workspaces/{workspaceId}/operationReceipts/{operationId}); its own principalId / classId decide:
+ *   - §6.1 steps 1–2a pass (binding active, token not before activatedAt, principal active);
+ *   - receipt.principalId === caller;
+ *   - the caller still holds a VALID class membership for receipt.classId in that workspace (no capability needed).
+ *  Not found and not allowed are the same deny (the caller learns nothing). The receipt is read only after
+ *  the caller's own identity checks passed. @returns { decision, reasonCode, principalId?, resource?, receipt? } */
+export async function checkReceiptAccess({ claims, workspaceId, operationId, nowMs, store }) {
+  const who = await resolvePrincipal(claims, store);
+  if (who.decision !== 'continue') return who;
+  const principalId = who.principalId;
+  if (typeof workspaceId !== 'string' || !ID_RE.test(workspaceId) || typeof operationId !== 'string' || !ID_RE.test(operationId)) return deny('TARGET_INVALID', { principalId });
+  const resource = `workspaces/${workspaceId}/operationReceipts/${operationId}`;
+  const receipt = await store.getDoc(resource);
+  if (!receipt) return deny('TARGET_NOT_FOUND', { principalId });
+  // the stored receipt must be self-consistent with its path before any field of it is trusted
+  if (receipt.operationId !== operationId || typeof receipt.classId !== 'string' || !ID_RE.test(receipt.classId) || typeof receipt.principalId !== 'string') return deny('SCOPE_INTEGRITY_ERROR', { principalId, resource });
+  if (receipt.principalId !== principalId) return deny('NOT_RECEIPT_OWNER', { principalId, resource, scope: { workspaceId, classId: receipt.classId } });
+  const eff = await validClassCapabilities(store, { principalId, workspaceId, classId: receipt.classId, nowMs });
+  if (!eff) return deny('NO_VALID_MEMBERSHIP', { principalId, resource, scope: { workspaceId, classId: receipt.classId } });
+  return { decision: 'allow', reasonCode: 'OK', principalId, resource, scope: { workspaceId, classId: receipt.classId }, receipt };
 }

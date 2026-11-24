@@ -258,9 +258,9 @@ test('B3A-N5: every non-canonical serialisation of a valid payload is refused (h
 // ======================================================================= F1 (B3A-R1-N1, NOTE-a, NOTE-b)
 import { VERIFIER_VERSION } from '../src/b3/verifier.mjs';
 
-test('NOTE-b: Verifier version is s2-verifier-b3c-0 (C-1)', () => {
-  assert.equal(VERIFIER_VERSION, 's2-verifier-b3c-0');
-  assert.equal(verifyMod().verifierVersion, 's2-verifier-b3c-0');
+test('NOTE-b: Verifier version is s2-verifier-b4-0 (B4 write cases)', () => {
+  assert.equal(VERIFIER_VERSION, 's2-verifier-b4-0');
+  assert.equal(verifyMod().verifierVersion, 's2-verifier-b4-0');
 });
 
 test('B3A-R1-N1: non-object top-level JSON is BLOCKED with a named reason and never throws', () => {
@@ -404,7 +404,7 @@ import { CASE_ACTORS } from '../src/b3/verifier.mjs';
 
 test('B3A-N8: case input carries only the case actor\'s token', () => {
   const users = { 'ACTOR-TEACHER': { token: 't-teacher' }, 'ACTOR-OTHER': { token: 't-other' }, 'ACTOR-SC01-TEACHER': { token: 't-sc01' } };
-  for (const t of ['POC-001', 'POC-002', 'POC-008', 'POC-009']) {
+  for (const t of ['POC-001', 'POC-002', 'POC-008', 'POC-009', 'POC-016', 'POC-017', 'POC-018', 'POC-021']) {
     const inp = buildCaseInput({ testId: t, fixtures: {}, users, caseActors: CASE_ACTORS });
     assert.deepEqual(Object.keys(inp.tokens), [CASE_ACTORS[t]], t); assert.equal(inp.tokens[CASE_ACTORS[t]], users[CASE_ACTORS[t]].token);
     assert.ok(!JSON.stringify(inp).includes(Object.values(users).map((u) => u.token).find((x) => x !== users[CASE_ACTORS[t]].token)), t);

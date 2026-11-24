@@ -1831,3 +1831,78 @@
   4. 021 的 digest 明定序列化與比對範圍；區分不可變收據與另讀的 derivedStatus，不把不同的回應封套當成同一份位元組。
   5. 實際展示 mutation 被判定器抓到，不只展示測試跑完；四個誠實案例與新增負向測試的結果逐項提供。
 - 使用者決策：`待決`（PR #20 是否合併；B4 計畫 §6 的 Q1～Q3）。審查者的建議不等於負責人的答覆。依使用者先前的決定，方向維持先完成 B4、再做網頁，Firebase 維持暫定。
+
+### PR #20 合併與負責人決定（2026-11-24）
+
+- 負責人指示：「pr20合併，依gpt的建議執行」。
+- Claude 合併前確認：Head `4488bb9` 的 CI run 45309556004，`validate`、`baseline-anchor` 皆 success（錨定 `caee1653…` 不變）。
+- 合併：PR #20 → main `42db0e4d7507b77d957e057516af6c580ce3e9a9`（merge commit）。
+- B4 計畫 §6 的負責人決定（採用審查者建議）：
+  - Q1：採用 POC-016／017／018／021；
+  - Q2：G-9、G-10 維持缺口追蹤、維持 BLOCKED；**不**為此擴張 B4 的權限或範圍，**不**新增測試 principal 或測資；
+  - Q3：不全面重跑 A1～A18 與 C-1～C-3；採用 §3.4 的七項新增路徑負向測試。
+- 下一步：B4 L3 實作（另開 PR）。實作審查時須核驗的 5 項見上一節。合併、錨定核准與 hosted 仍由負責人執行。
+
+### B4 實作（Claude，L3 實作 PR，待 ChatGPT 審查）
+
+- 依 `S2B2-B4-PLAN.md` v0.2 與負責人的 Q1～Q3 決定實作。報告：`docs/stage2/S2B2-B4-REPORT.md`（§2 授權 §8 對照、§4 實作審查 5 項、§5 七項負向測試、§6 mutation）。
+- 作者證據（本機 Linux；**不是**審查者的獨立重跑）：
+  - 沙箱 `s2:b3` 37/37：四個寫入案例都是 `UNATTESTED`，契約 `MATCH`；
+  - 程序內 `s2:b4` 27/27（兩次）：誠實案例、8 項情境 mutation、7 項負向測試；
+  - B4 原始碼 mutation 28/28；既有 mutation 組 145 被抓到，1 存活（Y5，等價）；
+  - 回歸：`check`、`npm test` 20/20、`stage1:all`、`s2:test` 191/191、`s2:cases`（71/71、7/7）。
+- 新錨定 `ddff49c60960495f44fa75b064b01968f1c01c23c96f324b46ebccb5fb364660`（95 檔），**待負責人核准**；在那之前 `baseline-anchor` 會失敗。
+- 已知限制：Emulator 的交易語意不等於正式環境；G-4（`periodRefs` 不重算）；稽核不在提交交易內（報告 §9）。
+- 狀態：**實作完成，未驗收**。hosted 未執行；`PASS_ENABLED=false`、POC-009 BLOCKED、72 筆 `NOT_RUN` 不變。
+- 使用者決策：`待決`（錨定核准、合併、合併後逐一觸發 hosted）。
+
+### PR #21 審查（ChatGPT，Head `047b05d`）：要求修正 REV-21-01（P1）、REV-21-02（P2）→ Claude R1
+
+- 審查者的結論：要求修正；暫不建議核准新錨定或合併；B4 尚未完成。
+  - REV-21-01：POC-016 沒有綁定本案例的操作，正確執行的 `AM_TO_PM` 也得到 `MATCH`。審查者以固定 Head 的判定程式合成重現；這是判定層的重現，不是 Emulator 或套件的重播。
+  - REV-21-02：並行判定只比較開始時間，沒有落實「完成讀取」。
+- 審查者已確認：
+  - `/v1/commit` 先授權再讀收據，交易內的順序與重試正確；`/v1/receipt` 的規則正確；
+  - mutation 參數沒有由 Runner 傳入的路徑；
+  - workflow 只加入 dispatch 選項；
+  - `UNAVAILABLE` 加上 `reason: TRANSACTION_CONTENTION` 的形式可接受。
+- 審查者的證據層級：
+  - 在 Windows 上：`check` 通過；`s2:test` 186 項中 185 通過、1 項 skip；`npm test` 17 通過、3 項失敗，失敗的是 anchor 測試，原因是既有的 Windows CLI 入口問題，與本 PR 無關；
+  - 以 `anchorListing` 重算得到 95 檔 `ddff49c6…`，這只是計算，不是核准；
+  - 作者的 Linux 結果仍屬作者證據；本輪沒有重播整合測試，也沒有執行 hosted。
+- Claude R1（報告 §10）：
+  - 可信的案例操作表 `case-ops.mjs`；
+  - 嚴格的重疊條件，加上 back 代理的 commit hold（Verifier 會核對）；
+  - 單元與 Emulator 的負向測試；mutation 13 項新增加 28 項原有，全部被抓到（逐項紀錄）；
+  - 可重播的已遮罩原檔與 `replay-b4.mjs`（`REPLAY_SAME`）。
+- 新錨定 `ad7d8670dabfebf610278147c016d20acc4bc13ba2747732fadfe3a2a2395e0b`（96 檔），**待審查者確認最後的受保護版本後，由負責人決定**；`ddff49c6…` 作廢。
+- Windows 的 anchor CLI 問題另外追蹤（建議任務卡），不擴張 B4。
+- 使用者決策：`待決`。
+
+### PR #21 R1 複審（ChatGPT，Head `f9097dd`，最後受保護版本 `971a7d3`）：**程式與補件審查通過**，REV-21-01／02 關閉
+
+- 審查者的結論：沒有新的合併阻擋問題；建議負責人核准錨定，確認 `baseline-anchor` 通過後再合併。
+  - **B4 尚未正式驗收**：合併後還要做四項 hosted 驗證。
+  - 這不是正式 PASS。
+- 審查者的獨立核驗：
+  - 線上 Head 與補件一致；相對 `971a7d3` 只改測試與文件；
+  - `BUNDLE-MANIFEST` 的 147 個檔案，大小與 SHA-256 一致。這是附件內部的完整性核對，不是第三方簽章；
+  - b4-unit 23/23；
+  - 以固定 Head 的判定程式重播，19/19 相同（`REPLAY_SAME`）：inprocess 15 項、sandbox 套件 4 包；
+  - POC-017 的讀取完成時間都嚴格早於最早的成功 commit 結束時間；hold 紀錄 `complete=true`、`readers=2`；
+  - 獨立呼叫 `anchorListing`：96 檔，值與附件、CI 日誌一致；
+  - CI run 45347748696：`validate` success；`baseline-anchor` failure，原因是 `ANCHOR_MISMATCH`（已核准的值仍是 `caee1653…`），不是測試失敗。
+- 證據層級：
+  - 審查者是對已提供的原檔重新判定，沒有重啟 Emulator 或 Linux 隔離 Runner，也沒有觸發 hosted；
+  - 作者的整套 Linux 回歸與原始碼 mutation 仍屬作者證據；
+  - 並行證據只支持這次受控的 Emulator 測試，不外推到正式環境。
+- 建議核准的錨定：`ad7d8670dabfebf610278147c016d20acc4bc13ba2747732fadfe3a2a2395e0b`（96 檔，適用本 Reviewed Head）。舊的 `ddff49c6…` 不使用。
+- 保留限制：
+  - `PASS_ENABLED=false`、POC-009 BLOCKED；
+  - G-4：`periodRefs` 不重算；
+  - 稽核在提交之後另外寫入；
+  - 真機與正式環境未驗證；
+  - Stage 1 歷史紀錄不回填；
+  - Windows anchor CLI 問題另外追蹤。
+- 使用者決策：`待決`（核准錨定、合併、合併後逐一觸發 hosted）。本回報是審查建議，不是 GitHub Approve，也不是合併授權。
+

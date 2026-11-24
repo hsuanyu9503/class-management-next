@@ -1,6 +1,6 @@
 # S2-B2 第 4 批（B4）｜Firebase 受控寫入核心：POC-016／017／018／021 計畫 v0.2（草案）
 
-> 狀態：**草案，送 ChatGPT 獨立審查；審查通過、負責人核准之後才實作**。
+> 狀態：**計畫審查通過（PR #20 複審，Head `d5fe266`），已合併（main `42db0e4`）**；負責人 2026-11-24 依審查者建議答覆 Q1～Q3（§6）。實作見 `S2B2-B4-REPORT.md`（L3 實作 PR，**未驗收**）。
 > 依據：`docs/adr/ADR-001-backend-selection.md`（暫定 Firebase）、`docs/SPEC.md` §4、`S2B1-AUTHORIZATION.md` §6.5 與 §8、`S2B1-DATA-MODEL.md`、`S2B2-ADAPTER-PLAN.md` §4（原規劃的「S2-B2 #4 受控寫入 API」）。
 > v0.2：回應 PR #20 審查（Head `3e86fb8`）的 REV-20-01（提交與查詢收據分開授權）、REV-20-02（並行、回應遺失與原子性的可判定條件），以及 Q3 的建議。對照表見 §7。
 > 不授權：開啟 PASS、修改 Settings、觸發 hosted、合併、網站頁面製作。`PASS_ENABLED=false`、POC-009 BLOCKED、72 筆 `NOT_RUN` 的歷史紀錄都不變。
