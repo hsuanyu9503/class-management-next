@@ -278,7 +278,7 @@
   - 決策紀錄：`docs/adr/ADR-001-backend-selection.md`；SPEC §4、TECH 已同步。
 - 鎖定的 Stage 1 契約、測資、測試矩陣、驗收標準與 72 筆 `NOT_RUN` **不改寫**；Firebase 的新結果另以可追溯的證據記錄。
 - 本 repository 繼續方向 A 的技術驗證，**不**開始網站頁面製作。
-- **B4**：計畫 `docs/stage2/S2B2-B4-PLAN.md`；實作 PR #21 已合併（main `1e20989`，錨定 `ad7d8670…`）。hosted 四項已執行，原檔核對完成（ChatGPT，報告 §12）：四項 `MATCH`、`UNATTESTED [TRUST_ROOT_NOT_CONFIGURED]`。**B4 已完成約定的 Emulator／hosted 驗證**，這不是正式 PASS。下一步：第一批網頁製作的範圍提案 `docs/WEB-B1-PROPOSAL.md`（PR #22）。ChatGPT 審查（Head `6fa73a4`）：**B4 收尾紀錄接受；WEB-B1 補充契約後再確認**（REV22-01／02）。Claude 已補為 v0.3，待複審。網站**尚未**製作，這不是正式 PASS。D-W4～D-W8 與 M02-04／M02-05 的來源待負責人決定；網站 repository 的寫入權限待授權。
+- **B4**：計畫 `docs/stage2/S2B2-B4-PLAN.md`；實作 PR #21 已合併（main `1e20989`，錨定 `ad7d8670…`）。hosted 四項已執行，原檔核對完成（ChatGPT，報告 §12）：四項 `MATCH`、`UNATTESTED [TRUST_ROOT_NOT_CONFIGURED]`。**B4 已完成約定的 Emulator／hosted 驗證**，這不是正式 PASS。下一步：第一批網頁製作的範圍提案 `docs/WEB-B1-PROPOSAL.md`（PR #22）。ChatGPT 審查（Head `6fa73a4`）：**B4 收尾紀錄接受；WEB-B1 補充契約後再確認**（REV22-01／02）。Claude 已補為 v0.3；R1 複審（`eec0c83`）剩兩項文件殘項，已補為 v0.4，待確認。網站**尚未**製作，這不是正式 PASS。D-W4～D-W8 與 M02-04／M02-05 的來源待負責人決定；網站 repository 的寫入權限待授權。
   - Firebase 受控寫入的核心：POC-016／017／018／021；
   - 案例盤點：已接上 4、被阻擋 4（POC-003、004、009、029；提議新缺口 G-9、G-10）、其餘依工作量分批；
   - 會改動受保護檔案（`attest.yml` 的 dispatch 選項、執行器白名單、判定程式、API），需要重新核准錨定（L3）。
