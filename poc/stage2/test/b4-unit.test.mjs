@@ -298,13 +298,14 @@ test('case operation: the resolved target must be THE case record path', () => {
 import http from 'node:http';
 import { createTraceProxy } from '../src/trace-proxy.mjs';
 import { makeMasker } from '../src/mask.mjs';
-test('REV-21-02 back commit hold: a commit waits until TWO requests completed a current read (real loopback proxy)', async () => {
+test('REV-21-02 back commit hold: a commit waits until TWO requests completed a current read (real loopback proxy)', { timeout: 20000 }, async () => {
   const up = http.createServer((req, res) => { req.resume(); req.on('end', () => { res.writeHead(200, { 'content-type': 'application/json' }); res.end(req.url.endsWith(':batchGet') ? '[]' : '{}'); }); });
   await new Promise((r) => up.listen(0, '127.0.0.1', r));
   const origin = `http://127.0.0.1:${up.address().port}`;
   const px = createTraceProxy({ role: 'back', port: 0, masker: makeMasker([]), route: () => origin, faults: { commitHold: { reads: 2, timeoutMs: 3000 } } });
   const port = await px.listen();
   const post = (verb, trace, body) => fetch(`http://127.0.0.1:${port}/v1/projects/p/databases/(default)/documents:${verb}`, { method: 'POST', headers: { 'content-type': 'application/json', 'x-cmn-trace-id': trace }, body: JSON.stringify(body) }).then((r) => r.text());
+  try {
   const A = 'TR-00000000-0000-4000-8000-00000000000a'; const B = 'TR-00000000-0000-4000-8000-00000000000b';
   const cur = { documents: [N(LV)], transaction: 'T' };
   let committed = false;
@@ -320,5 +321,5 @@ test('REV-21-02 back commit hold: a commit waits until TWO requests completed a 
   await c; assert.equal(committed, true);
   const rec = px.entries.find((e) => e.path.endsWith(':commit'));
   assert.equal(rec.hold.complete, true); assert.equal(rec.hold.readers, 2);
-  await px.close(); await new Promise((r) => up.close(r));
+  } finally { up.closeAllConnections(); await Promise.race([Promise.all([px.close(), new Promise((r) => up.close(r))]), new Promise((r) => setTimeout(r, 500))]); }
 });

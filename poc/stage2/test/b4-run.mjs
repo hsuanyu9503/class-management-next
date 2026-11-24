@@ -93,6 +93,8 @@ async function capture(testId, { label = testId, mutation, frontFaults = frontFa
   const front = readJsonl(frontFile); const back = readJsonl(backFile);
   const j = judge({ testId, front, back, pre: pre.docs, post: post.docs, caseWindow: { start, end }, claim: run?.claim ?? null });
   writeFileSync(path.join(dir, 'judgement.json'), JSON.stringify({ label, testId, ...j, adapterClaim: run?.claim ?? null }, null, 1));
+  // replay input (reviewer tool): the exact case window and ownership marker the judgement used
+  writeFileSync(path.join(dir, 'case-window.json'), JSON.stringify({ start, end, ownershipMarkerPath: `${MARKER_COLLECTION}/${nonce}` }, null, 1));
   return { ...j, label, testId, front, back, pre: pre.docs, post: post.docs, caseWindow: { start, end }, run, users };
 }
 const brief = (x) => `contract=${x.contractMatch} observed=${JSON.stringify(x.observed)} problems=${x.problems.slice(0, 6).join('|') || '-'}`;
