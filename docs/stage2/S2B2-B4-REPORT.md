@@ -240,5 +240,48 @@
   - 以上數字取自 Claude 以 GitHub API 讀取的 run／job metadata、verify job 的 log 與 artifact 清單；
   - Claude 的環境下載 artifact 原檔時被網路政策拒絕（artifact 的儲存主機不在允許清單內），**沒有**對原檔做重播；
   - 原檔重播（`verifyPackage`，以及從套件內的 trace／state 重新判定）需要負責人下載這 8 個 artifact，交審查者或 Claude 核對。保存期限到 2026-12-24。
-- B4 狀態：hosted 四項已執行，**原檔核對待完成**；核對完成之後才收尾 B4。
+- B4 狀態：hosted 四項已執行；原檔核對見 §12。
+
+## 12. hosted 原檔核對與 B4 收尾（ChatGPT，2026-11-24）
+
+- **結論**：四項 hosted 證據核對完成。B4 標記為「**已完成約定的 Emulator／hosted 驗證**」。
+  - 這**不是**正式 PoC PASS、正式簽章驗收，也不是產品上線許可。
+- **版本**：
+  - main `1e20989` 與 Reviewed Head `f9097dd` 只差 HANDOFF、REVIEW_LOG；判定程式與受保護程式相同；
+  - 審查者以 `f9097dd` 的程式重播。
+- **可信輸入的來源**：package／manifest digest、nonce、案例、artifact ID、`platformSupported`、toolchain commit，都取自 GitHub verify job 的日誌，再與附件交叉核對，沒有單純採信 package 的自述。
+- 四份 statement 的原始位元組 digest，與 verify／delivery 紀錄、線上日誌一致；delivery 只作交叉參照，不當作簽章證據。
+- **重播結果**：以固定版本的 `verifyPackage` 重新核對四包，與 hosted 結果相同：
+  - `result = UNATTESTED`，`reasons = [TRUST_ROOT_NOT_CONFIGURED]`；
+  - `contractMatch = MATCH`，`oracleFailures = []`，`problems = []`；
+  - 沒有未解釋的狀態變更、未歸屬的後端流量、重複的 trace ID、未綁定的交易呼叫或階段違規；
+  - 每次成功提交的 5 份文件寫入都被對帳解釋。
+
+| 案例 | run／attempt | 契約結果（審查者重播） | package SHA-256 |
+|---|---|---|---|
+| POC-016 | 45349735778／1 | MATCH：v6；revision、receipt、event 各一次；點名 N 不變 | `e47472c67d9dd458c0464c5f447a5d3f1dfe919d2a319298679be14e5c33b587` |
+| POC-017 | 45349750778／2 | MATCH：一成功、一 `VERSION_CONFLICT`，沒有靜默覆蓋 | `3f1602ca2e255f8e7e662630c6ce47abac5f2e05b66eea802c26eaca4c8fbf69` |
+| POC-018 | 45349771980／2 | MATCH：100 次請求，revision 一次，收據一份且一致 | `879f8c89e7c2e521eb8860890e76f531684b3ddfd6f5b41024b7f9272d8d8af0` |
+| POC-021 | 45349793785／1 | MATCH：回應遺失後恢復同一份收據，revision 一次，沒有重複提交 | `6209289a916883e04d218f859b61eb3ccbe1af2ff89054748d2992e082dfc295` |
+
+- **POC-017／018 的重跑**：本次驗收只涵蓋 attempt 2。查詢 attempt 1 的 job 回傳空清單，沒有取得前一次執行的細節。
+  - **不**宣稱第一次就成功；重跑的資訊保留在這裡，不抹除。
+- **原始證據與重播方法**：
+  - 審查者保存 `work/b4-hosted/replay.mjs`、`github-inputs.json`、`replay-results.json`；
+  - artifact 原檔在 GitHub 保存到 2026-12-24；
+  - 本機（作者）重播工具見 R1 附件的 `replay-b4.mjs`。
+  - 本次沒有重跑 hosted，也沒有產生或驗證 Sigstore 簽章。
+- **`UNATTESTED` 的處理**：這是 B4 原計畫允許的最高結果。
+  - 不需要為了收尾而開啟 PASS 或補造信任設定；
+  - 錨定一致與正式的信任核准是兩件事，不能互相替代。
+- **不變**：
+  - `PASS_ENABLED=false`；
+  - Stage 1 的 72 筆歷史 `NOT_RUN`；
+  - POC-009 BLOCKED；G-4、G-9、G-10。
+- **殘餘風險**：
+  - G-4：節次不重算；
+  - 稽核與提交不在同一交易；
+  - 受控 Emulator 的時序不代表正式環境；
+  - Windows anchor CLI 問題另外追蹤。
+  - 沒有新增阻擋 B4 收尾的發現。
 

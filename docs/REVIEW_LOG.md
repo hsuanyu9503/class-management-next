@@ -1921,3 +1921,14 @@
   - 原檔核對：8 個 artifact，到 2026-12-24 前有效；
   - 之後才收尾 B4。
 
+### B4 hosted 原檔核對（ChatGPT，2026-11-24）：**B4 收尾**
+
+- 結論：四項 hosted 證據核對完成，B4 標記為「已完成約定的 Emulator／hosted 驗證」。**不是**正式 PoC PASS、簽章驗收或上線許可。
+- 審查者以 `f9097dd` 的判定程式重播四個套件（main `1e20989` 與它只差文件）。
+  - 可信輸入取自 verify job 的日誌，並與附件交叉核對；
+  - 四項都是 `UNATTESTED [TRUST_ROOT_NOT_CONFIGURED]`、`MATCH`，`problems` 是空的；
+  - package digest 見 B4 報告 §12。
+- POC-017／018 只涵蓋 attempt 2；attempt 1 的 job 清單是空的，不宣稱第一次就成功。
+- 不變：`PASS_ENABLED=false`、72 筆 `NOT_RUN`、POC-009 BLOCKED、G-4／G-9／G-10。殘餘風險見報告 §12。
+- 下一步：依負責人已決定的順序，Claude 提出第一批網頁製作的範圍與驗收條件（只是提案，待負責人決定與審查）。
+
