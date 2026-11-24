@@ -16,7 +16,8 @@ on:
       testId:
         description: 要執行的案例（push 時固定為 POC-001）
         type: choice
-        options: [POC-001, POC-002, POC-008, POC-009]
+        # B4（docs/stage2/S2B2-B4-PLAN.md v0.2 §3.3）：加入受控寫入案例；每次只接受一個案例，由負責人逐一觸發
+        options: [POC-001, POC-002, POC-008, POC-009, POC-016, POC-017, POC-018, POC-021]
         default: POC-001
 
 permissions: {}

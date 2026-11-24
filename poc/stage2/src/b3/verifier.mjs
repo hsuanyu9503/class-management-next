@@ -18,12 +18,34 @@ import { verdict as contractVerdict, BLOCKED_FIELDS } from '../verdict.mjs';
 import { stableJson } from '../stable.mjs';
 
 export const PASS_ENABLED = false;
-export const VERIFIER_VERSION = 's2-verifier-b3c-0';   // b3a-0 = 211e114; b3a-1 = R1 + F1; b3a-2 = PR-1; b3b-0 = PR-2 (trust-gated decision); b3c-0 = C-1 (scenario binding, selfCheckFull)
+export const VERIFIER_VERSION = 's2-verifier-b4-0';   // b3a-0 = 211e114; b3a-1 = R1 + F1; b3a-2 = PR-1; b3b-0 = PR-2 (trust-gated decision); b3c-0 = C-1 (scenario binding, selfCheckFull); b4-0 = B4 write cases
 /** C-1 (attack plan v0.4 §1.2): the scenario comes ONLY from a trusted input (attest.yml fixes 'honest';
  *  attest-attack.yml takes it from the owner's dispatch input). Never defaulted, never taken from the package. */
 export const SCENARIO_RE = /^(honest|attack-[a-z0-9][a-z0-9-]{0,39})$/;
 /** Trusted case → actor table (from the locked matrix preconditions); not taken from Adapter code. */
-export const CASE_ACTORS = Object.freeze({ 'POC-001': 'ACTOR-TEACHER', 'POC-002': 'ACTOR-OTHER', 'POC-008': 'ACTOR-TEACHER', 'POC-009': 'ACTOR-SC01-TEACHER' });
+export const CASE_ACTORS = Object.freeze({ 'POC-001': 'ACTOR-TEACHER', 'POC-002': 'ACTOR-OTHER', 'POC-008': 'ACTOR-TEACHER', 'POC-009': 'ACTOR-SC01-TEACHER',
+  // B4 (plan v0.2 §2): the controlled write cases; ACTOR-SC01-TEACHER holds leave.revise in the locked fixtures
+  'POC-016': 'ACTOR-SC01-TEACHER', 'POC-017': 'ACTOR-SC01-TEACHER', 'POC-018': 'ACTOR-SC01-TEACHER', 'POC-021': 'ACTOR-SC01-TEACHER' });
+/** B4 (plan v0.2 §2.1): trusted FRONT faults per case — the Runner configures the front proxy from THIS table and the
+ *  Verifier checks the front trace against it (a fault where none is configured, or a missing one, is BLOCKED). */
+export const CASE_FRONT_FAULTS = Object.freeze({
+  'POC-017': Object.freeze({ commitBarrier: Object.freeze({ count: 2, timeoutMs: 5000 }) }),
+  'POC-021': Object.freeze({ dropCommitResponses: 1 }),
+});
+export const frontFaultsFor = (testId) => (Object.hasOwn(CASE_FRONT_FAULTS, testId) ? CASE_FRONT_FAULTS[testId] : null);
+/** The front trace shows exactly the configured faults: undelivered responses only where drops are configured (and
+ *  exactly that many), barrier records only where a barrier is configured (on every commit). */
+export function checkFrontFaults(front, testId) {
+  const cfg = frontFaultsFor(testId); const problems = [];
+  const fronts = front.filter((e) => e.role === 'front');
+  const dropped = fronts.filter((e) => e.delivered === false && typeof e.droppedAt === 'string');
+  const commits = fronts.filter((e) => e.method === 'POST' && e.path === '/v1/commit');
+  if (dropped.length !== (cfg?.dropCommitResponses ?? 0) || dropped.some((e) => e.path !== '/v1/commit')) problems.push(`FRONT_FAULT_MISMATCH:drop:${dropped.length}`);
+  const barrierEntries = fronts.filter((e) => e.barrier !== undefined);
+  if (cfg?.commitBarrier) { if (commits.length === 0 || barrierEntries.length !== commits.length) problems.push('FRONT_FAULT_MISMATCH:barrier'); }
+  else if (barrierEntries.length) problems.push('FRONT_FAULT_MISMATCH:barrier');
+  return problems;
+}
 export const PAYLOAD = Object.freeze(['adapter-claim.json', 'isolation.json', 'run.json', 'runner-log.jsonl', 'state-post.json', 'state-pre.json', 'trace-back.jsonl', 'trace-front.jsonl']);
 const sha = (b) => createHash('sha256').update(b).digest('hex');
 const jsonl = (b) => b.toString('utf8').split('\n').filter(Boolean).map((l) => parseStrictJson(l));
@@ -134,6 +156,7 @@ function verifyPackageUnguarded(packageBytes, trusted) {
   const expectedMarker = { nonce: trusted.attestationNonce, runAttempt: trusted.runAttempt, runId: trusted.runId, writtenAt: run.nonceWrittenAt };
   const rec = reconcile({ front, back, pre, post, runnerLog: rlog, caseWindow: { start: Date.parse(run.caseStartedAt), end: Date.parse(run.caseEndedAt) }, markerPath, expectedMarker, ownershipMarkerPath: run.ownershipMarkerPath });
   out.reconciliation = rec.counts; rec.problems.forEach(blocked);
+  checkFrontFaults(front, trusted.testId).forEach(blocked);
   // 6. Observer with THIS toolchain + Stage 1 comparator
   const obs = observe({ testId: trusted.testId, actor: own(CASE_ACTORS, trusted.testId) ? CASE_ACTORS[trusted.testId] : null, front, back, pre, post });
   const v = contractVerdict({ caseSpec: trusted.caseSpec, observation: obs, adapterOutput: claim, stage1Result: null, inputDigestsVerified: true });
@@ -144,7 +167,11 @@ function verifyPackageUnguarded(packageBytes, trusted) {
   else if (unverifiable) { out.result = 'UNATTESTED'; reasons.push('ISOLATION_UNVERIFIABLE'); }
   else if (own(BLOCKED_FIELDS, trusted.testId)) { out.result = 'BLOCKED'; reasons.push('BLOCKED_FIELDS_G1_G4'); }
   // an observation that cannot be attributed unambiguously is not a contract failure → BLOCKED
-  else if (v.contractMatch === 'MISMATCH_OR_UNOBSERVABLE') { out.result = 'BLOCKED'; reasons.push('OBSERVATION_AMBIGUOUS'); }
+  else if (v.contractMatch === 'MISMATCH_OR_UNOBSERVABLE') {
+    out.result = 'BLOCKED'; reasons.push('OBSERVATION_AMBIGUOUS');
+    // B4 §2.1: a case whose own preconditions were not established (e.g. no proven overlap) is INCONCLUSIVE, never a pass
+    for (const pr of v.problems) if (pr.startsWith('INCONCLUSIVE:')) reasons.push(pr);
+  }
   else if (v.contractMatch !== 'MATCH') { out.result = 'FAIL'; reasons.push('CONTRACT_MISMATCH'); }
   else {
     // B3b: PASS needs a GitHub-hosted runner (trusted input from the verify job's own environment) AND a

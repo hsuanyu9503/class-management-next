@@ -9,10 +9,28 @@
  *   - resourceRef is the full path of the unique target document; null fields follow the API's order;
  *     claimedScope agrees with the decision (B3A-N6);
  *   - front/back traffic happens only inside the case window; the Runner does nothing inside it;
- *   - the attestation marker is unchanged; nothing else changes. */
+ *   - the attestation marker is unchanged; nothing else changes.
+ *  B4 (plan S2B2-B4-PLAN v0.2 §3.2; implementation-review checks 2–3) — controlled writes:
+ *   - the ONLY other backend writes are Firestore transaction commits whose transaction id the Emulator handed to
+ *     THE SAME request (beginTransaction response in the back trace); begin / batchGet / rollback change nothing;
+ *   - every non-audit state change is explained by a successful bound commit: same full path, kind `update`, and
+ *     decoded fields equal to the exported document; every successful write is visible in the post-state;
+ *   - the audit of an authorized commit states operationId, requestHash, attempts and transactionRef, and each is
+ *     reconciled: requestHash recomputed from the front command, attempts = transactions begun, transactionRef =
+ *     the transaction of the request's successful commit (taken from the Emulator, never from the API), outcome
+ *     consistent with the response and the commits;
+ *   - a refused commit made no transaction call and read no receipt (§6.5); a receipt query made no transaction
+ *     call and no write (§3.1.2). */
 import { stableJson } from '../stable.mjs';
-import { OPERATIONS, POLICY_VERSION as AUTHZ_POLICY_VERSION } from '../authz.mjs';
+import { OPERATIONS, WRITE_OPERATIONS, RECEIPT_OPERATION, POLICY_VERSION as AUTHZ_POLICY_VERSION } from '../authz.mjs';
 import { MASK } from '../mask.mjs';
+import { transactionsOf, classifyBack, judgeRequestHash, tEnd } from '../b4/commit-trace.mjs';
+
+const WRITE_OUTCOMES = Object.freeze({
+  COMMITTED: { status: 200, code: 'OK', commits: 1 }, REPLAYED: { status: 200, code: 'OK', commits: 0 },
+  VERSION_CONFLICT: { status: 409, code: 'VERSION_CONFLICT', commits: 0 }, REUSE_MISMATCH: { status: 409, code: 'OPERATION_REUSE_MISMATCH', commits: 0 },
+  TRANSACTION_CONTENTION: { status: 503, code: 'UNAVAILABLE', commits: 0 }, INTENT_NOT_APPLICABLE: { status: 400, code: 'INVALID_INPUT', commits: 0 },
+});
 
 const AUDIT_PATH = /^(workspaces\/[^/]+\/auditLog|auditLogUnscoped)\/[^/]+$/;
 const isAudit = (p) => AUDIT_PATH.test(p);
@@ -21,7 +39,8 @@ const READ_ONLY_POST = [/:runQuery$/, /:listCollectionIds$/, /\/accounts:lookup$
 const isObj = (v) => v !== null && typeof v === 'object' && !Array.isArray(v);
 const CLASS_SCOPE_RE = /^workspaces\/([^/]+)\/classes\/([^/]+)\//;
 /** PR1-REV001: fields an audit document may hold (the API's writeAudit) and the ones it always holds. */
-const AUDIT_FIELDS = new Set(['auditId', 'at', 'authUid', 'principalId', 'action', 'resourceRef', 'decision', 'reasonCode', 'policyVersion', 'traceId', 'outcome', 'workspaceId']);
+const AUDIT_FIELDS = new Set(['auditId', 'at', 'authUid', 'principalId', 'action', 'resourceRef', 'decision', 'reasonCode', 'policyVersion', 'traceId', 'outcome', 'workspaceId', 'operationId', 'requestHash', 'attempts', 'transactionRef']);
+const INTEGER_AUDIT_FIELDS = new Set(['attempts']);
 const AUDIT_REQUIRED = ['auditId', 'at', 'authUid', 'principalId', 'action', 'resourceRef', 'decision', 'reasonCode', 'policyVersion', 'traceId'];
 /** Strict decoding of the audit PATCH body: exactly { fields }, only AUDIT_FIELDS, each value exactly one of
  *  { stringValue: string } | { nullValue: null }. Masking projection: the trace is masked in its Firestore
@@ -35,8 +54,9 @@ function decodeAuditWrite(body) {
     if (!AUDIT_FIELDS.has(k)) return { error: `unknownField:${k}` };
     if (v === MASK) { doc[k] = MASK; continue; }
     if (!isObj(v) || Object.keys(v).length !== 1) return { error: `valueShape:${k}` };
-    if (Object.hasOwn(v, 'stringValue') && typeof v.stringValue === 'string') doc[k] = v.stringValue;
+    if (Object.hasOwn(v, 'stringValue') && typeof v.stringValue === 'string' && !INTEGER_AUDIT_FIELDS.has(k)) doc[k] = v.stringValue;
     else if (Object.hasOwn(v, 'nullValue') && v.nullValue === null) doc[k] = null;
+    else if (INTEGER_AUDIT_FIELDS.has(k) && Object.hasOwn(v, 'integerValue') && /^[0-9]{1,6}$/.test(v.integerValue)) doc[k] = Number(v.integerValue);
     else return { error: `valueType:${k}` };
   }
   for (const k of AUDIT_REQUIRED) if (!Object.hasOwn(doc, k)) return { error: `missingField:${k}` };
@@ -48,7 +68,7 @@ const isCreateOnly = (query) => Array.isArray(query) && query.length === 1 && is
 /** B3A-N6: the documents the API's target lookup can return for (op, target) — a collection-group query on
  *  def.collection with def.idField == id — recomputed from the exported pre-state (trusted toolchain). */
 function targetCandidates(pre, op, target) {
-  const def = typeof op === 'string' && Object.hasOwn(OPERATIONS, op) ? OPERATIONS[op] : null;
+  const def = typeof op !== 'string' ? null : Object.hasOwn(OPERATIONS, op) ? OPERATIONS[op] : Object.hasOwn(WRITE_OPERATIONS, op) ? WRITE_OPERATIONS[op] : null;
   if (!def || !isObj(target) || !Object.hasOwn(target, def.idField)) return null;
   const id = target[def.idField];
   return Object.keys(pre).filter((k) => { const seg = k.split('/'); return seg.length >= 2 && seg[seg.length - 2] === def.collection && isObj(pre[k]) && pre[k][def.idField] === id; });
@@ -80,7 +100,9 @@ export function reconcile({ front, back, pre, post, runnerLog, caseWindow, marke
     const uid = f.authorizationRef?.claimedAuthUid ?? null;
     if (a.authUid !== null && a.authUid !== uid) why.push('authUid');
     if (a.principalId !== null) { const b = pre[`authBindings/${a.authUid}`]; if (!b || b.principalId !== a.principalId) why.push('principal'); }
-    const expectDecision = f.status === 200 ? 'allow' : f.status === 403 ? 'deny' : null;
+    // B4: 409 / 400 come only AFTER authorization passed (§6.6, §8)
+    const expectDecision = f.status === 200 || f.status === 409 || f.status === 400 ? 'allow' : f.status === 403 ? 'deny' : null;
+    const isReceiptOp = op === RECEIPT_OPERATION; const isWriteOp = typeof op === 'string' && Object.hasOwn(WRITE_OPERATIONS, op);
     if (expectDecision && a.decision !== expectDecision) why.push('decision');
     if (f.status === 503 && !a.outcome) why.push('outcome');
     if ((a.decision === 'allow') !== (a.reasonCode === 'OK')) why.push('reasonCode');
@@ -90,7 +112,13 @@ export function reconcile({ front, back, pre, post, runnerLog, caseWindow, marke
     if (!has(a.authUid) && (has(a.principalId) || has(a.resourceRef))) why.push('nullOrder');
     if (!has(a.principalId) && has(a.resourceRef)) why.push('nullOrder');
     // B3A-N6: resourceRef is the FULL path of the unique document the target lookup returns
-    if (has(a.resourceRef)) {
+    if (has(a.resourceRef) && isReceiptOp) {
+      // B4: a receipt is addressed by (claimed workspace, operationId) and may have been created inside this case
+      const cs0 = f.requestBody?.claimedScope; const t0 = f.requestBody?.target;
+      const rd = post[a.resourceRef];
+      if (!isObj(cs0) || !isObj(t0) || a.resourceRef !== `workspaces/${cs0.workspaceId}/operationReceipts/${t0.operationId}` || !isObj(rd) || rd.operationId !== t0.operationId) why.push('resourceRef');
+      else if (a.decision === 'allow' && rd.principalId !== a.principalId) why.push('receiptOwner');
+    } else if (has(a.resourceRef)) {
       const cands = targetCandidates(pre, f.requestBody?.op, f.requestBody?.target);
       if (!Object.hasOwn(pre, a.resourceRef) || !cands || cands.length !== 1 || cands[0] !== a.resourceRef) why.push('resourceRef');
     }
@@ -98,9 +126,36 @@ export function reconcile({ front, back, pre, post, runnerLog, caseWindow, marke
     // B3A-N6: claimedScope agrees with the decision (allow ⇒ equals the path scope; mismatch ⇒ differs; missing ⇒ absent)
     const cs = f.requestBody?.claimedScope; const csOk = isObj(cs) && typeof cs.workspaceId === 'string' && typeof cs.classId === 'string';
     const ps = has(a.resourceRef) ? CLASS_SCOPE_RE.exec(a.resourceRef) : null;
-    if (a.decision === 'allow' && !(csOk && ps && cs.workspaceId === ps[1] && cs.classId === ps[2] && a.workspaceId === ps[1])) why.push('claimedScope');
-    if (a.reasonCode === 'SCOPE_CLAIM_MISMATCH' && !(csOk && ps && !(cs.workspaceId === ps[1] && cs.classId === ps[2]))) why.push('claimedScope');
-    if (a.reasonCode === 'SCOPE_CLAIM_MISSING' && csOk) why.push('claimedScope');
+    if (isReceiptOp) {
+      if (a.decision === 'allow' && !(isObj(cs) && a.workspaceId === cs.workspaceId)) why.push('claimedScope');
+    } else {
+      if (a.decision === 'allow' && !(csOk && ps && cs.workspaceId === ps[1] && cs.classId === ps[2] && a.workspaceId === ps[1])) why.push('claimedScope');
+      if (a.reasonCode === 'SCOPE_CLAIM_MISMATCH' && !(csOk && ps && !(cs.workspaceId === ps[1] && cs.classId === ps[2]))) why.push('claimedScope');
+      if (a.reasonCode === 'SCOPE_CLAIM_MISSING' && csOk) why.push('claimedScope');
+    }
+    // B4: what the API claims about a commit is checked against the TRUSTED traces, field by field
+    const view = transactionsOf(back, tid);
+    const okCommits = view.attempts.filter((x) => x.commit?.ok);
+    const WRITE_KEYS = ['operationId', 'requestHash', 'attempts', 'transactionRef'];
+    if (isWriteOp && a.decision === 'allow' && !String(a.outcome || '').startsWith('INVALID_INPUT:') && a.outcome !== 'BACKEND_UNAVAILABLE' && !(a.reasonCode && a.reasonCode !== 'OK')) {
+      const cmd = f.requestBody?.command;
+      if (!WRITE_KEYS.every((k) => Object.hasOwn(a, k))) why.push('writeFieldsMissing');
+      else {
+        if (!isObj(cmd) || a.operationId !== cmd.operationId) why.push('operationId');
+        const ps2 = has(a.resourceRef) ? CLASS_SCOPE_RE.exec(a.resourceRef) : null;
+        if (!isObj(cmd) || !ps2 || a.requestHash !== judgeRequestHash({ command: cmd, workspaceId: ps2[1], classId: ps2[2], principalId: a.principalId })) why.push('requestHash');
+        if (a.attempts !== view.attempts.length) why.push('attempts');
+        const expRef = okCommits.length === 1 ? okCommits[0].txn : null;
+        if (a.transactionRef !== expRef) why.push('transactionRef');
+        const rule = Object.hasOwn(WRITE_OUTCOMES, a.outcome) ? WRITE_OUTCOMES[a.outcome] : null;
+        if (!rule || f.status !== rule.status || f.responseBody?.code !== rule.code || okCommits.length !== rule.commits) why.push('outcome');
+      }
+    } else if (isWriteOp || isReceiptOp) {
+      // refused / invalid commits and every receipt query: no transaction, no write; a refused commit read no receipt (§6.5)
+      if (WRITE_KEYS.some((k) => Object.hasOwn(a, k)) && !(isWriteOp && a.decision === 'allow')) why.push('writeFieldsOnNonCommit');
+      if (view.attempts.length || view.unboundTxnCalls.length || view.otherWrites.length) why.push('transactionOrWriteWithoutCommit');
+      if (isWriteOp && a.decision !== 'allow' && view.plainReads.some((r) => /\/operationReceipts(\/|$)/.test(r.docPath || '') || /operationReceipts/.test(JSON.stringify(r.e.requestBody || '')))) why.push('receiptReadBeforeAuthorization');
+    }
     if (why.length) p('AUDIT_UNRECONCILED', `${tid} ${why.join(',')}`); else auditMatched += 1;
   }
   const reached = fronts.filter((e) => e.status !== 502);
@@ -112,10 +167,33 @@ export function reconcile({ front, back, pre, post, runnerLog, caseWindow, marke
     if (!b.traceId || !byTrace.has(b.traceId)) { unattributedBackendRequests += 1; continue; }
     const isRead = b.method === 'GET' || (b.method === 'POST' && READ_ONLY_POST.some((re) => re.test(b.path)));
     if (isRead) continue;
+    const cls = classifyBack(b).cls;
+    if (cls === 'begin' || cls === 'batchGet' || cls === 'rollback' || cls === 'commit') continue;   // B4: transaction calls, reconciled below
     const dp = docPathOf(b.path);
     if (b.method === 'PATCH' && isAudit(dp)) { if (!auditWrites.has(b.traceId)) auditWrites.set(b.traceId, []); auditWrites.get(b.traceId).push({ path: dp, status: b.status, query: b.query, body: b.requestBody }); }
     else nonAuditBackendWrites += 1;
   }
+  // B4: successful commits — bound to a transaction of the same request; their writes explain the state changes
+  const explained = new Map(); let commitWrites = 0; let unboundTransactionCalls = 0; let commitWriteProblems = 0;
+  for (const tid of byTrace.keys()) {
+    const v = transactionsOf(back, tid);
+    unboundTransactionCalls += v.unboundTxnCalls.length + v.problems.length;
+    for (const x of v.attempts) {
+      if (!x.commit?.ok) continue;
+      if (!Array.isArray(x.commit.writes) || x.commit.writes.length === 0) { commitWriteProblems += 1; continue; }
+      for (const w of x.commit.writes) {
+        commitWrites += 1;
+        if (w.kind !== 'update' || typeof w.path !== 'string' || isAudit(w.path) || w.path.startsWith('_') || w.hasMask || w.hasTransforms || (w.unknownKeys || []).length || !isObj(w.fields)) { commitWriteProblems += 1; continue; }
+        const prev = explained.get(w.path);
+        if (!prev || tEnd(x.commit.e) > prev.end) explained.set(w.path, { end: tEnd(x.commit.e), fields: w.fields });
+      }
+    }
+  }
+  if (unboundTransactionCalls) p('TRANSACTION_UNBOUND', String(unboundTransactionCalls));
+  if (commitWriteProblems) p('COMMIT_WRITE_INVALID', String(commitWriteProblems));
+  let commitWritesNotInState = 0;
+  for (const [path, w] of explained) if (stableJson(post[path]) !== stableJson(w.fields)) commitWritesNotInState += 1;
+  if (commitWritesNotInState) p('COMMIT_WRITE_NOT_IN_STATE', String(commitWritesNotInState));
   for (const [tid, ws] of auditWrites) if (ws.length !== 1) p('AUDIT_UNRECONCILED', `${ws.length} audit writes for ${tid}`);
   // B3A-N6: every new audit document is the one successful back PATCH of its own trace, at the same path
   for (const [tid, list] of auditsByTrace) {
@@ -151,12 +229,12 @@ export function reconcile({ front, back, pre, post, runnerLog, caseWindow, marke
   const keys = new Set([...Object.keys(pre), ...Object.keys(post)]);
   for (const k of keys) {
     if (isAudit(k) || k === markerPath || k === ownershipMarkerPath) continue;
-    if (stableJson(pre[k]) !== stableJson(post[k])) unexplainedChanges += 1;
+    if (stableJson(pre[k]) !== stableJson(post[k]) && !(explained.has(k) && stableJson(post[k]) === stableJson(explained.get(k).fields))) unexplainedChanges += 1;
   }
   if (ownershipMarkerPath && stableJson(pre[ownershipMarkerPath]) !== stableJson(post[ownershipMarkerPath])) unexplainedChanges += 1;
   if (unexplainedChanges) p('STATE_CHANGE_UNEXPLAINED', String(unexplainedChanges));
   return {
-    counts: { frontRequests: fronts.length, auditAdded: added.length, auditMatched, auditModifiedOrDeleted, nonceMarkerUnchanged, unexplainedChanges, unattributedBackendRequests, nonAuditBackendWrites, duplicateTraceIds, phaseViolations },
+    counts: { frontRequests: fronts.length, auditAdded: added.length, auditMatched, auditModifiedOrDeleted, nonceMarkerUnchanged, unexplainedChanges, unattributedBackendRequests, nonAuditBackendWrites, duplicateTraceIds, phaseViolations, commitWrites, commitWritesExplained: explained.size, unboundTransactionCalls },
     problems,
   };
 }

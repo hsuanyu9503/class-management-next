@@ -28,4 +28,4 @@
 - `poc/stage1/**` 以 `.gitattributes` 停用行尾轉換，維持 SHA-256 鎖定。
 - Stage 2（Firebase）**進行中**：受控讀取 API、Observer、Verifier、可信執行與證據鏈（S2-B2 第 1～3 批）。接上的案例只有 POC-001／002／008／009，結果最多 `UNATTESTED`，POC-009 `BLOCKED`。`PASS_ENABLED=false`。
 - Stage 3（PostgreSQL）**暫緩**；Stage 4（真機、離線、備份還原、成本）對 Firebase 保留為必要，尚未開始；正式選型的確認（Stage 5）另立 ADR。
-- 目前沒有受控**寫入** API；下一批計畫見 `docs/stage2/S2B2-B4-PLAN.md`。
+- B4（實作中，L3 PR 待審）：本機受控寫入 API `POST /v1/commit`（`LeaveRecord.Revise`，依授權 §6.5／§8，Firestore REST 交易，只對 Emulator）與 `POST /v1/receipt`（不需要 capability，只限收據本人且仍有有效 class membership）。計畫 `docs/stage2/S2B2-B4-PLAN.md`，報告 `docs/stage2/S2B2-B4-REPORT.md`。結果最多 `UNATTESTED`。

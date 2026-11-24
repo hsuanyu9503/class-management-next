@@ -17,7 +17,7 @@ const sha = (b) => createHash('sha256').update(b).digest('hex');
 export const DELIVERY_VERSION = 's2-delivery-v1';
 /** Fixed name of the job that produced the package in .github/workflows/attest.yml (statement package.producerJob). */
 export const PRODUCER_JOB = 'attest-execute';
-const CASES = new Set(['POC-001', 'POC-002', 'POC-008', 'POC-009']);
+const CASES = new Set(['POC-001', 'POC-002', 'POC-008', 'POC-009', 'POC-016', 'POC-017', 'POC-018', 'POC-021']);
 
 /** @param io { env, listDownload(): [{name, isFile}], readDownload(name): Buffer, head: string,
  *              policy: { text, commit, anchorDigest } | null, workflowBlob: string|null, caseSpecs: {testId: spec}, now(): Date } */

@@ -9,7 +9,8 @@ import { appendFileSync, writeFileSync, mkdirSync, chmodSync } from 'node:fs';
 import path from 'node:path';
 import { assertLoopbackUrl } from './local-guard.mjs';
 import { maskAuthorization } from './mask.mjs';
-import { traceableRequestBody } from './api/request-shape.mjs';
+import { traceableBodyFor, ROUTES } from './api/request-shape.mjs';
+import { stableJson, sha256Hex } from './stable.mjs';
 
 export const TRACE_HEADER = 'x-cmn-trace-id';
 export const TRACE_ID_RE = /^TR-[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
@@ -64,9 +65,31 @@ export function queryOf(url) {
   return out;
 }
 
-export function createTraceProxy({ role, route, masker, file = null, port, host = '127.0.0.1', socketPath = null }) {
+/** B4 (plan v0.2 §2.1): trusted FRONT faults, set by the Runner per case from a trusted table — never by the Adapter.
+ *   commitBarrier { count, timeoutMs }: every POST /v1/commit is held after its full body arrived until `count`
+ *     commits are held (or the timeout passes), then all are released together (POC-017 sync point).
+ *   dropCommitResponses n: the first n POST /v1/commit are forwarded, the API's response is read, then the client
+ *     connection is destroyed WITHOUT delivering it (POC-021, API → client boundary).
+ *  Front entries of /v1/commit and /v1/receipt also record `receiptDigest` = sha256(stableJson(response.receipt))
+ *  (scope: the `receipt` member only — the immutable receipt, not derivedStatus / code / traceId) and `delivered`. */
+export const RECEIPT_DIGEST_SCOPE = 'sha256(stableJson(responseBody.receipt))';
+export function receiptDigestOf(text) {
+  let j; try { j = JSON.parse(text); } catch { return null; }
+  return j && typeof j === 'object' && j.receipt && typeof j.receipt === 'object' && !Array.isArray(j.receipt) ? sha256Hex(Buffer.from(stableJson(j.receipt), 'utf8')) : null;
+}
+
+export function createTraceProxy({ role, route, masker, file = null, port, host = '127.0.0.1', socketPath = null, faults = null }) {
   const entries = [];
   let seq = 0;
+  const barrier = role === 'front' && faults?.commitBarrier ? { need: faults.commitBarrier.count, timeoutMs: faults.commitBarrier.timeoutMs, waiting: [], released: false, timedOut: false, timer: null } : null;
+  let dropsLeft = role === 'front' && Number.isSafeInteger(faults?.dropCommitResponses) ? faults.dropCommitResponses : 0;
+  const releaseAll = () => { if (!barrier || barrier.released) return; barrier.released = true; clearTimeout(barrier.timer); const at = Date.now(); barrier.waiting.splice(0).forEach((w) => w(at)); };
+  const holdAtBarrier = () => new Promise((resolve) => {
+    if (!barrier || barrier.released) { resolve(null); return; }
+    barrier.waiting.push(resolve);
+    if (!barrier.timer) barrier.timer = setTimeout(() => { barrier.timedOut = true; releaseAll(); }, barrier.timeoutMs);
+    if (barrier.waiting.length >= barrier.need) releaseAll();
+  });
   if (file) { mkdirSync(path.dirname(file), { recursive: true }); writeFileSync(file, ''); }
   const record = (e) => { const m = masker.maskValue(e); entries.push(m); if (file) appendFileSync(file, JSON.stringify(m) + '\n'); };
   const server = http.createServer(async (req, res) => {
@@ -76,8 +99,17 @@ export function createTraceProxy({ role, route, masker, file = null, port, host 
     if (role === 'front') traceId = `TR-${randomUUID()}`;
     else { const h = req.headers[TRACE_HEADER]; traceId = typeof h === 'string' && TRACE_ID_RE.test(h) ? h : null; }
     let reqText = ''; let status = 0; let resText = '';
+    const urlPath = req.url.split('?')[0];
+    const isWriteRoute = role === 'front' && req.method === 'POST' && (urlPath === ROUTES.commit || urlPath === ROUTES.receipt);
+    const fault = {};
     try {
       reqText = await readBody(req);
+      if (role === 'front' && req.method === 'POST' && urlPath === ROUTES.commit && barrier) {
+        fault.barrierArrivedAt = new Date().toISOString();
+        const releasedAt = await holdAtBarrier();
+        fault.barrierReleasedAt = releasedAt === null ? null : new Date(releasedAt).toISOString();
+        fault.barrierComplete = releasedAt !== null && barrier.timedOut !== true;
+      }
       const origin = route(req.url);
       const url = `${origin}${req.url}`;
       assertLoopbackUrl(url);
@@ -87,14 +119,25 @@ export function createTraceProxy({ role, route, masker, file = null, port, host 
       if (traceId) headers[TRACE_HEADER] = traceId;
       const up = await fetch(url, { method: req.method, headers, body: ['GET', 'HEAD'].includes(req.method) ? undefined : reqText, redirect: 'error', signal: AbortSignal.timeout(8000) });
       status = up.status; resText = await up.text();
-      res.writeHead(status, { 'content-type': up.headers.get('content-type') || 'application/json' });
-      res.end(resText);
+      if (role === 'front' && req.method === 'POST' && urlPath === ROUTES.commit && dropsLeft > 0) {
+        // POC-021: the API answered; the client never receives it (connection destroyed, nothing written)
+        dropsLeft -= 1; fault.delivered = false; fault.droppedAt = new Date().toISOString();
+        req.socket.destroy();
+      } else {
+        res.writeHead(status, { 'content-type': up.headers.get('content-type') || 'application/json' });
+        res.end(resText);
+        if (isWriteRoute) fault.delivered = true;
+      }
     } catch (e) {
       status = 502; resText = JSON.stringify({ code: 'UNAVAILABLE' });
       if (!res.headersSent) res.writeHead(502, { 'content-type': 'application/json' });
       res.end(resText);
     } finally {
-      record({ role, seq: ++seq, traceId, at: new Date(started).toISOString(), durationMs: Date.now() - started, method: req.method, path: req.url.split('?')[0], query: queryOf(req.url), authorizationRef: maskAuthorization(req.headers.authorization), requestBody: role === 'front' ? traceableRequestBody(parseStrict(reqText)) : parseJson(reqText), status, responseBody: parseJson(resText) });
+      const ended = Date.now();
+      record({ role, seq: ++seq, traceId, at: new Date(started).toISOString(), endedAt: new Date(ended).toISOString(), durationMs: ended - started, method: req.method, path: urlPath, query: queryOf(req.url), authorizationRef: maskAuthorization(req.headers.authorization), requestBody: role === 'front' ? traceableBodyFor(urlPath, parseStrict(reqText)) : parseJson(reqText), status, responseBody: parseJson(resText),
+        ...(isWriteRoute ? { receiptDigest: receiptDigestOf(resText), delivered: fault.delivered ?? false } : {}),
+        ...(fault.barrierArrivedAt ? { barrier: { arrivedAt: fault.barrierArrivedAt, releasedAt: fault.barrierReleasedAt, complete: fault.barrierComplete } } : {}),
+        ...(fault.droppedAt ? { droppedAt: fault.droppedAt } : {}) });
     }
   });
   return {

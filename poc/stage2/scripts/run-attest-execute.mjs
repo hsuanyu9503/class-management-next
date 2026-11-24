@@ -19,7 +19,7 @@ import { SCENARIO_RE } from '../src/b3/verifier.mjs';
 const testId = process.env.B3_SINGLE_CASE; const out = process.env.B3_OUT_DIR;
 const scenario = process.env.B3_SCENARIO;
 if (!SCENARIO_RE.test(scenario || '')) { console.log('USAGE: B3_SCENARIO=<honest|attack-…> is required (never defaulted)'); process.exit(2); }
-if (!['POC-001', 'POC-002', 'POC-008', 'POC-009'].includes(testId) || !out || !path.isAbsolute(out)) { console.log('USAGE: B3_SINGLE_CASE=<POC-001|002|008|009> B3_OUT_DIR=<absolute dir>'); process.exit(2); }
+if (!['POC-001', 'POC-002', 'POC-008', 'POC-009', 'POC-016', 'POC-017', 'POC-018', 'POC-021'].includes(testId) || !out || !path.isAbsolute(out)) { console.log('USAGE: B3_SINGLE_CASE=<POC-001|002|008|009|016|017|018|021> B3_OUT_DIR=<absolute dir>'); process.exit(2); }
 const PORTS = [...EMULATOR_PORTS, 18300, 18301, 18302, SENTINEL_TCP_PORT];
 async function requireClosed(when) {
   const bad = []; for (const p of PORTS) { const s = await portState(p); if (s.state !== 'closed') bad.push(`${p}=${s.state}(${s.code})`); }

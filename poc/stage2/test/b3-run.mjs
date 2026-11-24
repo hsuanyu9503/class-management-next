@@ -23,7 +23,7 @@ import { collectKnownSecrets } from '../src/b3/mask-list.mjs';
 import { javaVersion } from '../src/b3/env-info.mjs';
 import { writePackage } from '../src/b3/package.mjs';
 import { buildCaseInput } from '../src/b3/case-input.mjs';
-import { verifyPackage, PAYLOAD, CASE_ACTORS, SCENARIO_RE } from '../src/b3/verifier.mjs';
+import { verifyPackage, PAYLOAD, CASE_ACTORS, SCENARIO_RE, frontFaultsFor } from '../src/b3/verifier.mjs';
 import { stableJson, sha256Hex } from '../src/stable.mjs';
 import { executeCase } from '../../stage1/src/runner.mjs';
 import { createFixtureHash } from '../../stage1/src/common.mjs';
@@ -41,7 +41,7 @@ const SINGLE_ENTRIES = Object.freeze({ 'tamper-toolchain': '/adapter/attackers/t
 const SINGLE_ENTRY = process.env.B3_SINGLE_ENTRY ? SINGLE_ENTRIES[process.env.B3_SINGLE_ENTRY] : '/adapter/main.mjs';
 if (SINGLE && (!SINGLE_ENTRY || (SINGLE_SCENARIO === 'honest' && SINGLE_ENTRY !== '/adapter/main.mjs'))) throw new Error('B3_SINGLE_ENTRY: unknown entry, or an attacker entry with the honest scenario');
 const OUT_DIR = process.env.B3_OUT_DIR || null;
-if (SINGLE && !['POC-001', 'POC-002', 'POC-008', 'POC-009'].includes(SINGLE)) throw new Error(`B3_SINGLE_CASE: unsupported ${SINGLE}`);
+if (SINGLE && !['POC-001', 'POC-002', 'POC-008', 'POC-009', 'POC-016', 'POC-017', 'POC-018', 'POC-021'].includes(SINGLE)) throw new Error(`B3_SINGLE_CASE: unsupported ${SINGLE}`);
 if (SINGLE && !OUT_DIR) throw new Error('B3_SINGLE_CASE needs B3_OUT_DIR');
 /** Reported runner kind (evidence only; the Verifier's trusted runnerKind comes from the VERIFY job's own environment). */
 const RUNNER_KIND = process.env.GITHUB_ACTIONS === 'true' && process.env.RUNNER_ENVIRONMENT === 'github-hosted' ? 'github-hosted' : 'local-untrusted';
@@ -110,7 +110,8 @@ async function attestedRun(label, { testId, entry = '/adapter/main.mjs', cfg = s
   const users = await h.seedWorld(); rl('setup', 'seed-world');                                 // T1
   const sock = path.join(entryDir, 'front.sock'); rmSync(sock, { force: true });
   const frontFile = path.join(dir, 'trace-front.jsonl'), backFile = path.join(dir, 'trace-back.jsonl');
-  const stack = await h.startStack({ frontFile, backFile, frontSocketPath: sock });
+  // B4: per-case front faults come ONLY from the trusted table (POC-017 sync point, POC-021 lost response)
+  const stack = await h.startStack({ frontFile, backFile, frontSocketPath: sock, frontFaults: frontFaultsFor(testId) });
   const iso = simulateUnsupported ? { platformSupported: false, reason: 'simulated (A9)', selfCheckRaw: null, sandboxPolicyDigest: configDigest(cfg) }
     : await runSelfCheck({ cfg, pathMap, hostPaths, outputChannels, workDir, startSentinel });
   rl('setup', 'isolation-self-check');
@@ -214,9 +215,9 @@ if (SINGLE) {
   process.exit(0);
 }
 
-// ---------------- positive controls: honest sandboxed Adapter, four cases
+// ---------------- positive controls: honest sandboxed Adapter, four read cases + four B4 write cases
 const honest = {};
-for (const t of ['POC-001', 'POC-002', 'POC-008', 'POC-009']) {
+for (const t of ['POC-001', 'POC-002', 'POC-008', 'POC-009', 'POC-016', 'POC-017', 'POC-018', 'POC-021']) {
   const x = await attestedRun(`honest-${t}`, { testId: t }); honest[t] = x;
   const ok = t === 'POC-009' ? (x.result.result === 'BLOCKED' && stableJson(x.result.reasons) === stableJson(['BLOCKED_FIELDS_G1_G4'])) : isLocalOnly(x);
   log(ok, `HONEST ${t}`, `${R(x)} contract=${x.result.contract?.contractMatch} stage1=${x.stage1.status} selfCheck=${Object.values(x.iso.selfCheck || {}).filter((c) => c.ok && c.positiveControlOk !== false).length}/22`);
