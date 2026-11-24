@@ -108,7 +108,7 @@
         1. 收集自動觸發的 `attest.yml` run：run、attempt、commit、`verify` 的 `s2-attest` 部署紀錄、UNATTESTED、簽章步驟沒有執行；
         2. 你觸發一次新的 `attest-sigtest.yml`；
         3. 第三方用 CLI 驗證，結果應為 `SIGTEST_IDENTITY_ACCEPTED`、exit 0，而且採用 `SIGTEST-002`；記錄憑證中是否出現 Environment；
-      - 以上核對通過後，才記錄 C-3 完成。Settings 一律由你操作，**而且要在合併 C-3 的實作 PR 之前**完成。
+      - **已完成：C-3 本階段驗收完成**（2026-11-24，見 C-3 報告 §4）。Settings 一律由你操作，**而且要在合併 C-3 的實作 PR 之前**完成。
 - 四個 hosted run 的 artifact 原檔重播仍待處理，需要你提供原檔給 ChatGPT。
 - **PASS 啟用的門檻**（依 Q-B 的選擇；**選擇之前 `PASS_ENABLED=false`**）：
   - **流程 I（保留原門檻）**：A4／A10／A14 的 hosted 驗收、A18 的隔離測試簽章驗收（分為密碼學／身分層與 statement 政策層），以及第三方驗證腳本，**全部**完成並經獨立審查、負責人核准之後，才進入打開 PASS 的 PR。
@@ -262,3 +262,10 @@
 | 2026-11-23 | ChatGPT → Claude | PR #14 R1 複審 `d2c1c09fcfe4`：程式複審通過（PR14-REV001 關閉） | 負責人核准錨定與合併 |
 
 > 規格的正式變更請同步修改 SPEC／TECH，不要只在這裡留下新決策。
+
+## S2-B2 第 3 批（C-1～C-3）收尾（2026-11-24）
+
+- C-1、C-2、C-3 都已完成本階段驗收。正式 PASS **沒有**開啟（`PASS_ENABLED=false`）。
+- 剩餘項目分為三類：「阻擋網站功能開發」「只阻擋正式 PASS／發布」「後續追蹤」。分類與下一批的提案見 `docs/stage2/S2B2-B3-CLOSEOUT.md`。
+- **需要負責人決定**：下一批要做什麼。`docs/SPEC.md` 寫明本 repository「**不是**正式班級管理網站」，所以「網站功能開發」屬於範圍的變更，Claude 不自行選擇（收尾文件 §3）。
+

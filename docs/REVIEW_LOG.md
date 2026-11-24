@@ -1746,3 +1746,15 @@
   - 第三方用 CLI 驗證新的簽章，預期 `SIGTEST_IDENTITY_ACCEPTED`、exit 0，採用 `SIGTEST-002`；
   - ChatGPT 核對。
 
+### C-3 完成驗收（ChatGPT，審查 2026-11-24；執行 2026-11-23）：**C-3 本階段驗收完成**
+
+- 結論：程式審查、Settings 證據、合併後 `verify` 的 Environment 部署與 UNATTESTED 結果、新 sigtest 的真實 `gh` 驗證與獨立政策重播，**都已核對**。這不是正式 PASS 的驗收或啟用授權。
+- 證據：報告 `S2B2-B3C3-REPORT.md` §4。
+  - deployment 7996534106（verify job 137638666261）與 7996542680（sigtest job 137638891104），environment=`s2-attest`，success；
+  - 新舊兩份 attestation 都被核對：`SIGTEST-002`、`SIGTEST-001`；
+  - 政策 SHA-256 `36797ef1…`；`gh-stdout.json` `a873a8bf…`。
+- 交付的 `gh` 憑證欄位中，沒有看到 deployment environment，只有 `runnerEnvironment`。這不推論底層憑證一定沒有該擴充欄位，也不新增門檻。
+- 保留：負向阻擋未實測。不再重跑 C-2／C-3 的 sigtest，也不再要求相同的設定截圖。
+- `PASS_ENABLED=false`、POC-009 BLOCKED、Stage 1 的 72 筆 NOT_RUN 維持不變。正式 PASS 與其他歷史殘餘項目不由此結案。
+- 下一步：階段收尾分類與下一批的提案，見 `docs/stage2/S2B2-B3-CLOSEOUT.md`，交負責人確認。
+
