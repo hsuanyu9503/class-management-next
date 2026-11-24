@@ -63,6 +63,7 @@
 - Environment 在憑證中的呈現：
   - `gh` 交付的 `verificationResult.signature.certificate` 中**沒有** deployment environment 欄位，只有 `runnerEnvironment=github-hosted`，兩者不能混為一談；
   - Claude 先前從 job log 的 PEM 讀到 Fulcio 擴充欄位 1.23=`s2-attest`、1.24 為含 immutable ID 的 `sub`。這只是讀取，不是驗證；
+  - **補充（PR #19 審查）**：審查者解析了交付的 `gh-stdout.json` 中，第一份 attestation 的 `bundle.verificationMaterial.certificate.rawBytes`，讀到的 X.509 擴充欄位是 1.23=`s2-attest`、1.24=`repo:hsuanyu9503@328976242/class-management-next@1463026260:environment:s2-attest`，與 Claude 從 log 讀到的一致。`gh` 的 `verificationResult.signature.certificate` 摘要沒有展開這兩欄，不代表原始憑證沒有它們。這仍然**不是**審查者重新驗證憑證鏈或簽章；密碼學驗證的來源區分不變，也不新增接受門檻；
   - `s2-attest` 的使用，由 GitHub 的 deployment 狀態證實；
   - 不新增接受門檻。
 - 保留的限制：負向的阻擋（非 `main` 被 Environment 擋下）**沒有實測**（計畫 §4）。
