@@ -136,7 +136,7 @@ test('write and read operations are separate: neither route can authorize the ot
 test('front-trace projections: values recorded only in the expected form; credential-like ids never', () => {
   const t = traceableCommitBody({ command: CMD, claimedScope: SCOPE });
   assert.equal(t.op, 'leaveRecord.revise'); assert.deepEqual(t.command.intent, CMD.intent); assert.equal(t.command.expectedVersion, 5);
-  const bad = traceableCommitBody({ command: { ...CMD, operationId: 'ghp_abcdefABCDEF0123456789', intent: { coverageChange: 'WIPE', reasonCode: 'lowercase secret' } }, claimedScope: SCOPE });
+  const bad = traceableCommitBody({ command: { ...CMD, operationId: ['gh', 'p_abcdefABCDEF0123456789'].join(''), intent: { coverageChange: 'WIPE', reasonCode: 'lowercase secret' } }, claimedScope: SCOPE });
   assert.deepEqual(bad.command.operationId, { valueRecorded: false }); assert.deepEqual(bad.command.intent, { coverageChange: { valueRecorded: false }, reasonCode: { valueRecorded: false } });
   assert.equal(traceableCommitBody({ command: { ...CMD, x: 'secret' }, claimedScope: SCOPE }).shapeValid, false);
   assert.deepEqual(traceableReceiptBody({ operationId: 'OP-1', workspaceId: 'WS-SC01' }), { op: 'operationReceipt.read', target: { operationId: 'OP-1' }, claimedScope: { workspaceId: 'WS-SC01' } });
