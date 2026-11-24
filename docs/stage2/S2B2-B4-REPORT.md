@@ -57,11 +57,12 @@
 
 | 案例 | 判定重點 | 沙箱（`s2:b3`） | 程序內（`s2:b4`） |
 |---|---|---|---|
-| POC-016 | back trace 中整個案例只有一次成功的 commit；5 項寫入的完整路徑、種類、前提條件與內容，由判定端從 pre 狀態、front 命令與同一交易的讀取重算；狀態中只有這 5 份文件改變；點名不變；回應中的收據等於狀態中的收據 | `UNATTESTED`，契約 `MATCH` | `MATCH`：`officialVersion 6`，各 delta 都是 1，`attendance N` |
-| POC-017 | 兩個請求的 `operationId` 不同、`expectedVersion` 相同、意圖不同；兩個交易**時間重疊**，否則是 `INCONCLUSIVE`；輸的一方最後一次嘗試讀到 v6、沒有寫入；嘗試次數在上限內 | `UNATTESTED`，`MATCH` | `MATCH`：`successes 1`、`conflicts 1`、`silentOverwrite false` |
-| POC-018 | 100 次相同的命令；只有第一次 commit；其餘 99 次只讀收據；100 份收據的 digest 都相同，且等於狀態中的收據 | `UNATTESTED`，`MATCH` | `MATCH`：`uniqueReceiptIds 1`，以整份收據的 digest 計算，不只看 ID |
-| POC-021 | front trace 記錄 API 回了 200 與收據 digest、`delivered:false`；之後以原 `operationId` 查詢，得到的 digest 與遺失的回應相同，也等於狀態中的收據；查詢的 trace 中沒有交易；整個案例只有一次 commit | `UNATTESTED`，`MATCH` | `MATCH`：`receiptRecovered true`、`duplicateCommit false` |
+| POC-016 | **（R1，REV-21-01）先核對案例本身的操作**：命令必須正是 fixture `canonicalCommand`，也就是 LV-007、v5、`AM_TO_FULL_DAY`、原 `operationId` 與 scope；目標 pre 狀態是 v5、AM，post 是 FULL_DAY。之後再核對：back trace 中整個案例只有一次成功的 commit；5 項寫入的完整路徑、種類、前提條件與內容，由判定端從 pre 狀態、front 命令與同一交易的讀取重算；狀態中只有這 5 份文件改變；點名不變；回應中的收據等於狀態中的收據 | `UNATTESTED`，契約 `MATCH` | `MATCH`：`officialVersion 6`，各 delta 都是 1，`attendance N` |
+| POC-017 | 兩個請求的 `operationId` 不同；目標與 `expectedVersion 5` 由可信表格綁定；意圖恰好是一個 `AM_TO_FULL_DAY`、一個 `AM_TO_PM`。兩個交易**時間重疊**，條件見 §4 第 1 項（R1），否則是 `INCONCLUSIVE`；輸的一方最後一次嘗試讀到 v6、沒有寫入；嘗試次數在上限內 | `UNATTESTED`，`MATCH` | `MATCH`：`successes 1`、`conflicts 1`、`silentOverwrite false` |
+| POC-018 | 100 次都是 `canonicalCommand`（由可信表格綁定）；只有第一次 commit；其餘 99 次只讀收據；100 份收據的 digest 都相同，且等於狀態中的收據 | `UNATTESTED`，`MATCH` | `MATCH`：`uniqueReceiptIds 1`，以整份收據的 digest 計算，不只看 ID |
+| POC-021 | 提交的命令是 `canonicalCommand`（由可信表格綁定）；front trace 記錄 API 回了 200 與收據 digest、`delivered:false`；之後以原 `operationId` 查詢，得到的 digest 與遺失的回應相同，也等於狀態中的收據；查詢的 trace 中沒有交易；整個案例只有一次 commit | `UNATTESTED`，`MATCH` | `MATCH`：`receiptRecovered true`、`duplicateCommit false` |
 
+- R0（Head `047b05d` 之前）的結果記錄在下方，保留作為歷史。**R1 的結果見 §10。**
 - 沙箱：run `S2B2B3A-20261124T022727Z-045298c0`，37/37。
   - 八個誠實案例中，七個的結果都是 `UNATTESTED [LOCAL_UNTRUSTED_RUNNER, TRUST_ROOT_NOT_CONFIGURED]`；
   - POC-009 仍是 `BLOCKED [BLOCKED_FIELDS_G1_G4]`；
@@ -75,7 +76,7 @@
 
 | # | 要求 | 做法 | 證據 |
 |---|---|---|---|
-| 1 | 並行判定用同一可信時間基準與交易關聯，不看 trace 檔的寫入順序；同步釋放只是安排；重試不沿用舊讀值，記錄首次與重試次數 | 時間區間是每筆 back-proxy 紀錄的 `[at, endedAt]`，來自同一個代理程序的時鐘。判定條件：兩個請求的第一次嘗試，都在最早的成功 commit **結束之前**開始並完成第一次讀取，時間相同也不算重疊。交易依 beginTransaction 回應中的 ID 分組；每次嘗試的讀取只能屬於它自己的交易 | 單元：故意反轉檔案順序仍判為重疊、依序的請求不重疊、時間相同不算；mutation T1、T2；`MUT-sequential-adapter` 只被並行檢查擋下（`onlyProblem`）；Observer 證據中有 `attempts`（每次嘗試的交易、讀到的版本、commit 結果） |
+| 1 | 並行判定用同一可信時間基準與交易關聯，不看 trace 檔的寫入順序；同步釋放只是安排；重試不沿用舊讀值，記錄首次與重試次數 | 時間區間是每筆 back-proxy 紀錄的 `[at, endedAt]`，來自同一個代理程序的時鐘。<br>**R1（REV-21-02）的判定條件**：兩個請求的第一次嘗試，各自在交易中做的每一次讀取（至少包括收據與 current）都要：<br>- 成功（HTTP 200，有 found 或 missing 的結果）；<br>- 時間有效（`at ≤ endedAt`）；<br>- **結束時間嚴格早於**最早的成功 commit 結束時間。<br>也就是兩個交易都已經讀到 current，而且還沒有任何一方完成 commit。時間相同不算。<br>R0 只比較讀取的開始時間，這是審查指出的落差，已修正。<br>交易依 beginTransaction 回應中的 ID 分組；每次嘗試的讀取只能屬於它自己的交易。<br>**安排**：back 代理的 commit hold（只用於 POC-017），在兩個不同的請求都完成 current 的讀取之前，暫不送出任何 commit。它只是安排，判定仍依上面的時間條件 | 單元：<br>- 故意反轉檔案順序仍判為重疊；<br>- 依序的請求、時間相同的邊界，都不算重疊；<br>- 審查者的反例（讀取在 commit 結束之後才完成）、讀取失敗、時間缺漏或倒置、沒有 current 讀取，都判為未建立；<br>- 真的 loopback 代理上的 hold 測試。<br>mutation T1、T2、C1～C5、H1、H2；`MUT-sequential-adapter` 只被並行檢查擋下（`onlyProblem`）；Observer 證據中有 `attempts`（每次嘗試的交易、讀到的版本、commit 結果） |
 | 2 | 稽核寫入的例外只限已知路徑與操作；commit 集合核對完整路徑、操作種類、前提條件與安全欄位 | 稽核只接受稽核路徑上、只能新建、內容與匯出逐欄相同的 PATCH（既有規則）；commit 寫入不得指向稽核路徑或 `_` 開頭的路徑；`checkCommitWriteSet` 核對完整路徑、`update` 種類、沒有 mask 或 transform、前提條件，以及判定端重算的內容 | 單元：少一項、多一項、前提條件錯誤、收據內容被改都會被點名；NEG-3e；mutation T4～T6 |
 | 3 | trace 的遮罩保留判定需要的交易關聯與前提條件，不洩漏敏感內容；證據缺漏就拒絕或列為無法判定 | back trace 保留 Firestore 的請求與回應本體，與既有的稽核 PATCH 相同，用同一個遮罩器處理。這些集合不含敏感文字（I-11）。front 投影逐欄記錄，值的格式不符就不記錄；判定需要的欄位缺漏時，結果是 `COMMAND_NOT_FULLY_RECORDED`，不是通過 | 遮罩掃描：程序內 71 個檔案、沙箱 120 個檔案，都是 0 洩漏；NEG-3b～3d：缺少 commit、交易 ID 不符、beginTransaction 回應被改，都被拒絕 |
 | 4 | 021 的 digest 明定序列化與範圍；不可變收據與 `derivedStatus` 分開 | `receiptDigest = sha256(stableJson(responseBody.receipt))`，範圍只有 `receipt` 成員（11 個欄位），不含 `code`、`traceId`、`derivedStatus`。`derivedStatus` 另外與 `derivedProgress` 比對 | 單元：digest 範圍；mutation P1；POC-021 的 `lookupDerivedStatusEqualsDerivedProgress` |
@@ -172,7 +173,7 @@
   - `poc/stage2/test/b3-run.mjs`
   - `poc/stage2/src/` 下的 `authz.mjs`、`harness.mjs`、`observer.mjs`、`trace-proxy.mjs`、`api/request-shape.mjs`、`api/server.mjs`、`b3/attest-verify.mjs`、`b3/reconcile.mjs`、`b3/verifier.mjs`
   - 新增：`api/commit.mjs`、`api/txn.mjs`、`b4/commit-trace.mjs`（位於受保護的 `poc/stage2/src` 目錄）
-- 新錨定（`node scripts/verify-anchor.mjs --print`，95 檔）：
+- R0 的錨定（95 檔，已被 R1 取代，見 §10）：
   `ddff49c60960495f44fa75b064b01968f1c01c23c96f324b46ebccb5fb364660`。
   - 原本的值是 `caee1653…`（92 檔）；
   - 合併前要由負責人重新核准 repository variable `CMN_STAGE1_ANCHOR_SHA256`。Claude 不設定也不要求設定；
@@ -192,3 +193,30 @@
 - **`TRANSACTION_CONTENTION`**：回應碼是 `UNAVAILABLE`（Stage 1 的錯誤碼），另加 `reason` 欄位；稽核的 `outcome` 是 `TRANSACTION_CONTENTION`。
 - **front 代理不是隔離邊界**：沿用 B3a，有 §9 隔離的前提才成立。同步點與回應遺失由可信的 Runner 依表格設定，Verifier 會核對。
 - **mutation 參數**（`mutation`、`authorizeFn`）在受控 API 中，只有測試能傳入。Runner（`b3-run.mjs`）與 `attest.yml` 不傳。
+
+## 10. R1（PR #21 審查，Reviewed Head `047b05d`）
+
+| ID | 問題 | 處理 | 測試 |
+|---|---|---|---|
+| REV-21-01（P1） | POC-016 只依受測命令自己的意圖重算寫入，沒有綁定本案例的操作：API 正確執行 `AM_TO_PM`，結果也是 `MATCH` | 新增 `src/b4/case-ops.mjs`（可信工具鏈）：每個寫入案例必須執行的操作，取自鎖定的 `canonicalCommand` 與 `SC01-COMMITTED-v6`，不修改 oracle。Observer 的四個案例都先核對：<br>- 命令欄位（POC-016／018／021 的完整 `canonicalCommand`；POC-017 的目標、版本與兩個指定意圖）；<br>- claimedScope；<br>- 目標路徑；<br>- pre 狀態的版本與 dayPart；<br>- POC-016／018／021 的 post dayPart 必須是 FULL_DAY。<br>不符就是 `CASE_OPERATION_MISMATCH:*`，結果為 `BLOCKED`（`OBSERVATION_AMBIGUOUS`） | 單元：<br>- 案例表格等於鎖定的 fixtures；<br>- 審查者的合成重現：完整判定中，`AM_TO_FULL_DAY` 是 `MATCH`；正確執行的 `AM_TO_PM` 被拒絕（`intent[0]`、`postDayPart`）；<br>- 目標、版本、operationId、scope、目標路徑、POC-017 的意圖都會被點名。<br>Emulator：`MUT-wrong-intent-POC-016` 被拒絕。<br>mutation K1～K6 |
+| REV-21-02（P2） | 並行證據只比較開始時間，沒有落實「完成讀取」 | 見 §4 第 1 項：嚴格條件，加上 back 代理的 commit hold（`CASE_BACK_FAULTS`，Verifier 以 `checkBackFaults` 核對：設定的案例每次 commit 都有 hold 紀錄，其他案例沒有）。Emulator 只能提供較弱的證據時，結果如實為 `INCONCLUSIVE` | 單元：審查者的反例與各種邊界；hold 的 loopback 測試。Emulator：`MUT-no-back-hold-POC-017` 被拒絕（`BACK_FAULT_MISMATCH:hold`）；`MUT-sequential-adapter` 仍只因 `INCONCLUSIVE` 被擋下；誠實的 POC-017 證據中，兩方的讀取結束時間都早於 commit 結束，hold 紀錄是 `complete` |
+
+**R1 的結果**（作者在本機 Linux 執行；不是審查者的重跑）：
+- `s2:test` 198/198（含 b4-unit 23 項）；`npm test` 20/20；`check`；`stage1:all`；`s2:cases` run `S2B2B2-20261124T072147Z-498f8158`：四個讀取案例結果不變，71/71、7/7。
+- `s2:b3`（沙箱，src 與 `971a7d3` 相同）：run `S2B2B3A-20261124T064146Z-355fa5d8`，37/37；四個寫入案例都是 `UNATTESTED`，`MATCH`。
+- `s2:b4`：`S2B2B4-20261124T063821Z-e3ad7c27`、`…T063934Z-0ae49e78`、`…T071949Z-9a4ee395`（最後版本 `da5fafd`），都是 29/29。
+  - 本機一次中間執行（`…T063645Z-22944a92`）是 28/29。原因是 commit 在 hold 釋放之後才抵達，紀錄寫成 `releasedAt: null`、`complete: false`，hold 本身的行為正確。
+  - 已改為記錄 hold 何時、因何釋放（`readers`）。
+- 原始碼 mutation：
+  - R1 新增 13 項（K1～K6、C1～C5、H1～H2）：13/13 被抓到；
+  - B4 原有 28 項：28/28 被抓到。T1 的目標字串因 REV-21-02 改寫而消失，已改為「忽略每個請求的理由」，被抓到；
+  - 第一輪中，K5（不綁定目標路徑）與 H2（只有一個讀取者就釋放 hold）存活。已加上單元測試：目標路徑不符，以及真的 loopback 代理上的 hold。重跑後兩項都被抓到；
+  - 既有的 mutation 組不變：只有 Y5 存活（等價）。
+- 可重播證據：附件 `out-pr21-r1`，包含：
+  - `inprocess/`：run `…T071949Z-9a4ee395` 的四個誠實案例、10 項情境 mutation 與 NEG-7，每個都有 front／back trace、pre／post、`judgement.json`、`case-window.json`；
+  - `sandbox/`：run `…T064146Z-355fa5d8` 的四個案例，有 `package.tar`、`job-outputs.json`、`statement.json`、`verify.json` 與 trace；
+  - `replay-b4.mjs`：在審查 Head 的 checkout 上重新判定，結果與紀錄逐項相同（`REPLAY_SAME`）。
+  - 被拒絕與無法判定的結果都保留。
+- 新錨定：`ad7d8670dabfebf610278147c016d20acc4bc13ba2747732fadfe3a2a2395e0b`（96 檔；新增 `case-ops.mjs`）。**待負責人核准**；前一輪的 `ddff49c6…` 作廢。
+- Windows 的 anchor CLI 問題（`verify-anchor.mjs` 入口判斷）另外追蹤，不在 B4 範圍。
+

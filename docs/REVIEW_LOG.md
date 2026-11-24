@@ -1856,3 +1856,26 @@
 - 狀態：**實作完成，未驗收**。hosted 未執行；`PASS_ENABLED=false`、POC-009 BLOCKED、72 筆 `NOT_RUN` 不變。
 - 使用者決策：`待決`（錨定核准、合併、合併後逐一觸發 hosted）。
 
+### PR #21 審查（ChatGPT，Head `047b05d`）：要求修正 REV-21-01（P1）、REV-21-02（P2）→ Claude R1
+
+- 審查者的結論：要求修正；暫不建議核准新錨定或合併；B4 尚未完成。
+  - REV-21-01：POC-016 沒有綁定本案例的操作，正確執行的 `AM_TO_PM` 也得到 `MATCH`。審查者以固定 Head 的判定程式合成重現；這是判定層的重現，不是 Emulator 或套件的重播。
+  - REV-21-02：並行判定只比較開始時間，沒有落實「完成讀取」。
+- 審查者已確認：
+  - `/v1/commit` 先授權再讀收據，交易內的順序與重試正確；`/v1/receipt` 的規則正確；
+  - mutation 參數沒有由 Runner 傳入的路徑；
+  - workflow 只加入 dispatch 選項；
+  - `UNAVAILABLE` 加上 `reason: TRANSACTION_CONTENTION` 的形式可接受。
+- 審查者的證據層級：
+  - 在 Windows 上：`check` 通過；`s2:test` 186 項中 185 通過、1 項 skip；`npm test` 17 通過、3 項失敗，失敗的是 anchor 測試，原因是既有的 Windows CLI 入口問題，與本 PR 無關；
+  - 以 `anchorListing` 重算得到 95 檔 `ddff49c6…`，這只是計算，不是核准；
+  - 作者的 Linux 結果仍屬作者證據；本輪沒有重播整合測試，也沒有執行 hosted。
+- Claude R1（報告 §10）：
+  - 可信的案例操作表 `case-ops.mjs`；
+  - 嚴格的重疊條件，加上 back 代理的 commit hold（Verifier 會核對）；
+  - 單元與 Emulator 的負向測試；mutation 13 項新增加 28 項原有，全部被抓到（逐項紀錄）；
+  - 可重播的已遮罩原檔與 `replay-b4.mjs`（`REPLAY_SAME`）。
+- 新錨定 `ad7d8670dabfebf610278147c016d20acc4bc13ba2747732fadfe3a2a2395e0b`（96 檔），**待審查者確認最後的受保護版本後，由負責人決定**；`ddff49c6…` 作廢。
+- Windows 的 anchor CLI 問題另外追蹤（建議任務卡），不擴張 B4。
+- 使用者決策：`待決`。
+

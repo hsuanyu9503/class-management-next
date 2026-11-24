@@ -7,7 +7,7 @@
 - 性質：Classroom Manager Next **獨立技術驗證 PoC**，非正式網站。
 - 執行環境：Node.js 22+。Stage 1 只用標準函式庫；Stage 2（`poc/stage2`）以鎖檔安裝 Firebase Emulator 相關套件。
 - 自動檢查：`scripts/check.mjs`、`tests/*.test.mjs`、`poc/stage1` 的 `stage1:all`。
-- CI：`.github/workflows/ci.yml` 的 `validate`（`contents: read`，不使用 secrets）與 `baseline-anchor`。`baseline-anchor` 把受保護檔案的 digest 與負責人設定的 repository variable `CMN_STAGE1_ANCHOR_SHA256` 比對；清單在 `scripts/anchor-paths.json`。已核准的是 92 檔；B4 實作 PR 會變成 95 檔，待負責人重新核准。
+- CI：`.github/workflows/ci.yml` 的 `validate`（`contents: read`，不使用 secrets）與 `baseline-anchor`。`baseline-anchor` 把受保護檔案的 digest 與負責人設定的 repository variable `CMN_STAGE1_ANCHOR_SHA256` 比對；清單在 `scripts/anchor-paths.json`。已核准的是 92 檔；B4 實作 PR（R1）會變成 96 檔，待負責人重新核准。
 - 其他 workflow：`attest.yml`（S2-B2 B3b）、`attest-attack.yml`（C-1）、`attest-sigtest.yml`（C-2）。兩個簽章 job 使用 Environment `s2-attest`（C-3）。見 `CLAUDE.md`。
 - 部署／發行：**無**（未導入 Pages／Release workflow）。
 - 後端：**暫定 Firebase**（ADR-001，2026-11-24），是目前主要的實作與驗證方向，**尚未**通過任何驗收。**PostgreSQL 對照驗證暫緩**，不作為前置條件。Stage 1 的 72 筆計畫（36 Firebase＋36 PostgreSQL）仍全部是歷史的 `NOT_RUN`。
