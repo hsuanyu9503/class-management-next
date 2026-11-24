@@ -157,7 +157,7 @@
 | `npm run stage1:all` | 通過；72 筆 `NOT_RUN` 計畫不變 |
 | `npm run s2:test`（Stage 2 單元，含 b4-unit） | 191/191 |
 | `s2:b3`（沙箱，Linux root） | run `S2B2B3A-20261124T022727Z-045298c0`，37/37 |
-| `s2:b4`（程序內，Emulator） | 27/27（`S2B2B4-20261124T023014Z-1a8b41bd`、`…T023110Z-61bd6918`） |
+| `s2:b4`（程序內，Emulator） | 27/27（`S2B2B4-20261124T023014Z-1a8b41bd`、`…T023110Z-61bd6918`；加入 `reconcileProblem` 之後，以目前的測試程式再跑：`…T024829Z-872a46e2`） |
 | `s2:cases`（第 2 批讀取案例） | run `S2B2B2-20261124T024342Z-ab2261e4`：四個案例結果不變（POC-001／002／008 `MATCH`、POC-009 `PARTIAL_MATCH_REST_BLOCKED`）；負向控制 71/71；mutation 7/7 |
 | hosted | **未執行**：要在合併後，由負責人逐一觸發 |
 
