@@ -1715,5 +1715,66 @@
   - 加上 18:19 的 secrets／variables 空清單截圖，**「是否已儲存」的疑點關閉**。沒有實際觀察到 Environment 擋下非 `main` 的執行。
 - cutoff 是固定的政策邊界，不是合併時間；審查**不等於**負責人已授權 `SIGTEST-002`，要以政策描述中「明確的合併指示」為準。
 - 非阻擋的文件收尾已在計畫 v0.3 完成（§3.1 的空清單證據、§5 依既定 Q3、OIDC `sub` 格式不保證固定、更新為 API 證據）。**受保護檔案沒有變更**，錨定仍是 `caee1653…`。
-- 使用者決策：`待決`（核准錨定 `caee1653…`、確認同 Head 的 CI 全綠、合併）
+- 使用者決策（2026-11-23）：
+  - 負責人更新了 `CMN_STAGE1_ANCHOR_SHA256`，並指示「改好了，若 CI 全綠，合併 pr18」；
+  - 同 Head `f6c6659` 的 CI run 45158172223 attempt 2：`validate` success，`baseline-anchor` 為 `ANCHOR_OK`（`caee1653…`，92 檔）；
+  - PR #18 合併為 `824dcbf17dc1e119a014802812e223c4663104f3`（約 2026-11-23T10:43Z，晚於 cutoff 10:30Z）；
+  - **C-3 尚未完成**：還要收集合併後自動觸發的 `attest.yml`（run 45158736877）證據，以及 Q3 的新 sigtest 與第三方驗證。
+
+### C-3 合併後的 hosted 證據（Claude 從 log 讀出；不是密碼學驗證）
+
+- 自動觸發的 `attest.yml` run 45158736877 attempt 1（push，main `824dcbf`）：
+  - `execute` success；
+  - `verify` success：`S2B2_B3B_VERIFY POC-001 result=UNATTESTED reasons=TRUST_ROOT_NOT_CONFIGURED`；簽章步驟 **skipped**；`DELIVERY result=UNATTESTED signing=NOT_ATTEMPTED_NOT_PASS`；log 中的錨定是 `caee1653…`；
+  - `availability` skipped（因為 verify 沒有失敗）。
+  - `verify` 的 `s2-attest` 部署紀錄**沒有出現在 job log 中**，Claude 的工具也讀不到 deployments API。要由負責人提供 run 頁面的截圖，或 `gh api` 的部署清單。
+- 新的 `attest-sigtest.yml` run 45158899144 attempt 1（負責人觸發，main `824dcbf`）：
+  - job `sigtest` success；
+  - `Attestation created for SIGTEST.txt@sha256:63515e7c…`；
+  - Rekor `logIndex=4051371751`；
+  - attestation https://github.com/hsuanyu9503/class-management-next/attestations/71047255 。
+  - Claude 從 log 印出的 PEM 解出 Fulcio 憑證的擴充欄位，**只是讀取，沒有驗證**：
+    - 1.9 build signer URI：`…/.github/workflows/attest-sigtest.yml@refs/heads/main`；
+    - 1.10／1.13 commit：`824dcbf…`；
+    - 1.14 ref：`refs/heads/main`；
+    - 1.21 run：`…/actions/runs/45158899144/attempts/1`；
+    - **1.23（deployment environment）：`s2-attest`**；
+    - **1.24（OIDC subject）：`repo:hsuanyu9503@328976242/class-management-next@1463026260:environment:s2-attest`**。這證實了 v0.3 的限制：完整的 `sub` 包含 immutable ID，不是假定的簡單格式。
+  - Environment 確實出現在憑證中，但依計畫**只記錄，不作為接受條件**。
+- 待完成：
+  - `verify` 的部署紀錄證據（負責人提供）；
+  - 第三方用 CLI 驗證新的簽章，預期 `SIGTEST_IDENTITY_ACCEPTED`、exit 0，採用 `SIGTEST-002`；
+  - ChatGPT 核對。
+
+### C-3 完成驗收（ChatGPT，審查 2026-11-24；執行 2026-11-23）：**C-3 本階段驗收完成**
+
+- 結論：程式審查、Settings 證據、合併後 `verify` 的 Environment 部署與 UNATTESTED 結果、新 sigtest 的真實 `gh` 驗證與獨立政策重播，**都已核對**。這不是正式 PASS 的驗收或啟用授權。
+- 證據：報告 `S2B2-B3C3-REPORT.md` §4。
+  - deployment 7996534106（verify job 137638666261）與 7996542680（sigtest job 137638891104），environment=`s2-attest`，success；
+  - 新舊兩份 attestation 都被核對：`SIGTEST-002`、`SIGTEST-001`；
+  - 政策 SHA-256 `36797ef1…`；`gh-stdout.json` `a873a8bf…`。
+- 交付的 `gh` 憑證欄位中，沒有看到 deployment environment，只有 `runnerEnvironment`。這不推論底層憑證一定沒有該擴充欄位，也不新增門檻。
+- 保留：負向阻擋未實測。不再重跑 C-2／C-3 的 sigtest，也不再要求相同的設定截圖。
+- `PASS_ENABLED=false`、POC-009 BLOCKED、Stage 1 的 72 筆 NOT_RUN 維持不變。正式 PASS 與其他歷史殘餘項目不由此結案。
+- 下一步：階段收尾分類與下一批的提案，見 `docs/stage2/S2B2-B3-CLOSEOUT.md`，交負責人確認。
+
+### PR #19 文件審查（ChatGPT，Head `0e55a39`）：通過，可作為決策文件
+
+- 結論：C-3 的結案紀錄審查通過；收尾文件與下一批提案可以作為決策文件；純文件變更沒有阻擋問題。這**不**替負責人選擇 A／B，也不是正式 Approve、合併、開啟 PASS 或實作新產品的授權。
+- 審查者的證據：
+  - 只改了 4 份文件；CLOSEOUT 與 C-3 REPORT 的 blob（`46c84dc8…`、`8ca54ae6…`）與 Head 一致；
+  - CI 45298413946 兩項都 success；錨定仍是 `caee1653…`；
+  - C-3 REPORT §4 的各項 ID、時間、政策與證據來源的區分都一致；
+  - 從交付的 `gh-stdout.json` 原始憑證中解出 1.23／1.24，與 Claude 從 log 讀到的一致（只是解析，不是重新驗證）。
+- 要補充的範圍與用語（已在收尾文件 v0.2 與 C-3 報告中處理）：
+  - 「不阻擋網站開發」限定為獨立的 UI 原型、虛構或假資料、不依賴未決能力的功能；
+  - D-xx 逐功能檢查；
+  - 分清楚 PoC 的簽章 PASS、技術選型的放行、網站的正式上線；
+  - §2.3 的「不阻擋」不是永久豁免；
+  - 方向 A 需要擴充既有的 `attest.yml` dispatch 選項與 `run-attest-execute.mjs` 的白名單（受保護的變更，要重新核准錨定），具體的 P0 ID 尚未列定；
+  - 方向 B 要先讀 `Homework-manager-` 與 M02-04／M02-05 的既有規格；不預設負責人要繼續 A；
+  - TECH／DESIGN 的舊字句只是歷史背景；
+  - artifact 的期限以 `expires_at` 為準，已保存在本機的原檔仍可重播。
+- 「main 摘要」：審查者在本機也沒有找到原始定義，維持待確認。
+- 使用者決策：`待決`（是否合併 PR #19；下一批選 A 或 B）
 
