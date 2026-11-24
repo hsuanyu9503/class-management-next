@@ -1906,3 +1906,18 @@
   - Windows anchor CLI 問題另外追蹤。
 - 使用者決策：`待決`（核准錨定、合併、合併後逐一觸發 hosted）。本回報是審查建議，不是 GitHub Approve，也不是合併授權。
 
+### PR #21 合併與 B4 hosted 執行（2026-11-24）
+
+- 負責人核准錨定 `ad7d8670…`，合併 PR #21：main `1e20989`。
+- 負責人逐一觸發 `attest.yml`。四個案例都是 `UNATTESTED [TRUST_ROOT_NOT_CONFIGURED]`，簽章 skipped：
+  - POC-016：run 45349735778／1
+  - POC-017：run 45349750778／2
+  - POC-018：run 45349771980／2
+  - POC-021：run 45349793785／1
+  - job、artifact ID 與 digest 見 B4 報告 §11。
+- 證據層級：Claude 讀取的 metadata 與 job log。**原檔沒有重播**：本環境的網路政策拒絕 artifact 下載。
+- 待決：
+  - 負責人確認 POC-017／018 attempt 1 的原因；
+  - 原檔核對：8 個 artifact，到 2026-12-24 前有效；
+  - 之後才收尾 B4。
+

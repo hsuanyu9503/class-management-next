@@ -278,7 +278,7 @@
   - 決策紀錄：`docs/adr/ADR-001-backend-selection.md`；SPEC §4、TECH 已同步。
 - 鎖定的 Stage 1 契約、測資、測試矩陣、驗收標準與 72 筆 `NOT_RUN` **不改寫**；Firebase 的新結果另以可追溯的證據記錄。
 - 本 repository 繼續方向 A 的技術驗證，**不**開始網站頁面製作。
-- **B4**：計畫 `docs/stage2/S2B2-B4-PLAN.md`（已合併，計畫審查通過）；實作報告 `docs/stage2/S2B2-B4-REPORT.md`（待審）。
+- **B4**：計畫 `docs/stage2/S2B2-B4-PLAN.md`；實作 PR #21 已合併（main `1e20989`，錨定 `ad7d8670…`）。hosted 四項已執行，都是 `UNATTESTED [TRUST_ROOT_NOT_CONFIGURED]`（報告 §11）；**原檔核對待完成**，完成後才收尾 B4。
   - Firebase 受控寫入的核心：POC-016／017／018／021；
   - 案例盤點：已接上 4、被阻擋 4（POC-003、004、009、029；提議新缺口 G-9、G-10）、其餘依工作量分批；
   - 會改動受保護檔案（`attest.yml` 的 dispatch 選項、執行器白名單、判定程式、API），需要重新核准錨定（L3）。
