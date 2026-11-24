@@ -291,3 +291,34 @@ test('REV-21-02 back commit hold: recorded on every commit of POC-017 only', () 
   assert.ok(checkBackFaults([c({ hold: {} })], 'POC-016').length);
   assert.deepEqual(checkBackFaults([c({})], 'POC-016'), []);
 });
+test('case operation: the resolved target must be THE case record path', () => {
+  const lv = { path: 'workspaces/WS-X/classes/CLASS-606-SC01/leaveRecords/LV-007', pre: CURRENT, post: { ...CURRENT, coverageSegments: [{ ...CURRENT.coverageSegments[0], dayPart: 'FULL_DAY' }] } };
+  assert.ok(checkCaseOperation('POC-016', { commands: [{ command: { ...CMD }, claimedScope: SCOPE }], lv }).includes('CASE_OPERATION_MISMATCH:target'));
+});
+import http from 'node:http';
+import { createTraceProxy } from '../src/trace-proxy.mjs';
+import { makeMasker } from '../src/mask.mjs';
+test('REV-21-02 back commit hold: a commit waits until TWO requests completed a current read (real loopback proxy)', async () => {
+  const up = http.createServer((req, res) => { req.resume(); req.on('end', () => { res.writeHead(200, { 'content-type': 'application/json' }); res.end(req.url.endsWith(':batchGet') ? '[]' : '{}'); }); });
+  await new Promise((r) => up.listen(0, '127.0.0.1', r));
+  const origin = `http://127.0.0.1:${up.address().port}`;
+  const px = createTraceProxy({ role: 'back', port: 0, masker: makeMasker([]), route: () => origin, faults: { commitHold: { reads: 2, timeoutMs: 3000 } } });
+  const port = await px.listen();
+  const post = (verb, trace, body) => fetch(`http://127.0.0.1:${port}/v1/projects/p/databases/(default)/documents:${verb}`, { method: 'POST', headers: { 'content-type': 'application/json', 'x-cmn-trace-id': trace }, body: JSON.stringify(body) }).then((r) => r.text());
+  const A = 'TR-00000000-0000-4000-8000-00000000000a'; const B = 'TR-00000000-0000-4000-8000-00000000000b';
+  const cur = { documents: [N(LV)], transaction: 'T' };
+  let committed = false;
+  await post('batchGet', A, cur);
+  const c = post('commit', A, { transaction: 'T', writes: [] }).then(() => { committed = true; });
+  await post('batchGet', B, { documents: [N('x/r')], transaction: 'T' });          // not a current read: does not count
+  await new Promise((r) => setTimeout(r, 150));
+  assert.equal(committed, false, 'commit must still be held after only ONE request read the current record');
+  await post('batchGet', A, cur);                                                   // same request again: does not count
+  await new Promise((r) => setTimeout(r, 100));
+  assert.equal(committed, false, 'a second read by the SAME request does not release the hold');
+  await post('batchGet', B, cur);
+  await c; assert.equal(committed, true);
+  const rec = px.entries.find((e) => e.path.endsWith(':commit'));
+  assert.equal(rec.hold.complete, true); assert.equal(rec.hold.readers, 2);
+  await px.close(); await new Promise((r) => up.close(r));
+});
