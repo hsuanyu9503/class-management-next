@@ -2,7 +2,7 @@
 
 > ⚠️ **本 PoC 適用說明**：本 Repository 沒有 `pages.yml`、`release.yml`、`site/` 或網站建置步驟；本提案**不**新增任何部署或發行流程。GitHub Settings 已啟用 Pages，若發佈來源為 `main`，合併後的檔案仍可能被公開（D-W6）。
 
-> 狀態：**提案，送 ChatGPT 審查；核准前不寫任何網頁程式**。
+> 狀態：**文件審查通過（PR #22 R2，Reviewed Head `0018b11`），已合併**。2026-11-25 負責人更正 D-W1：網站的 repository 是 **`hsuanyu9503/Classroom-Manager-ver.Next`**，下文中的 `Classroom-Managerment-Next` 都以此為準。D-W4～D-W8 依建議。
 > v0.2（2026-11-24）：負責人已決定 D-W1（另一個 repository：`hsuanyu9503/Classroom-Managerment-Next`）、D-W2（同意讀取既有規格）、D-W3（採用 §3 的候選流程），並要求送審與開 PR。D-W4～D-W8 仍是 Claude 的建議，待負責人確認。既有規格的讀取結果見 §2.1。
 > v0.3（2026-11-24）：回應 PR #22 審查——REV22-01（開發身分與本機服務的啟動契約，§2.2）、REV22-02（結果不明時的規則，§3.1），以及三個小項目（待確認項目統一為 D-W4～D-W8；POC-002 改列為參考案例；「版本 6」限定在重設後的初始測資）。
 > v0.4（2026-11-24）：回應 PR #22 R1 複審（Head `eec0c83`）——REV22-01 殘項：靜態首頁的頂層導航與 API 的 POST 分開規定；REV22-02 殘項：結果不明後重送時，仍可能因身分或授權失效而被拒絕。另外補上授權規格的明確連結，並說明離開頁面的提示只是盡力提醒。
@@ -65,6 +65,7 @@
 - **M02-04／M02-05：在該 repository 中找不到這兩個編號。標示為「原文缺失，待確認」**：
   - 不推測其內容；
   - 請負責人提供文件，或指出所在位置。
+- **（2026-11-25 負責人更正）既有網站只參考功能；顏色等視覺效果依先前已驗收的準則，不沿用下列色彩 tokens**，見網站 repository 的 `docs/DESIGN.md` D0.2。
 - **可以沿用的既有慣例**（這些不是 M02 的正式規格，只是現有網站的作法；採用與否在網站 repository 的 DESIGN 中定案）：
   - 色彩 tokens：`--bg #f7fbff`、`--surface #fff`、`--text #243047`、`--muted #718096`、`--line #e3ebf6`、`--primary #6c63ff`、`--danger #e95d7b`、`--warning #e8922f`、`--success #26a879`；`--radius 18px`；字型 `system-ui … "Noto Sans TC"`；
   - 版面：以 iPad 橫向為主（例如 1408 × 1056），窄螢幕改成兩欄或單欄，長名稱換行；
