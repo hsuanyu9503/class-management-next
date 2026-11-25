@@ -31,4 +31,5 @@
   - Firebase 的新實測結果另以可追溯的證據記錄。
 - Firebase 必要的真機、離線、備份還原、成本與安全驗證，**全部保留**。
 - 本 repository 仍是技術驗證 PoC，**不**開始網站頁面製作。
+  - 2026-11-24 補註（負責人決策）：網站在**另一個 repository** `hsuanyu9503/Classroom-Managerment-Next` 製作；第一批的範圍提案見 `docs/WEB-B1-PROPOSAL.md`（草案）。本 repository 的定位不變。
 

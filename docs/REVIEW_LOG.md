@@ -1906,3 +1906,91 @@
   - Windows anchor CLI 問題另外追蹤。
 - 使用者決策：`待決`（核准錨定、合併、合併後逐一觸發 hosted）。本回報是審查建議，不是 GitHub Approve，也不是合併授權。
 
+### PR #21 合併與 B4 hosted 執行（2026-11-24）
+
+- 負責人核准錨定 `ad7d8670…`，合併 PR #21：main `1e20989`。
+- 負責人逐一觸發 `attest.yml`。四個案例都是 `UNATTESTED [TRUST_ROOT_NOT_CONFIGURED]`，簽章 skipped：
+  - POC-016：run 45349735778／1
+  - POC-017：run 45349750778／2
+  - POC-018：run 45349771980／2
+  - POC-021：run 45349793785／1
+  - job、artifact ID 與 digest 見 B4 報告 §11。
+- 證據層級：Claude 讀取的 metadata 與 job log。**原檔沒有重播**：本環境的網路政策拒絕 artifact 下載。
+- 待決：
+  - 負責人確認 POC-017／018 attempt 1 的原因；
+  - 原檔核對：8 個 artifact，到 2026-12-24 前有效；
+  - 之後才收尾 B4。
+
+### B4 hosted 原檔核對（ChatGPT，2026-11-24）：**B4 收尾**
+
+- 結論：四項 hosted 證據核對完成，B4 標記為「已完成約定的 Emulator／hosted 驗證」。**不是**正式 PoC PASS、簽章驗收或上線許可。
+- 審查者以 `f9097dd` 的判定程式重播四個套件（main `1e20989` 與它只差文件）。
+  - 可信輸入取自 verify job 的日誌，並與附件交叉核對；
+  - 四項都是 `UNATTESTED [TRUST_ROOT_NOT_CONFIGURED]`、`MATCH`，`problems` 是空的；
+  - package digest 見 B4 報告 §12。
+- POC-017／018 只涵蓋 attempt 2；attempt 1 的 job 清單是空的，不宣稱第一次就成功。
+- 不變：`PASS_ENABLED=false`、72 筆 `NOT_RUN`、POC-009 BLOCKED、G-4／G-9／G-10。殘餘風險見報告 §12。
+- 下一步：依負責人已決定的順序，Claude 提出第一批網頁製作的範圍與驗收條件（只是提案，待負責人決定與審查）。
+
+### WEB-B1 提案的負責人決定（2026-11-24）
+
+- D-W1：網站在另一個 repository `hsuanyu9503/Classroom-Managerment-Next` 製作（目前是空的 repository）。
+- D-W2：同意讀取既有規格。Claude 唯讀讀取 `Homework-manager-` `cdaf91e`（v2.103）；**M02-04／M02-05 找不到，原文缺失，待確認**，不推測其內容。
+- D-W3：採用候選流程（點名名冊與請假更正）。
+- 要求送 ChatGPT 審查並開 PR。
+- D-W4～D-W8 仍是 Claude 的建議，待負責人確認。
+- 使用者決策：`待決`（D-W4～D-W8、M02 來源、合併）。
+
+### PR #22 審查（ChatGPT，Head `6fa73a4`）：B4 收尾接受；WEB-B1 需補兩項契約（REV22-01、REV22-02，皆 P2）→ Claude v0.3
+
+- 已確認：
+  - B4 報告 §12 與前次核驗一致，沒有寫成 PASS 或已簽章；
+  - POC-017／018 只採用 attempt 2；
+  - 只改 5 份文件；CI run 45352793543 的 `validate`、`baseline-anchor` 都 success；
+  - 提案的排除範圍正確；不顯示姓名；不帶入既有網站的請假連動；
+  - 網站另建 repository，M02 標為缺失，處理合理。
+  - 審查者沒有獨立驗證提案中對舊網站規格的摘要。
+- REV22-01：開發身分與本機服務的啟動契約——API 固定版本、啟動／重設／停止、token 的交付與儲存、分開的情境、代理的邊界。
+- REV22-02：結果不明時的規則——凍結 `operationId` 與完整 command；「結果尚未確認」；收據查詢失敗或 `FORBIDDEN` 不等於未提交；衝突要重新確認；重新整理的限制；端對端驗收項目。
+- 小項目：統一為 D-W4～D-W8；POC-002 改列為參考案例；「v6」限定在重設後的初始測資。
+- Claude v0.3：
+  - §2.2：API 固定在 `1e20989`；開發用啟動器；三個分開的情境；token 只在代理的記憶體中，頁面拿不到；代理只綁 127.0.0.1，固定 upstream，三條 POST 路徑，檢查 Host、Origin、Sec-Fetch-Site；
+  - §3.1：結果規則表；
+  - §4：驗收增加到 9 項，另有代理的邊界測試。
+  - 只改文件，錨定不變。
+- 使用者決策：`待決`。
+
+### PR #22 R1 複審（ChatGPT，Head `eec0c83`）：主要設計補齊，剩兩項狹窄的文件殘項 → Claude v0.4
+
+- 審查者已確認：
+  - 只改 3 份文件；CI run 45403471440 的 `validate`、`baseline-anchor` 都 success；
+  - §2.2、§3.1 的方向，在本機虛構測資的範圍內可以接受，但不是已完成的安全實測；
+  - 小項目都已修正。
+- REV22-01 殘項（P2）：靜態首頁的頂層導航（`Sec-Fetch-Site: none`）不得套用 API 的同源限制。
+- REV22-02 殘項（P2）：API 先驗證身分與授權，才檢查收據；所以結果不明之後重送，可能因 token 過期或 membership 撤銷而得到 `FORBIDDEN`，不能保證取回原收據。
+- 非阻擋：更新 PR 的描述；「§8」改為明確的連結；離開頁面的提示只是盡力提醒。
+- Claude v0.4：
+  - §2.2：靜態 `GET`／`HEAD` 與 API `POST` 分開規定；API 的 `POST` 要求 `Origin` 必須存在；
+  - §3.1：區分第一次提交被拒與重送被拒；重送被拒時保留原操作與「尚未確認」；
+  - §4：新增第 10 項（失效後重送）、第 11 項（首頁導航與跨來源的 API POST）。
+  - 只改文件，錨定不變。B4 的接受結論不變。
+- 使用者決策：`待決`。
+
+### PR #22 R2 收尾審查（ChatGPT，Reviewed Head `0018b11`）：**文件審查通過**，REV22-01／02 與 R1 殘項關閉
+
+- 審查者的結論：沒有新的阻擋項，可以交負責人決定是否合併。
+  - WEB-B1 v0.4 可以作為網站規格的依據；
+  - 這**不是** GitHub 的正式 Approve，**不是**使用者已同意合併，也**不是**網站已實作、安全實測完成、正式 PASS 或部署核准。
+- 審查者的核對：
+  - 附件與線上 Head 一致；相對 `eec0c83` 只改 3 份文件（+52／−14），沒有程式或 workflow 變更；
+  - CI run 45404756469：`validate`、`baseline-anchor` 都 success；
+  - 本機的 `check`、`npm test` 是作者的結果；11 項網站驗收是將來實作時的要求，還沒有執行。
+- B4 的 `MATCH`／`UNATTESTED` 與 `PASS_ENABLED=false` 不變；不需要重跑 hosted。
+- 保留的限制：
+  - 只用本機 Emulator 與虛構測資，不建立正式雲端環境，不部署；
+  - 本機其他程序可以呼叫代理；
+  - 未確認的操作只存在記憶體中；
+  - G-1／G-4／G-9／G-10 與 Stage 4 都不解除；
+  - M02-04／M02-05 原文仍缺失，對應需求標示「未確認」，不把舊網站的摘要當成正式規格。
+- 使用者決策：`待決`（合併 PR #22；D-W4～D-W8；網站 repository 的寫入範圍）。合併這份文件，不代表 D-W4～D-W8 已確認。
+
