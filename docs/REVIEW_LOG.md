@@ -1994,3 +1994,20 @@
   - M02-04／M02-05 原文仍缺失，對應需求標示「未確認」，不把舊網站的摘要當成正式規格。
 - 使用者決策：`待決`（合併 PR #22；D-W4～D-W8；網站 repository 的寫入範圍）。合併這份文件，不代表 D-W4～D-W8 已確認。
 
+### PR #22 合併與 WEB-B1 的負責人決定（2026-11-25）
+
+- 負責人指示合併 PR #22。Claude 合併前確認：Head `7819c05` 的 CI run 45405640599，`validate`、`baseline-anchor` 都 success。合併為 main `754e3a1c0ec674e57ff36d4af7b45b959f448e5b`。
+- D-W4～D-W8：**依 Claude 的建議**：
+  - D-W4：只用虛構測資；
+  - D-W5：本機 Emulator 加上固定版本的受控 API；
+  - D-W6：只在本機執行，不部署；
+  - D-W7：原生 HTML、CSS、JS 加 Playwright；
+  - D-W8：開發用啟動器與只綁本機的代理。
+- **D-W1 更正**：網站的 repository 改為 `hsuanyu9503/Classroom-Manager-ver.Next`，取代 PR #22 中寫的 `Classroom-Managerment-Next`。
+  - 新的 repository 是 public，`main` 只有一個 `README`（`10670e7`）；
+  - 本 session 已取得 push 權限。
+- **M02-04／M02-05**：負責人提供附件 `ClassroomManager-v2.101.zip`（SHA-256 `3ce976a7…`），內容是 `README.md`、`app.js`、`index.html`、`style.css`（Classroom Manager v2.101）。
+  - 這 4 個檔案中都**沒有** M02-04 或 M02-05 的編號；
+  - Claude 記錄為「負責人提供的既有網站基準（v2.101）」，但 M02-04／M02-05 各自對應哪些功能，**仍待負責人確認**，不推測。
+- 下一步：在 `Classroom-Manager-ver.Next` 以 PR 提交網站的 SPEC、DESIGN、CLAUDE.md，承接 WEB-B1 v0.4，送 ChatGPT 審查；審查通過後才實作 W1。
+

@@ -2,7 +2,7 @@
 
 > ⚠️ **本 PoC 適用說明**：本 Repository 沒有 `pages.yml`、`release.yml`、`site/` 或網站建置步驟；本提案**不**新增任何部署或發行流程。GitHub Settings 已啟用 Pages，若發佈來源為 `main`，合併後的檔案仍可能被公開（D-W6）。
 
-> 狀態：**提案，送 ChatGPT 審查；核准前不寫任何網頁程式**。
+> 狀態：**文件審查通過（PR #22 R2，Reviewed Head `0018b11`），已合併**。2026-11-25 負責人更正 D-W1：網站的 repository 是 **`hsuanyu9503/Classroom-Manager-ver.Next`**，下文中的 `Classroom-Managerment-Next` 都以此為準。D-W4～D-W8 依建議。
 > v0.2（2026-11-24）：負責人已決定 D-W1（另一個 repository：`hsuanyu9503/Classroom-Managerment-Next`）、D-W2（同意讀取既有規格）、D-W3（採用 §3 的候選流程），並要求送審與開 PR。D-W4～D-W8 仍是 Claude 的建議，待負責人確認。既有規格的讀取結果見 §2.1。
 > v0.3（2026-11-24）：回應 PR #22 審查——REV22-01（開發身分與本機服務的啟動契約，§2.2）、REV22-02（結果不明時的規則，§3.1），以及三個小項目（待確認項目統一為 D-W4～D-W8；POC-002 改列為參考案例；「版本 6」限定在重設後的初始測資）。
 > v0.4（2026-11-24）：回應 PR #22 R1 複審（Head `eec0c83`）——REV22-01 殘項：靜態首頁的頂層導航與 API 的 POST 分開規定；REV22-02 殘項：結果不明後重送時，仍可能因身分或授權失效而被拒絕。另外補上授權規格的明確連結，並說明離開頁面的提示只是盡力提醒。
