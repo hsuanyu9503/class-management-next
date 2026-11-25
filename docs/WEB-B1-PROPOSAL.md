@@ -65,6 +65,7 @@
 - **M02-04／M02-05：在該 repository 中找不到這兩個編號。標示為「原文缺失，待確認」**：
   - 不推測其內容；
   - 請負責人提供文件，或指出所在位置。
+- **（2026-11-25 負責人更正）既有網站只參考功能；顏色等視覺效果依先前已驗收的準則，不沿用下列色彩 tokens**，見網站 repository 的 `docs/DESIGN.md` D0.2。
 - **可以沿用的既有慣例**（這些不是 M02 的正式規格，只是現有網站的作法；採用與否在網站 repository 的 DESIGN 中定案）：
   - 色彩 tokens：`--bg #f7fbff`、`--surface #fff`、`--text #243047`、`--muted #718096`、`--line #e3ebf6`、`--primary #6c63ff`、`--danger #e95d7b`、`--warning #e8922f`、`--success #26a879`；`--radius 18px`；字型 `system-ui … "Noto Sans TC"`；
   - 版面：以 iPad 橫向為主（例如 1408 × 1056），窄螢幕改成兩欄或單欄，長名稱換行；
